@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+
+{% block page_header %}
+    <a href="{{ url_for('index') }}"><i class="fas fa-home"></i></a> > <a href="{{ url_for('project', project_id=project.id) }}"> Project {{project.name}}</a> > Tax statement {{taxstatement.year}}
+{% endblock %}
+
+{% block page_content %}
+<hr>
+<div class="card">
+    <div class="card-header">
+        <div class="row">
+            <div class="col-11">
+                <h3 class="text-center">Income</h3>
+            </div>
+            <div class="col-1">
+{% if income %}
+                <button class="btn btn-primary" data-toggle="modal" data-target="#incomeModal">Edit</button>
+{% else %}
+                <button class="btn btn-primary" data-toggle="modal" data-target="#incomeModal">Add</button>
+{% endif %}
+            </div>
+        </div>
+    </div>
+{% if income %}
+    <ul class="list-group">
+        <li class="list-group-item"><text class="text-muted">Income person 1</text> € {{ income.income_1 }}</li>
+        <li class="list-group-item"><text class="text-muted">Income person 2</text> € {{ income.income_2 }}</li>
+    </ul>
+{% endif %}
+</div>
+
+{% import 'bootstrap/form.html' as wtf %}
+
+<!-- Modals -->
+<div class="modal" id="incomeModal" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">Add income</div>
+            <div class="modal-body">
+                    {{ wtf.render_form(form, action=url_for('upsert_income', project_id=project.id, taxstatement_id=taxstatement.id)) }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<hr>
+
+<div class="row">
+    <div class="col">
+        To do
+    </div>
+</div>
+
+{% endblock %}

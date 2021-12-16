@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+
+{% block page_header %}
+<a href="{{ url_for('index') }}"><i class="fas fa-home"></i></a> > Project {{project.name}}
+{% endblock %}
+
+{% block page_content %}
+<div class="card-columns">
+
+    {% for taxstatement in taxstatements %}
+    <div class="card">
+        <h3 class="card-header">{{ taxstatement.year }}</h3>
+        <div class="card-body">
+            <p class="card-text">Coucou</p>
+            <a href="{{ url_for('taxstatement',  project_id=project.id, taxstatement_id=taxstatement.id) }}" class="btn btn-primary">Go</a>
+            <a href="{{ url_for('taxstatement_delete', project_id=project.id, taxstatement_id=taxstatement.id) }}" class="btn btn-danger">Delete</a>
+        </div>
+    </div>
+    {% endfor %}
+
+
+    {% import 'bootstrap/form.html' as wtf %}
+    <div class="card">
+        <h3 class="card-header text-center bg-info text-white">Add a Tax Statement</h3>
+        <div class="card-body">
+            {{ wtf.render_form(form) }}
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
