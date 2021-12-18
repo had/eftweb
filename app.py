@@ -17,7 +17,8 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 bootstrap = Bootstrap(app)
 fa = FontAwesome(app)
 db = SQLAlchemy(app)
-migrate = Migrate(app, db)
+migrate = Migrate(app, db, render_as_batch=True)
 
 from routes import *
 from models import *
+

@@ -17,3 +17,8 @@ class IncomeForm(FlaskForm):
     income_1 = IntegerField("Income 1 (1AJ)")
     income_2 = IntegerField("Income 2 (1BJ)")
     submit = SubmitField("Confirm")
+
+class CharityForm(FlaskForm):
+    charity_7UD = IntegerField("Charity towards people in distress (7UD)")
+    charity_7UF = IntegerField("Other charity (7UF)")
+    submit = SubmitField("Confirm")

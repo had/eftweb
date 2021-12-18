@@ -30,25 +30,57 @@
 {% endif %}
 </div>
 
+<div class="card">
+    <div class="card-header">
+        <div class="row">
+            <div class="col-11">
+                <h3 class="text-center">Charity</h3>
+            </div>
+            <div class="col-1">
+{% if charity %}
+                <button class="btn btn-primary" data-toggle="modal" data-target="#charityModal">Edit</button>
+{% else %}
+                <button class="btn btn-primary" data-toggle="modal" data-target="#charityModal">Add</button>
+{% endif %}
+            </div>
+        </div>
+    </div>
+{% if charity %}
+    <ul class="list-group">
+        <li class="list-group-item"><text class="text-muted">Charity towards people in distress (7UD)</text> € {{ charity.charity_7UD }}</li>
+        <li class="list-group-item"><text class="text-muted">Other charity (7UF)</text> € {{ charity.charity_7UF }}</li>
+    </ul>
+{% endif %}
+</div>
+
 {% import 'bootstrap/form.html' as wtf %}
 
 <!-- Modals -->
 <div class="modal" id="incomeModal" role="dialog" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
-            <div class="modal-header">Add income</div>
+            <div class="modal-header">{% if income %}Edit{% else %}Add{% endif %} income</div>
             <div class="modal-body">
-                    {{ wtf.render_form(form, action=url_for('upsert_income', project_id=project.id, taxstatement_id=taxstatement.id)) }}
+                    {{ wtf.render_form(income_form, action=url_for('upsert_income', project_id=project.id, taxstatement_id=taxstatement.id)) }}
             </div>
         </div>
     </div>
 </div>
-
+<div class="modal" id="charityModal" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">{% if charity %}Edit{% else %}Add{% endif %} charity</div>
+            <div class="modal-body">
+                    {{ wtf.render_form(charity_form, action=url_for('upsert_charity', project_id=project.id, taxstatement_id=taxstatement.id)) }}
+            </div>
+        </div>
+    </div>
+</div>
 <hr>
 
 <div class="row">
     <div class="col">
-        To do
+        <h5> Your taxes will be {{ tax_result }} </h5>
     </div>
 </div>
 
