@@ -3,7 +3,7 @@ import forms
 import models
 import taxsim
 from app import app, db
-
+from collections import namedtuple
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -54,70 +54,66 @@ def taxstatement_delete(project_id, taxstatement_id):
     db.session.commit()
     return redirect(url_for("project", project_id=project_id))
 
+StatementElement = namedtuple("StatementElement", ["name", "model", "form", "fields", "upsert_route"])
+statement_elements = [
+   StatementElement("Income", models.IncomeSegment, forms.IncomeForm, [
+       ("Income person 1", "income_1"),
+       ("Income person 2", "income_2")
+   ], "upsert_income"),
+   StatementElement("Charity", models.CharitySegment, forms.CharityForm, [
+       ("Charity towards people in distress (7UD)", "charity_7UD"),
+       ("Other charity (7UF)", "charity_7UF")
+   ], "upsert_charity"),
+]
+
 @app.route("/project/<int:project_id>/taxstatement/<int:taxstatement_id>", methods=["GET"])
 def taxstatement(project_id, taxstatement_id):
     project = models.Project.query.get(project_id)
     taxstatement = models.TaxStatement.query.get(taxstatement_id)
 
-    income_form = forms.IncomeForm()
-    if taxstatement.income_id:
-        income_object = models.IncomeSegment.query.get(taxstatement.income_id)
-        income_form.income_1.data = income_object.income_1
-        income_form.income_2.data = income_object.income_2
-    else:
-        income_object = None
+    rendering_elements = []
+    for elt in statement_elements:
+        elt_form = elt.form()
+        elt_id = getattr(taxstatement, elt.name.lower()+"_id")
+        if elt_id:
+            elt_object = elt.model.query.get(elt_id)
+            for _, field in elt.fields:
+                getattr(elt_form, field).data = getattr(elt_object, field)
+        else:
+            elt_object = None
+        # upsert_fn = upsert_factory(elt)
+        rendering_elements.append((elt.name, elt_object, elt_form, elt.fields, "upsert_"+elt.name.lower()))
 
-    charity_form = forms.CharityForm()
-    if taxstatement.charity_id:
-        charity_object = models.CharitySegment.query.get(taxstatement.charity_id)
-        charity_form.charity_7UD.data = charity_object.charity_7UD
-        charity_form.charity_7UF.data = charity_object.charity_7UF
-    else:
-        charity_object = None
-
-    net_taxes = taxsim.simulateTax(income_object, charity_object)
+    net_taxes = taxsim.simulateTax({elt[0]: elt[1] for elt in rendering_elements})
     return render_template("taxstatement.html",
                            project=project,
                            taxstatement=taxstatement,
-                           income=income_object,
-                           income_form=income_form,
-                           charity=charity_object,
-                           charity_form=charity_form,
-                           tax_result=net_taxes
-    )
+                           statement_elements=rendering_elements,
+                           tax_result=net_taxes)
 
-@app.route("/project/<int:project_id>/taxstatement/<int:taxstatement_id>/add_income", methods=["POST"])
-def upsert_income(project_id, taxstatement_id):
-    form = forms.IncomeForm()
-    if form.validate_on_submit():
-        taxstatement = models.TaxStatement.query.get(taxstatement_id)
-        if taxstatement.income_id:
-            income = models.IncomeSegment.query.get(taxstatement.income_id)
-            income.income_1 = form.income_1.data
-            income.income_2 = form.income_2.data
-            db.session.commit()
-        else:
-            income = models.IncomeSegment(income_1=form.income_1.data, income_2=form.income_2.data)
-            db.session.add(income)
-            db.session.commit()
-            taxstatement.income_id = income.id
-            db.session.commit()
-    return redirect(url_for("taxstatement", project_id=project_id, taxstatement_id=taxstatement_id))
+def upsert_factory(element:StatementElement):
+    elt_name = element.name.lower()
 
-@app.route("/project/<int:project_id>/taxstatement/<int:taxstatement_id>/add_charity", methods=["POST"])
-def upsert_charity(project_id, taxstatement_id):
-    form = forms.CharityForm()
-    if form.validate_on_submit():
-        taxstatement = models.TaxStatement.query.get(taxstatement_id)
-        if taxstatement.charity_id:
-            charity = models.CharitySegment.query.get(taxstatement.charity_id)
-            charity.charity_7UD = form.charity_7UD.data
-            charity.charity_7UF = form.charity_7UF.data
-            db.session.commit()
-        else:
-            charity = models.CharitySegment(charity_7UD=form.charity_7UD.data, charity_7UF=form.charity_7UF.data)
-            db.session.add(charity)
-            db.session.commit()
-            taxstatement.charity_id = charity.id
-            db.session.commit()
-    return redirect(url_for("taxstatement", project_id=project_id, taxstatement_id=taxstatement_id))
+    @app.route("/project/<int:project_id>/taxstatement/<int:taxstatement_id>/add_"+elt_name, endpoint="upsert_"+elt_name, methods=["POST"])
+    def upsert_element(project_id, taxstatement_id):
+        form = element.form()
+        if form.validate_on_submit():
+            taxstatement = models.TaxStatement.query.get(taxstatement_id)
+            if getattr(taxstatement, elt_name+"_id"):
+                elt_object = element.model.query.get(taxstatement.income_id)
+                for _, field in element.fields:
+                    setattr(elt_object, field, getattr(form, field).data)
+                db.session.commit()
+            else:
+                elt_object = element.model()
+                for _, field in element.fields:
+                    setattr(elt_object, field, getattr(form, field).data)
+                db.session.add(elt_object)
+                db.session.commit()
+                setattr(taxstatement, elt_name+"_id", elt_object.id)
+                db.session.commit()
+        return redirect(url_for("taxstatement", project_id=project_id, taxstatement_id=taxstatement_id))
+
+    return upsert_element
+
+upsert_functions = [upsert_factory(elt) for elt in statement_elements]

@@ -1,6 +1,8 @@
 from easyfrenchtax import TaxSimulator
 
-def simulateTax(income, charity):
+def simulateTax(elements):
+    income = elements["Income"]
+    charity = elements["Charity"]
     tax_input = {
         "household_shares": 2,
         "nb_kids": 0,
