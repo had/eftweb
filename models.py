@@ -12,6 +12,7 @@ class TaxStatement(db.Model):
     year = db.Column(db.Integer)
     income_id = db.Column(db.Integer, db.ForeignKey('income_segments.id'))
     charity_id = db.Column(db.Integer, db.ForeignKey('charity_segments.id'))
+    retirementinvestment_id = db.Column(db.Integer, db.ForeignKey('retirementinvestment_segments.id'))
 
 class IncomeSegment(db.Model):
     __tablename__ = "income_segments"
@@ -25,3 +26,8 @@ class CharitySegment(db.Model):
     charity_7UD = db.Column(db.Integer)
     charity_7UF = db.Column(db.Integer)
 
+class RetirementInvestmentSegment(db.Model):
+    __tablename__ = "retirementinvestment_segments"
+    id = db.Column(db.Integer, primary_key=True)
+    per_transfers_1_6NS = db.Column(db.Integer)
+    per_transfers_2_6NT = db.Column(db.Integer)

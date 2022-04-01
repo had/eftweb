@@ -54,16 +54,20 @@ def taxstatement_delete(project_id, taxstatement_id):
     db.session.commit()
     return redirect(url_for("project", project_id=project_id))
 
-StatementElement = namedtuple("StatementElement", ["name", "model", "form", "fields", "upsert_route"])
+StatementElement = namedtuple("StatementElement", ["name", "model", "form", "fields"])
 statement_elements = [
    StatementElement("Income", models.IncomeSegment, forms.IncomeForm, [
        ("Income person 1", "income_1"),
        ("Income person 2", "income_2")
-   ], "upsert_income"),
+   ]),
    StatementElement("Charity", models.CharitySegment, forms.CharityForm, [
        ("Charity towards people in distress (7UD)", "charity_7UD"),
        ("Other charity (7UF)", "charity_7UF")
-   ], "upsert_charity"),
+   ]),
+    StatementElement("Retirement investment", models.RetirementInvestmentSegment, forms.RetirementInvestmentForm, [
+        ("Investment on PER 1 (6NS)", "per_transfers_1_6NS"),
+        ("Investment on PER 2 (6NT)", "per_transfers_2_6NT")
+    ]),
 ]
 
 @app.route("/project/<int:project_id>/taxstatement/<int:taxstatement_id>", methods=["GET"])
@@ -74,7 +78,7 @@ def taxstatement(project_id, taxstatement_id):
     rendering_elements = []
     for elt in statement_elements:
         elt_form = elt.form()
-        elt_id = getattr(taxstatement, elt.name.lower()+"_id")
+        elt_id = getattr(taxstatement, elt.name.lower().replace(' ','')+"_id")
         if elt_id:
             elt_object = elt.model.query.get(elt_id)
             for _, field in elt.fields:
@@ -82,7 +86,8 @@ def taxstatement(project_id, taxstatement_id):
         else:
             elt_object = None
         # upsert_fn = upsert_factory(elt)
-        rendering_elements.append((elt.name, elt_object, elt_form, elt.fields, "upsert_"+elt.name.lower()))
+        # field_and_labels = {field}
+        rendering_elements.append((elt.name, elt_object, elt_form, elt.fields, "upsert_"+elt.name.lower().replace(' ','')))
 
     net_taxes = taxsim.simulateTax({elt[0]: elt[1] for elt in rendering_elements})
     return render_template("taxstatement.html",
@@ -92,15 +97,16 @@ def taxstatement(project_id, taxstatement_id):
                            tax_result=net_taxes)
 
 def upsert_factory(element:StatementElement):
-    elt_name = element.name.lower()
+    elt_name = element.name.lower().replace(' ','')
 
     @app.route("/project/<int:project_id>/taxstatement/<int:taxstatement_id>/add_"+elt_name, endpoint="upsert_"+elt_name, methods=["POST"])
     def upsert_element(project_id, taxstatement_id):
         form = element.form()
         if form.validate_on_submit():
             taxstatement = models.TaxStatement.query.get(taxstatement_id)
-            if getattr(taxstatement, elt_name+"_id"):
-                elt_object = element.model.query.get(taxstatement.income_id)
+            elt_id = getattr(taxstatement, elt_name + "_id")
+            if elt_id:
+                elt_object = element.model.query.get(elt_id)
                 for _, field in element.fields:
                     setattr(elt_object, field, getattr(form, field).data)
                 db.session.commit()
