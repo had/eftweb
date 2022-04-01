@@ -68,6 +68,22 @@ statement_elements = [
         ("Investment on PER 1 (6NS)", "per_transfers_1_6NS"),
         ("Investment on PER 2 (6NT)", "per_transfers_2_6NT")
     ]),
+    StatementElement("Service charges", models.ServicesChargesSegment, forms.ServicesChargesForm, [
+        ("Children care - 1st child (7GA)", "children_daycare_fees_7GA"),
+        ("Home services (7DB)", "home_services_7DB")
+    ]),
+    StatementElement("Other investments", models.OtherInvestmentsSegment, forms.OtherInvestmentsForm, [
+        ("PME investment (7CH)", "pme_capital_subscription_7CH"),
+    ]),
+    StatementElement("Shareholding", models.ShareholdingSegment, forms.ShareholdingForm, [
+        ("Taxable acquisition gain (1TZ)", "taxable_acquisition_gain_1TZ"),
+        ("Acquisition gain rebates (1UZ)", "acquisition_gain_rebates_1UZ"),
+        ("Acquisition gain 50% rebates (1WZ)", "acquisition_gain_50p_rebates_1WZ"),
+        ("Other taxable gain 1 (1TT)", "exercise_gain_1_1TT"),
+        ("Other taxable gain 2 (1UT)", "exercise_gain_2_1UT"),
+        ("Capital gain (3VG)", "capital_gain_3VG"),
+        ("Capital loss (3VH)", "capital_loss_3VH"),
+    ]),
 ]
 
 @app.route("/project/<int:project_id>/taxstatement/<int:taxstatement_id>", methods=["GET"])

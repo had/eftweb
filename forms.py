@@ -29,6 +29,25 @@ class RetirementInvestmentForm(FlaskForm):
     per_transfers_2_6NT = IntegerField("Investment on PER 2 (6NT)", default=0)
     submit = SubmitField("Confirm")
 
+class ServicesChargesForm(FlaskForm):
+    children_daycare_fees_7GA = IntegerField("Children care - 1st child (7GA)", default=0)
+    home_services_7DB = IntegerField("Home services (7DB)", default=0)
+    submit = SubmitField("Confirm")
+
+class OtherInvestmentsForm(FlaskForm):
+    pme_capital_subscription_7CH = IntegerField("PME investment (7CH)", default=0)
+    submit = SubmitField("Confirm")
+
+class ShareholdingForm(FlaskForm):
+    taxable_acquisition_gain_1TZ = IntegerField("Taxable acquisition gain (1TZ)", default=0)
+    acquisition_gain_rebates_1UZ = IntegerField("Acquisition gain rebates (1UZ)", default=0)
+    acquisition_gain_50p_rebates_1WZ = IntegerField("Acquisition gain 50% rebates (1WZ)", default=0)
+    exercise_gain_1_1TT = IntegerField("Other taxable gain 1 (1TT)", default=0)
+    exercise_gain_2_1UT = IntegerField("Other taxable gain 2 (1UT)", default=0)
+    capital_gain_3VG = IntegerField("Capital gain (3VG)", default=0)
+    capital_loss_3VH = IntegerField("Capital loss (3VH)", default=0)
+    submit = SubmitField("Confirm")
+
 # introspect a form and returns tuples of field names and labels
 def form_to_fields(form):
     fields = inspect.getmembers(form, lambda x: issubclass(getattr(x,"field_class", type(None)), Field))
