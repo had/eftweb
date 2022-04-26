@@ -1,9 +1,11 @@
+import dateutil.relativedelta
 from flask import render_template, redirect, session, url_for, flash
 import forms
 import models
 import taxsim
 from app import app, db
 from collections import namedtuple
+from itertools import groupby
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -16,12 +18,12 @@ def index():
         except IntegrityError:
             db.session.rollback()
         flash(f"Project added (total {len(models.Project.query.all())} projects)")
-        return redirect(url_for('project', project_id=project.id))
+        return redirect(url_for('project_tax', project_id=project.id))
     projects = models.Project.query.all()
     return render_template("index.html", name="Guest", projects=projects, form=form)
 
 @app.route("/project/<int:project_id>", methods=["GET", "POST"])
-def project(project_id):
+def project_tax(project_id):
     project = models.Project.query.get(project_id)
     form = forms.TaxStatementForm()
     if form.validate_on_submit():
@@ -32,13 +34,158 @@ def project(project_id):
         except IntegrityError:
             db.session.rollback()
         flash(f"Tax statement added")
-        return redirect(url_for('project', project_id=project.id))
+        return redirect(url_for('project_tax', project_id=project.id))
     else:
         # prefill with current year-1
         form.year.data = 2020
     statements = models.TaxStatement.query.filter_by(project_id=project.id).all()
-    return render_template("project.html", project=project, form=form, taxstatements=statements)
+    return render_template("project_tax.html", project=project, form=form, taxstatements=statements)
 
+@app.route("/project/<int:project_id>/stocks", methods=["GET"])
+def project_stocks(project_id):
+    project = models.Project.query.get(project_id)
+    dstock_form = forms.DirectStocksForm()
+    rsuplan_form = forms.RsuPlanForm()
+    rsuvesting_form = forms.RsuVestingForm()
+    direct_stocks = models.DirectStocks.query.filter_by(project_id=project.id).all()
+    rsu_plans = models.RSUPlan.query.filter_by(project_id=project.id).all()
+    rsu_plans_id = [p.id for p in rsu_plans]
+    rsu_vestings = models.RSUVesting.query.filter(models.RSUVesting.rsu_plan_id.in_(rsu_plans_id)).all()
+    rsu_vestings_per_plan = {plan_id:list(v) for plan_id,v in groupby(rsu_vestings, key=lambda x:x.rsu_plan_id)}
+    dstock_sale_form = forms.DirectStocksSaleForm()
+    dstock_sales = models.DirectStocksSale.query.filter_by(project_id=project.id).all()
+    return render_template("project_stocks.html",
+                           project=project,
+                           direct_stocks=direct_stocks, dstock_form=dstock_form,
+                           rsu_plans=rsu_plans, rsuplan_form=rsuplan_form,
+                           rsu_vestings=rsu_vestings_per_plan, rsuvesting_form=rsuvesting_form,
+                           dstock_sales=dstock_sales, dstock_sale_form=dstock_sale_form
+                           )
+
+@app.route("/project/<int:project_id>/stocks/direct", methods=["POST"])
+def add_direct_stocks(project_id):
+    dstock_form = forms.DirectStocksForm()
+    if dstock_form.validate_on_submit():
+        dstock = models.DirectStocks(
+            project_id=project_id,
+            taxpayer_owner=dstock_form.tp_owner.data,
+            symbol=dstock_form.symbol.data,
+            quantity=dstock_form.quantity.data,
+            acquisition_date=dstock_form.acquisition_date.data,
+            acquisition_price=dstock_form.acquisition_price.data,
+            stock_currency=dstock_form.stock_currency.data
+        )
+        db.session.add(dstock)
+        try:
+            db.session.commit()
+        except IntegrityError as e:
+            print("ERR ", e)
+            db.session.rollback()
+        print("Added direct stocks:", dstock)
+    else:
+        # TODO: pop-up errors back to user?
+        print("Validation error:", dstock_form.errors)
+    return redirect(url_for('project_stocks', project_id=project_id))
+
+@app.route("/project/<int:project_id>/stocks/rsu", methods=["POST"])
+def add_rsu_plan(project_id):
+    rsuplan_form = forms.RsuPlanForm()
+    if rsuplan_form.validate_on_submit():
+        rsuplan = models.RSUPlan(
+            project_id=project_id,
+            name=rsuplan_form.name.data,
+            taxpayer_owner=rsuplan_form.tp_owner.data,
+            grant_date=rsuplan_form.grant_date.data,
+            symbol=rsuplan_form.symbol.data,
+            stock_currency=rsuplan_form.stock_currency.data
+        )
+        db.session.add(rsuplan)
+        try:
+            db.session.commit()
+        except IntegrityError as e:
+            print("ERR ", e)
+            db.session.rollback()
+        print("Added rsu plan:", rsuplan)
+    else:
+        # TODO: pop-up errors back to user?
+        print("Validation error:", rsuplan_form.errors)
+    return redirect(url_for('project_stocks', project_id=project_id))
+
+@app.route("/project/<int:project_id>/stocks/rsu/vesting", methods=["POST"])
+def add_rsu_vesting(project_id):
+    rsuvesting_form = forms.RsuVestingForm()
+    if rsuvesting_form.validate_on_submit():
+        rsuplan_id = rsuvesting_form.rsuplan_id.data
+        periodicity = rsuvesting_form.periodicity.data
+        qty = rsuvesting_form.quantity.data
+        vdate = rsuvesting_form.vesting_date.data
+        acq_price = rsuvesting_form.acquisition_price.data
+        if periodicity == 'No':
+            rsuvesting = models.RSUVesting(
+                rsu_plan_id=rsuplan_id,
+                count=qty,
+                vesting_date=vdate,
+                acquisition_price=acq_price
+            )
+            db.session.add(rsuvesting)
+        else:
+            delta = dateutil.relativedelta.relativedelta(months= +3 if periodicity == "Quarterly" else +1)
+            for _ in range(rsuvesting_form.number_of_periods.data):
+                rsuvesting = models.RSUVesting(
+                    rsu_plan_id=rsuplan_id,
+                    count=qty,
+                    vesting_date=vdate,
+                    acquisition_price=acq_price
+                )
+                db.session.add(rsuvesting)
+                print(rsuvesting)
+                vdate += delta
+        db.session.commit()
+    return redirect(url_for('project_stocks', project_id=project_id))
+
+@app.route("/project/<int:project_id>/stocks/direct/selling", methods=["POST"])
+def add_dstocks_sale(project_id):
+    dstock_sale_form = forms.DirectStocksSaleForm()
+    if dstock_sale_form.validate_on_submit():
+        dstock_sale = models.DirectStocksSale(
+            project_id=project_id,
+            symbol=dstock_sale_form.symbol.data,
+            quantity=dstock_sale_form.quantity.data,
+            sell_date=dstock_sale_form.sell_date.data,
+            sell_price=dstock_sale_form.sell_price.data,
+            sell_currency=dstock_sale_form.sell_currency.data,
+            fees=dstock_sale_form.fees.data
+        )
+        db.session.add(dstock_sale)
+        try:
+            db.session.commit()
+        except IntegrityError as e:
+            print("ERR ", e)
+            db.session.rollback()
+    else:
+        # TODO: pop-up errors back to user?
+        print("Validation error:", dstock_sale_form.errors)
+    return redirect(url_for('project_stocks', project_id=project_id))
+
+# TODO: find a way to use a DELETE method instead of GET, this is not very nice and RESTful
+@app.route("/project/<int:project_id>/stocks/direct/<int:dstocks_id>/delete")
+def rm_direct_stocks(project_id, dstocks_id):
+    models.DirectStocks.query.filter_by(id=dstocks_id).delete()
+    db.session.commit()
+    return redirect(url_for('project_stocks', project_id=project_id))
+
+@app.route("/project/<int:project_id>/stocks/rsu/<int:rsuplan_id>/delete")
+def rm_rsu_plan(project_id, rsuplan_id):
+    models.RSUVesting.query.filter_by(rsu_plan_id=rsuplan_id).delete()
+    models.RSUPlan.query.filter_by(id=rsuplan_id).delete()
+    db.session.commit()
+    return redirect(url_for('project_stocks', project_id=project_id))
+
+@app.route("/project/<int:project_id>/stocks/rsu/dstock_sale/<int:dstock_sale_id>/delete")
+def rm_dstock_sale(project_id, dstock_sale_id):
+    models.DirectStocksSale.query.filter_by(id=dstock_sale_id).delete()
+    db.session.commit()
+    return redirect(url_for('project_stocks', project_id=project_id))
 
 @app.route("/project/<int:project_id>/delete", methods=["GET", "POST"])
 def project_delete(project_id):
@@ -52,7 +199,7 @@ def taxstatement_delete(project_id, taxstatement_id):
     taxstatement = models.TaxStatement.query.get(taxstatement_id)
     db.session.delete(taxstatement)
     db.session.commit()
-    return redirect(url_for("project", project_id=project_id))
+    return redirect(url_for("project_tax", project_id=project_id))
 
 StatementElement = namedtuple("StatementElement", ["name", "model", "form", "fields"])
 statement_elements = [
