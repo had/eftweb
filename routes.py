@@ -1,3 +1,5 @@
+import datetime
+
 import dateutil.relativedelta
 from flask import render_template, redirect, session, url_for, flash
 import forms
@@ -11,7 +13,9 @@ from itertools import groupby
 def index():
     form = forms.ProjectForm()
     if form.validate_on_submit():
-        project = models.Project(name=form.name.data)
+        project = models.Project(
+            name=form.name.data
+        )
         db.session.add(project)
         try:
             db.session.commit()
@@ -25,9 +29,15 @@ def index():
 @app.route("/project/<int:project_id>", methods=["GET", "POST"])
 def project_tax(project_id):
     project = models.Project.query.get(project_id)
-    form = forms.TaxStatementForm()
-    if form.validate_on_submit():
-        taxstatement = models.TaxStatement(project_id=project_id, year=form.year.data)
+    # prepare project form in case of edit/update
+    project_form = forms.ProjectForm()
+    project_form.name.data = project.name
+    project_form.situation.data = "Married" if project.married else "Single"
+    project_form.nb_children.data = project.nb_children
+    # tax form
+    tax_form = forms.TaxStatementForm()
+    if tax_form.validate_on_submit():
+        taxstatement = models.TaxStatement(project_id=project_id, year=tax_form.year.data)
         db.session.add(taxstatement)
         try:
             db.session.commit()
@@ -36,10 +46,31 @@ def project_tax(project_id):
         flash(f"Tax statement added")
         return redirect(url_for('project_tax', project_id=project.id))
     else:
-        # prefill with current year-1
-        form.year.data = 2020
+        # prefill with current year
+        tax_form.year.data = datetime.date.today().year
     statements = models.TaxStatement.query.filter_by(project_id=project.id).all()
-    return render_template("project_tax.html", project=project, form=form, taxstatements=statements)
+    return render_template("project_tax.html", project=project, tax_form=tax_form, project_edit_from=project_form, taxstatements=statements)
+
+@app.route("/project/<int:project_id>/edit", methods=["POST"])
+def project_update(project_id):
+    form = forms.ProjectForm()
+    if form.validate_on_submit():
+        project = models.Project(
+            name=form.name.data
+        )
+        project = models.Project.query.get(project_id)
+        project.name = form.name.data
+        project.married = (form.situation.data == "Married")
+        project.nb_children = form.nb_children.data
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+    else:
+        # TODO: show validation to user
+        print("Validation error")
+    return redirect(url_for('project_tax', project_id=project.id))
+
 
 @app.route("/project/<int:project_id>/delete", methods=["GET", "POST"])
 def project_delete(project_id):
@@ -226,12 +257,12 @@ def taxstatement_delete(project_id, taxstatement_id):
 StatementElement = namedtuple("StatementElement", ["name", "model", "form", "fields"])
 statement_elements = [
    StatementElement("Income", models.IncomeSegment, forms.IncomeForm, [
-       ("Income person 1", "income_1"),
-       ("Income person 2", "income_2")
+       ("Salary 1 (1AJ)", "salary_1_1AJ"),
+       ("Salary 2 (1BJ)", "salary_2_1BJ")
    ]),
    StatementElement("Charity", models.CharitySegment, forms.CharityForm, [
-       ("Charity towards people in distress (7UD)", "charity_7UD"),
-       ("Other charity (7UF)", "charity_7UF")
+       ("Charity donation for people in distress (7UD)", "charity_donation_7UD"),
+       ("Other charity donations (7UF)", "charity_donation_7UF")
    ]),
     StatementElement("Retirement investment", models.RetirementInvestmentSegment, forms.RetirementInvestmentForm, [
         ("Investment on PER 1 (6NS)", "per_transfers_1_6NS"),
@@ -262,26 +293,30 @@ def taxstatement(project_id, taxstatement_id):
     taxstatement = models.TaxStatement.query.get(taxstatement_id)
 
     rendering_elements = []
-
+    tax_input = {}
     for elt in statement_elements:
         elt_form = elt.form()
         elt_id = getattr(taxstatement, elt.name.lower().replace(' ','')+"_id")
         if elt_id:
             elt_object = elt.model.query.get(elt_id)
             for _, field in elt.fields:
-                getattr(elt_form, field).data = getattr(elt_object, field)
+                value = getattr(elt_object, field)
+                getattr(elt_form, field).data = value
+                tax_input[field] = value
         else:
             elt_object = None
         rendering_elements.append((elt.name, elt_object, elt_form, elt.fields, "upsert_"+elt.name.lower().replace(' ','')))
-
-    tax_result = taxhelpers.simulate_tax(taxstatement.year, {elt[0]: elt[1] for elt in rendering_elements})
+    tax_input["married"] = project.married
+    tax_input["nb_children"] = project.nb_children
+    tax_result, tax_flags = taxhelpers.simulate_tax(taxstatement.year, tax_input)
     net_taxes = tax_result["net_taxes"]
     print(net_taxes)
     return render_template("taxstatement.html",
                            project=project,
                            taxstatement=taxstatement,
                            statement_elements=rendering_elements,
-                           tax_result=tax_result)
+                           tax_result=tax_result,
+                           tax_flags=tax_flags)
 
 def upsert_factory(element:StatementElement):
     elt_name = element.name.lower().replace(' ','')

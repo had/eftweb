@@ -4,6 +4,8 @@ class Project(db.Model):
     __tablename__ = "projects"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(256), unique=True)
+    married = db.Column(db.Boolean)
+    nb_children = db.Column(db.Integer)
 
 ##### Stock-related tables #####
 
@@ -76,14 +78,14 @@ class TaxStatement(db.Model):
 class IncomeSegment(db.Model):
     __tablename__ = "income_segments"
     id = db.Column(db.Integer, primary_key=True)
-    income_1 = db.Column(db.Integer)
-    income_2 = db.Column(db.Integer)
+    salary_1_1AJ = db.Column(db.Integer)
+    salary_2_1BJ = db.Column(db.Integer)
 
 class CharitySegment(db.Model):
     __tablename__ = "charity_segments"
     id = db.Column(db.Integer, primary_key=True)
-    charity_7UD = db.Column(db.Integer)
-    charity_7UF = db.Column(db.Integer)
+    charity_donation_7UD = db.Column(db.Integer)
+    charity_donation_7UF = db.Column(db.Integer)
 
 class RetirementInvestmentSegment(db.Model):
     __tablename__ = "retirementinvestment_segments"
@@ -100,6 +102,7 @@ class ServicesChargesSegment(db.Model):
 class OtherInvestmentsSegment(db.Model):
     __tablename__ = "otherinvestments_segments"
     id = db.Column(db.Integer, primary_key=True)
+    pme_capital_subscription_7CF = db.Column(db.Integer)
     pme_capital_subscription_7CH = db.Column(db.Integer)
 
 class ShareholdingSegment(db.Model):

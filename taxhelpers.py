@@ -3,20 +3,10 @@ from typing import List, Set, Dict, Tuple, Optional
 import models
 
 
-def simulate_tax(year, elements):
-    print(elements)
-    income = elements["Income"]
-    charity = elements["Charity"]
-    tax_input = {
-        "household_shares": 2,
-        "nb_kids": 0,
-        "salary_1_1AJ": income.income_1 if income else 0,
-        "salary_2_1BJ": income.income_2 if income else 0,
-        "charity_donation_7UD": charity.charity_7UD if charity else 0,
-        "charity_donation_7UF": charity.charity_7UF if charity else 0
-    }
-    tax_result = TaxSimulator(year, tax_input).state
-    return tax_result
+def simulate_tax(year, tax_input):
+    print(tax_input)
+    tax_result = TaxSimulator(year, tax_input)
+    return tax_result.state, tax_result.flags
 
 def taxed_stock_helper(direct_stocks: List[models.DirectStocks], year: int, dstock_sales_that_year: List[models.DirectStocksSale]):
     stock_helper = StockHelper()

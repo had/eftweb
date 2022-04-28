@@ -6,6 +6,9 @@
 {% endblock %}
 
 {% block page_content %}
+<div class="my-4"> Married = {{ 'Yes' if project.married else 'No' }} ; Children = {{project.nb_children}}</div><a class="btn" data-toggle="modal" data-target="#EditProject"> Edit...</a>
+
+
 <div class="card-columns">
 
     {% for taxstatement in taxstatements %}
@@ -24,10 +27,22 @@
     <div class="card">
         <h3 class="card-header text-center bg-info text-white">Add a Tax Statement</h3>
         <div class="card-body">
-            {{ wtf.render_form(form) }}
+            {{ wtf.render_form(tax_form) }}
         </div>
     </div>
 
+</div>
+
+
+<div class="modal" id="EditProject" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">Edit project</div>
+            <div class="modal-body">
+                    {{ wtf.render_form(project_edit_from, action=url_for("project_update", project_id=project.id)) }}
+            </div>
+        </div>
+    </div>
 </div>
 
 {% endblock %}

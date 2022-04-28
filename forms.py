@@ -8,7 +8,7 @@ class ProjectForm(FlaskForm):
     name = StringField("Name your project", validators=[DataRequired()])
     situation = SelectField("Marital situation", choices=["Married", "Single"])
     nb_children = IntegerField("Number of minor children")
-    submit = SubmitField("Add")
+    submit = SubmitField("Submit")
 
 ### Stocks ###
 
@@ -54,13 +54,13 @@ class TaxStatementForm(FlaskForm):
     submit = SubmitField("Add")
 
 class IncomeForm(FlaskForm):
-    income_1 = IntegerField("Income 1 (1AJ)", default=0)
-    income_2 = IntegerField("Income 2 (1BJ)", default=0)
+    salary_1_1AJ = IntegerField("Income 1 (1AJ)", default=0)
+    salary_2_1BJ = IntegerField("Income 2 (1BJ)", default=0)
     submit = SubmitField("Confirm")
 
 class CharityForm(FlaskForm):
-    charity_7UD = IntegerField("Charity towards people in distress (7UD)", default=0)
-    charity_7UF = IntegerField("Other charity (7UF)", default=0)
+    charity_donation_7UD = IntegerField("Charity donation for people in distress (7UD)", default=0)
+    charity_donation_7UF = IntegerField("Other charity donations (7UF)", default=0)
     submit = SubmitField("Confirm")
 
 class RetirementInvestmentForm(FlaskForm):
@@ -74,7 +74,8 @@ class ServicesChargesForm(FlaskForm):
     submit = SubmitField("Confirm")
 
 class OtherInvestmentsForm(FlaskForm):
-    pme_capital_subscription_7CH = IntegerField("PME investment (7CH)", default=0)
+    pme_capital_subscription_7CF = IntegerField("PME investment 1st period (7CF)", default=0)
+    pme_capital_subscription_7CH = IntegerField("PME investment 2nd period (7CH)", default=0)
     submit = SubmitField("Confirm")
 
 class ShareholdingForm(FlaskForm):
