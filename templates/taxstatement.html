@@ -54,7 +54,17 @@
 
 <div class="row">
     <div class="col">
-        <h5> Your taxes will be {{ tax_result }} </h5>
+        <h5> Your taxes will be {{ tax_result['net_taxes'] }} </h5>
+        <a class="btn" data-toggle="collapse" href="#collapseTaxDetails" role="button" aria-expanded="false" aria-controls="collapseExample">
+            Details...
+        </a>
+        <div class="collapse" id="collapseTaxDetails">
+            <ul class="list-group">
+        {% for field_text, field_content in tax_result.items() %}
+                <li class="list-group-item"><text class="text-muted">{{field_text}}</text> € {{ field_content }}</li>
+        {% endfor %}
+            </ul>
+        </div>
     </div>
 </div>
 

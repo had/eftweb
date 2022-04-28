@@ -2,7 +2,7 @@ import dateutil.relativedelta
 from flask import render_template, redirect, session, url_for, flash
 import forms
 import models
-import taxsim
+import taxhelpers
 from app import app, db
 from collections import namedtuple
 from itertools import groupby
@@ -41,6 +41,15 @@ def project_tax(project_id):
     statements = models.TaxStatement.query.filter_by(project_id=project.id).all()
     return render_template("project_tax.html", project=project, form=form, taxstatements=statements)
 
+@app.route("/project/<int:project_id>/delete", methods=["GET", "POST"])
+def project_delete(project_id):
+    project = models.Project.query.get(project_id)
+    db.session.delete(project)
+    db.session.commit()
+    return redirect(url_for("index"))
+
+###### Stocks ######
+
 @app.route("/project/<int:project_id>/stocks", methods=["GET"])
 def project_stocks(project_id):
     project = models.Project.query.get(project_id)
@@ -48,18 +57,22 @@ def project_stocks(project_id):
     rsuplan_form = forms.RsuPlanForm()
     rsuvesting_form = forms.RsuVestingForm()
     direct_stocks = models.DirectStocks.query.filter_by(project_id=project.id).all()
+    direct_stocks_per_symbol = {symbol:list(ds) for symbol, ds in groupby(direct_stocks, key=lambda x:x.symbol)}
     rsu_plans = models.RSUPlan.query.filter_by(project_id=project.id).all()
     rsu_plans_id = [p.id for p in rsu_plans]
     rsu_vestings = models.RSUVesting.query.filter(models.RSUVesting.rsu_plan_id.in_(rsu_plans_id)).all()
     rsu_vestings_per_plan = {plan_id:list(v) for plan_id,v in groupby(rsu_vestings, key=lambda x:x.rsu_plan_id)}
     dstock_sale_form = forms.DirectStocksSaleForm()
     dstock_sales = models.DirectStocksSale.query.filter_by(project_id=project.id).all()
+    years = {ds.sell_date.year for ds in dstock_sales}
+    print(years)
     return render_template("project_stocks.html",
                            project=project,
-                           direct_stocks=direct_stocks, dstock_form=dstock_form,
+                           direct_stocks=direct_stocks_per_symbol, dstock_form=dstock_form,
                            rsu_plans=rsu_plans, rsuplan_form=rsuplan_form,
                            rsu_vestings=rsu_vestings_per_plan, rsuvesting_form=rsuvesting_form,
-                           dstock_sales=dstock_sales, dstock_sale_form=dstock_sale_form
+                           dstock_sales=dstock_sales, dstock_sale_form=dstock_sale_form,
+                           sales_years=years
                            )
 
 @app.route("/project/<int:project_id>/stocks/direct", methods=["POST"])
@@ -187,12 +200,21 @@ def rm_dstock_sale(project_id, dstock_sale_id):
     db.session.commit()
     return redirect(url_for('project_stocks', project_id=project_id))
 
-@app.route("/project/<int:project_id>/delete", methods=["GET", "POST"])
-def project_delete(project_id):
+@app.route("/project/<int:project_id>/stocks/taxhelper/<int:year>")
+def taxed_stock_helper(project_id, year):
     project = models.Project.query.get(project_id)
-    db.session.delete(project)
-    db.session.commit()
-    return redirect(url_for("index"))
+    direct_stocks = models.DirectStocks.query.filter_by(project_id=project.id).all()
+    # rsu_plans = models.RSUPlan.query.filter_by(project_id=project.id).all()
+    # rsu_plans_id = [p.id for p in rsu_plans]
+    # rsu_vestings = models.RSUVesting.query.filter(models.RSUVesting.rsu_plan_id.in_(rsu_plans_id)).all()
+    dstock_sales = models.DirectStocksSale.query.filter_by(project_id=project.id).all()
+    dstock_sales_that_year = filter(lambda x: x.sell_date.year == year, dstock_sales)
+    tax_report = taxhelpers.taxed_stock_helper(direct_stocks, year, dstock_sales_that_year)
+    print(tax_report)
+    return render_template("stock_taxhelper.html", project=project, tax_report=tax_report, year=year)
+
+
+###### Tax statements ######
 
 @app.route("/project/<int:project_id>/taxstatement/<int:taxstatement_id>/delete", methods=["GET", "POST"])
 def taxstatement_delete(project_id, taxstatement_id):
@@ -220,7 +242,8 @@ statement_elements = [
         ("Home services (7DB)", "home_services_7DB")
     ]),
     StatementElement("Other investments", models.OtherInvestmentsSegment, forms.OtherInvestmentsForm, [
-        ("PME investment (7CH)", "pme_capital_subscription_7CH"),
+        ("PME investment 1st period (7CF)", "pme_capital_subscription_7CF"),
+        ("PME investment 2nd period (7CH)", "pme_capital_subscription_7CH"),
     ]),
     StatementElement("Shareholding", models.ShareholdingSegment, forms.ShareholdingForm, [
         ("Taxable acquisition gain (1TZ)", "taxable_acquisition_gain_1TZ"),
@@ -229,7 +252,7 @@ statement_elements = [
         ("Other taxable gain 1 (1TT)", "exercise_gain_1_1TT"),
         ("Other taxable gain 2 (1UT)", "exercise_gain_2_1UT"),
         ("Capital gain (3VG)", "capital_gain_3VG"),
-        ("Capital loss (3VH)", "capital_loss_3VH"),
+        ("Capital loss (3VH) *NOT IMPLEMENTED*", "capital_loss_3VH"),
     ]),
 ]
 
@@ -239,6 +262,7 @@ def taxstatement(project_id, taxstatement_id):
     taxstatement = models.TaxStatement.query.get(taxstatement_id)
 
     rendering_elements = []
+
     for elt in statement_elements:
         elt_form = elt.form()
         elt_id = getattr(taxstatement, elt.name.lower().replace(' ','')+"_id")
@@ -248,16 +272,16 @@ def taxstatement(project_id, taxstatement_id):
                 getattr(elt_form, field).data = getattr(elt_object, field)
         else:
             elt_object = None
-        # upsert_fn = upsert_factory(elt)
-        # field_and_labels = {field}
         rendering_elements.append((elt.name, elt_object, elt_form, elt.fields, "upsert_"+elt.name.lower().replace(' ','')))
 
-    net_taxes = taxsim.simulateTax({elt[0]: elt[1] for elt in rendering_elements})
+    tax_result = taxhelpers.simulate_tax(taxstatement.year, {elt[0]: elt[1] for elt in rendering_elements})
+    net_taxes = tax_result["net_taxes"]
+    print(net_taxes)
     return render_template("taxstatement.html",
                            project=project,
                            taxstatement=taxstatement,
                            statement_elements=rendering_elements,
-                           tax_result=net_taxes)
+                           tax_result=tax_result)
 
 def upsert_factory(element:StatementElement):
     elt_name = element.name.lower().replace(' ','')

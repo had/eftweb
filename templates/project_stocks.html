@@ -5,27 +5,51 @@
 <a href="{{ url_for('index') }}"><i class="fas fa-home"></i></a> > Stocks {{project.name}}
 {% endblock %}
 {% block page_content %}
+<div class="btn-toolbar mb-3" role="toolbar" aria-label="Stock management toolbar">
+<div class="btn-group mr-2" role="group" aria-label="Add stocks and plans">
+    <button class="btn btn-outline-primary" data-toggle="modal" data-target="#DirectStocksModal">Add Direct Stocks</button>
+    <button class="btn btn-outline-primary" data-toggle="modal" data-target="#RsuPlanModal">Add RSU plan</button>
+    <button class="btn btn-outline-primary" data-toggle="modal" data-target="#StockOptionsModal">Add Stock Option plan</button>
+</div>
+<div class="btn-group mr-2" role="group" aria-label="Sell stocks">
+    <button class="btn btn-primary" data-toggle="modal" data-target="#SellingModal">Declare a selling event</button>
+</div>
+<div class="btn-group mr-2" role="group" aria-label="Get tax statement">
+    <div class="dropdown">
+        <button class="btn btn-success dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-expanded="false">
+            Tax helper
+        </button>
+        <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+        {% for y in sales_years %}
+            <a class="dropdown-item" href="{{ url_for('taxed_stock_helper', project_id=project.id, year=y) }}">{{y}}</a>
+        {% endfor %}
+        </div>
+    </div>
 
-<button class="btn btn-light" data-toggle="modal" data-target="#DirectStocksModal">Add Direct Stocks</button>
-<button class="btn btn-light" data-toggle="modal" data-target="#RsuPlanModal">Add RSU plan</button>
-<button class="btn btn-light" data-toggle="modal" data-target="#StockOptionsModal">Add Stock Option plan</button>
-<button class="btn btn-primary" data-toggle="modal" data-target="#SellingModal">Declare a selling event</button>
+</div>
+</div>
 <hr>
 
-<h3>Direct stocks</h3>
-
+{% if direct_stocks %}
+<h3 class="my-4">Direct stocks</h3>
+{% endif %}
+<div class="mx-2">
+{% for symbol, dstocks in direct_stocks.items() %}
+<h6 class="mt-3">{{ symbol }}</h6>
 <ul class="list-group">
-    {% for dstocks in direct_stocks %}
-    <li class="list-group-item">{{ dstocks.symbol }}  <text class="text-muted">{{ dstocks.quantity }} x {{dstocks.acquisition_price}} {{dstocks.stock_currency}}</text>
-                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('rm_direct_stocks', project_id=project.id, dstocks_id=dstocks.id) }}"><i class="fa fa-trash"></i></a>
+    {% for ds in dstocks %}
+    <li class="list-group-item">{{ds.acquisition_date}} <text class="text-muted">{{ ds.quantity }} x {{ds.acquisition_price}} {{ds.stock_currency}}</text>
+                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('rm_direct_stocks', project_id=project.id, dstocks_id=ds.id) }}"><i class="fa fa-trash"></i></a>
     </li>
     {% endfor %}
 </ul>
+{% endfor %}
+</div>
 
-{% if rsuplan %}
-
-<h3>RSU Plans</h3>
+{% if rsu_plans %}
+<h3 class="my-4">RSU Plans</h3>
 {% endif %}
+
 <ul class="list-group">
     {% for rsuplan in rsu_plans %}
     <li class="list-group-item">{{ rsuplan.symbol }}  <text class="text-muted">granted on {{rsuplan.grant_date}}</text>
@@ -43,7 +67,7 @@
 
 <hr>
 
-<h3>Direct stock sales</h3>
+<h3 class="my-4">Direct stock sales</h3>
 <ul class="list-group">
     {% for dstock_sale in dstock_sales %}
     <li class="list-group-item">{{ dstock_sale.symbol }}  <text class="text-muted">{{ dstock_sale.quantity }} x {{dstock_sale.sell_price}} {{dstock_sale.sell_currency}}</text>

@@ -44,7 +44,7 @@ class DirectStocksSaleForm(FlaskForm):
     sell_date = DateField("Sell date")
     sell_price = DecimalField("Sell price")
     sell_currency = StringField("Sell price currency")
-    fees = DecimalField("Fees (in EUR)")
+    fees = DecimalField("Fees (in same currency)")
     submit = SubmitField("Confirm")
 
 ### Tax ###
