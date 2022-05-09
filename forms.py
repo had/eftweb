@@ -73,6 +73,12 @@ class ServicesChargesForm(FlaskForm):
     home_services_7DB = IntegerField("Home services (7DB)", default=0)
     submit = SubmitField("Confirm")
 
+class FixedIncomeInvestmentForm(FlaskForm):
+    fixed_income_interests_2TR = IntegerField("Fixed income investments (2TR)", default=0)
+    fixed_income_interests_already_taxed_2BH = IntegerField("Fixed income already taxed (2BH)", default=0)
+    interest_tax_already_paid_2CK = IntegerField("Tax already paid on fixed income (2CK)", default=0)
+    submit = SubmitField("Confirm")
+
 class OtherInvestmentsForm(FlaskForm):
     pme_capital_subscription_7CF = IntegerField("PME investment 1st period (7CF)", default=0)
     pme_capital_subscription_7CH = IntegerField("PME investment 2nd period (7CH)", default=0)
@@ -87,6 +93,7 @@ class ShareholdingForm(FlaskForm):
     capital_gain_3VG = IntegerField("Capital gain (3VG)", default=0)
     capital_loss_3VH = IntegerField("Capital loss (3VH)", default=0)
     submit = SubmitField("Confirm")
+
 
 # introspect a form and returns tuples of field names and labels
 def form_to_fields(form):

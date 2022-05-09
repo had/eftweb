@@ -272,6 +272,11 @@ statement_elements = [
         ("Children care - 1st child (7GA)", "children_daycare_fees_7GA"),
         ("Home services (7DB)", "home_services_7DB")
     ]),
+    StatementElement("Fixed income investment", models.FixedIncomeInvestmentSegment, forms.FixedIncomeInvestmentForm, [
+        ("Fixed income investments (2TR)", "fixed_income_interests_2TR"),
+        ("Fixed income already taxed (2BH)", "fixed_income_interests_already_taxed_2BH"),
+        ("Tax already paid on fixed income (2CK)", "interest_tax_already_paid_2CK")
+    ]),
     StatementElement("Other investments", models.OtherInvestmentsSegment, forms.OtherInvestmentsForm, [
         ("PME investment 1st period (7CF)", "pme_capital_subscription_7CF"),
         ("PME investment 2nd period (7CH)", "pme_capital_subscription_7CH"),

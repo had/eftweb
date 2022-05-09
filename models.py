@@ -72,6 +72,7 @@ class TaxStatement(db.Model):
     charity_id = db.Column(db.Integer, db.ForeignKey('charity_segments.id'))
     retirementinvestment_id = db.Column(db.Integer, db.ForeignKey('retirementinvestment_segments.id'))
     servicecharges_id = db.Column(db.Integer, db.ForeignKey('servicecharges_segments.id'))
+    fixedincomeinvestment_id = db.Column(db.Integer, db.ForeignKey('fixedincomeinvestment_segments.id'))
     otherinvestments_id = db.Column(db.Integer, db.ForeignKey('otherinvestments_segments.id'))
     shareholding_id = db.Column(db.Integer, db.ForeignKey('shareholding_segments.id'))
 
@@ -98,6 +99,13 @@ class ServicesChargesSegment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     children_daycare_fees_7GA = db.Column(db.Integer)
     home_services_7DB = db.Column(db.Integer)
+
+class FixedIncomeInvestmentSegment(db.Model):
+    __tablename__ = "fixedincomeinvestment_segments"
+    id = db.Column(db.Integer, primary_key=True)
+    fixed_income_interests_2TR = db.Column(db.Integer)
+    fixed_income_interests_already_taxed_2BH = db.Column(db.Integer)
+    interest_tax_already_paid_2CK = db.Column(db.Integer)
 
 class OtherInvestmentsSegment(db.Model):
     __tablename__ = "otherinvestments_segments"
