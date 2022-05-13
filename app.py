@@ -1,23 +1,26 @@
-import os.path
-
 from flask import Flask
 from flask_bootstrap import Bootstrap
 from flask_fontawesome import FontAwesome
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from config import config
 
-basedir = os.path.abspath(os.path.dirname(__file__))
+db = SQLAlchemy()
+bootstrap = Bootstrap()
+fa = FontAwesome()
+migrate = Migrate()
 
-app = Flask(__name__)
-app.config['BOOTSTRAP_BOOTSWATCH_THEME'] = 'litera'
-app.config['SECRET_KEY'] = 't0p.5ecr3t'
-app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///" + os.path.join(basedir,"eftdb.sqlite")
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+def create_app(config_name):
+    app = Flask(__name__)
+    app.config.from_object(config[config_name])
 
-bootstrap = Bootstrap(app)
-fa = FontAwesome(app)
-db = SQLAlchemy(app)
-migrate = Migrate(app, db, render_as_batch=True)
+    bootstrap.init_app(app)
+    fa.init_app(app)
+    db.init_app(app)
+    migrate.init_app(app, db, render_as_batch=True)
+    return app
+
+app = create_app("default")
 
 from routes import *
 from models import *
