@@ -2,7 +2,7 @@
 
 
 {% block page_header %}
-    <a href="{{ url_for('index') }}"><i class="fas fa-home"></i></a> > <a href="{{ url_for('project_tax', project_id=project.id) }}"> Project {{project.name}}</a> > Tax statement {{taxstatement.year}}
+    <a href="{{ url_for('main.index') }}"><i class="fas fa-home"></i></a> > <a href="{{ url_for('tax.project_tax', project_id=project.id) }}"> Project {{project.name}}</a> > Tax statement {{taxstatement.year}}
 {% endblock %}
 
 {% block page_content %}
@@ -44,7 +44,7 @@
         <div class="modal-content">
             <div class="modal-header">{% if elt_object %}Edit{% else %}Add{% endif %} {{elt_name}}</div>
             <div class="modal-body">
-                    {{ wtf.render_form(elt_form, action=url_for(upsert_route, project_id=project.id, taxstatement_id=taxstatement.id)) }}
+                    {{ wtf.render_form(elt_form, action=url_for("tax." + upsert_route, project_id=project.id, taxstatement_id=taxstatement.id)) }}
             </div>
         </div>
     </div>

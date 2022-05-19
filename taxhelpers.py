@@ -1,6 +1,6 @@
 from easyfrenchtax import TaxSimulator, StockHelper
-from typing import List, Set, Dict, Tuple, Optional
-import models
+from typing import List
+from app import models
 
 
 def simulate_tax(year, tax_input):
@@ -8,7 +8,8 @@ def simulate_tax(year, tax_input):
     tax_result = TaxSimulator(year, tax_input)
     return tax_result.state, tax_result.flags
 
-def taxed_stock_helper(direct_stocks: List[models.DirectStocks], year: int, dstock_sales_that_year: List[models.DirectStocksSale]):
+def taxed_stock_helper(direct_stocks: List[models.DirectStocks], year: int, dstock_sales_that_year: List[
+    models.DirectStocksSale]):
     stock_helper = StockHelper()
     for ds in direct_stocks:
         print("Adding direct stocks", ds.taxpayer_owner, ds.symbol, ds.quantity, ds.acquisition_date, ds.acquisition_price, ds.stock_currency)

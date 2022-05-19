@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+
+{% block page_header %}
+<a href="{{ url_for('main.index') }}"><i class="fas fa-home"></i></a> > <a href="{{ url_for('stocks.project_stocks', project_id=project.id)}}">Stocks {{project.name}}</a> > Tax helper {{year}}
+{% endblock %}
+{% block page_content %}
+
+{{ tax_report }}
+
+{% endblock %}
+

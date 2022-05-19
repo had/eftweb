@@ -2,7 +2,7 @@
 
 
 {% block page_header %}
-<a href="{{ url_for('index') }}"><i class="fas fa-home"></i></a> > Stocks {{project.name}}
+<a href="{{ url_for('main.index') }}"><i class="fas fa-home"></i></a> > Stocks {{project.name}}
 {% endblock %}
 {% block page_content %}
 <div class="btn-toolbar mb-3" role="toolbar" aria-label="Stock management toolbar">
@@ -21,7 +21,7 @@
         </button>
         <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
         {% for y in sales_years %}
-            <a class="dropdown-item" href="{{ url_for('taxed_stock_helper', project_id=project.id, year=y) }}">{{y}}</a>
+            <a class="dropdown-item" href="{{ url_for('.taxed_stock_helper', project_id=project.id, year=y) }}">{{y}}</a>
         {% endfor %}
         </div>
     </div>
@@ -39,7 +39,7 @@
 <ul class="list-group">
     {% for ds in dstocks %}
     <li class="list-group-item">{{ds.acquisition_date}} <text class="text-muted">{{ ds.quantity }} x {{ds.acquisition_price}} {{ds.stock_currency}}</text>
-                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('rm_direct_stocks', project_id=project.id, dstocks_id=ds.id) }}"><i class="fa fa-trash"></i></a>
+                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_direct_stocks', project_id=project.id, dstocks_id=ds.id) }}"><i class="fa fa-trash"></i></a>
     </li>
     {% endfor %}
 </ul>
@@ -55,7 +55,7 @@
     <li class="list-group-item">{{ rsuplan.symbol }}  <text class="text-muted">granted on {{rsuplan.grant_date}}</text>
                 <!-- data-rsuplan gets forwarded to the wtform in modal, by some JS -->
                 <a class="btn btn-success btn-sm" data-toggle="modal" data-target="#RsuVestingModal" data-rsuplan="{{rsuplan.id}}"><i class="fa fa-plus" style="color:white"></i></a>
-                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('rm_rsu_plan', project_id=project.id, rsuplan_id=rsuplan.id) }}"><i class="fa fa-trash"></i></a>
+                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_rsu_plan', project_id=project.id, rsuplan_id=rsuplan.id) }}"><i class="fa fa-trash"></i></a>
         <ul>
             {% for vesting in rsu_vestings[rsuplan.id] %}
             <li>{{vesting.vesting_date}} : {{vesting.count}}</li>
@@ -71,7 +71,7 @@
 <ul class="list-group">
     {% for dstock_sale in dstock_sales %}
     <li class="list-group-item">{{ dstock_sale.symbol }}  <text class="text-muted">{{ dstock_sale.quantity }} x {{dstock_sale.sell_price}} {{dstock_sale.sell_currency}}</text>
-                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('rm_dstock_sale', project_id=project.id, dstock_sale_id=dstock_sale.id) }}"><i class="fa fa-trash"></i></a>
+                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_dstock_sale', project_id=project.id, dstock_sale_id=dstock_sale.id) }}"><i class="fa fa-trash"></i></a>
     </li>
     {% endfor %}
 </ul>
@@ -83,7 +83,7 @@
         <div class="modal-content">
             <div class="modal-header">Direct Stocks</div>
             <div class="modal-body">
-                    {{ wtf.render_form(dstock_form, action=url_for("add_direct_stocks", project_id=project.id)) }}
+                    {{ wtf.render_form(dstock_form, action=url_for(".add_direct_stocks", project_id=project.id)) }}
             </div>
         </div>
     </div>
@@ -94,7 +94,7 @@
         <div class="modal-content">
             <div class="modal-header">RSU Plan</div>
             <div class="modal-body">
-                    {{ wtf.render_form(rsuplan_form, action=url_for("add_rsu_plan", project_id=project.id)) }}
+                    {{ wtf.render_form(rsuplan_form, action=url_for(".add_rsu_plan", project_id=project.id)) }}
             </div>
         </div>
     </div>
@@ -105,7 +105,7 @@
         <div class="modal-content">
             <div class="modal-header">RSU Plan</div>
             <div class="modal-body">
-                    {{ wtf.render_form(rsuvesting_form, action=url_for("add_rsu_vesting", project_id=project.id)) }}
+                    {{ wtf.render_form(rsuvesting_form, action=url_for(".add_rsu_vesting", project_id=project.id)) }}
             </div>
         </div>
     </div>
@@ -116,7 +116,7 @@
         <div class="modal-content">
             <div class="modal-header">Selling direct stocks</div>
             <div class="modal-body">
-                    {{ wtf.render_form(dstock_sale_form, action=url_for("add_dstocks_sale", project_id=project.id)) }}
+                    {{ wtf.render_form(dstock_sale_form, action=url_for(".add_dstocks_sale", project_id=project.id)) }}
             </div>
         </div>
     </div>

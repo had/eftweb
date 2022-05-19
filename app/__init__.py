@@ -18,10 +18,16 @@ def create_app(config_name):
     fa.init_app(app)
     db.init_app(app)
     migrate.init_app(app, db, render_as_batch=True)
+
+    from .main import main as main_bp
+    app.register_blueprint(main_bp)
+    from .stocks import stocks as stocks_bp
+    app.register_blueprint(stocks_bp)
+    from .tax import tax as tax_bp
+    app.register_blueprint(tax_bp)
+
     return app
 
-app = create_app("default")
-
-from routes import *
-from models import *
+# from routes import *
+# from .models import *
 
