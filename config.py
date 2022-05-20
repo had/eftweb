@@ -14,10 +14,14 @@ class DevelopmentConfig(Config):
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = "sqlite:///" + os.path.join(basedir, "eftdb-dev.sqlite")
 
+class TestingConfig(Config):
+    DEBUG = True
+    SQLALCHEMY_DATABASE_URI = "sqlite:///" + os.path.join(basedir, "eftdb-test.sqlite")
+
 config = {
     'development': DevelopmentConfig,
+    'testing': TestingConfig,
     # TODO
-    # 'testing': TestingConfig,
     # 'production': ProductionConfig,
     'default': DevelopmentConfig
 }
