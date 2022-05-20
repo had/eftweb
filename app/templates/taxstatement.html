@@ -2,7 +2,7 @@
 
 
 {% block page_header %}
-    <a href="{{ url_for('main.index') }}"><i class="fas fa-home"></i></a> > <a href="{{ url_for('tax.project_tax', project_id=project.id) }}"> Project {{project.name}}</a> > Tax statement {{taxstatement.year}}
+    <a href="{{ url_for('main.index') }}"><i class="fas fa-home"></i></a> > <a href="{{ url_for('main.project_tax', project_id=project.id) }}"> Project {{project.name}}</a> > Tax statement {{taxstatement.year}}
 {% endblock %}
 
 {% block page_content %}

@@ -16,8 +16,8 @@
         <h3 class="card-header">{{ taxstatement.year }}</h3>
         <div class="card-body">
             <p class="card-text">Coucou</p>
-            <a href="{{ url_for('.taxstatement',  project_id=project.id, taxstatement_id=taxstatement.id) }}" class="btn btn-primary">Go</a>
-            <a href="{{ url_for('.taxstatement_delete', project_id=project.id, taxstatement_id=taxstatement.id) }}" class="btn btn-danger">Delete</a>
+            <a href="{{ url_for('tax.taxstatement',  project_id=project.id, taxstatement_id=taxstatement.id) }}" class="btn btn-primary">Go</a>
+            <a href="{{ url_for('tax.taxstatement_delete', project_id=project.id, taxstatement_id=taxstatement.id) }}" class="btn btn-danger">Delete</a>
         </div>
     </div>
     {% endfor %}

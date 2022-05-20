@@ -6,30 +6,31 @@ from sqlalchemy.exc import IntegrityError
 from . import main
 from .forms import ProjectForm, TaxStatementForm
 from .. import db
-from .. import models
+from ..tax import models
+from .models import Project
 
 
 @main.route("/", methods=["GET", "POST"])
 def index():
     form = ProjectForm()
     if form.validate_on_submit():
-        project = models.Project(
+        project = Project(
             name=form.name.data
         )
         db.session.add(project)
         try:
             db.session.commit()
-            flash(f"Project added (total {len(models.Project.query.all())} projects)")
+            flash(f"Project added (total {len(Project.query.all())} projects)")
             return redirect(url_for('.project_tax', project_id=project.id))
         except IntegrityError:
             db.session.rollback()
-    projects = models.Project.query.all()
+    projects = Project.query.all()
     return render_template("index.html", name="Guest", projects=projects, form=form)
 
 
 @main.route("/project/<int:project_id>", methods=["GET", "POST"])
 def project_tax(project_id):
-    project = models.Project.query.get(project_id)
+    project = Project.query.get(project_id)
     # prepare project form in case of edit/update
     project_form = ProjectForm()
     project_form.name.data = project.name
@@ -58,7 +59,7 @@ def project_tax(project_id):
 def project_update(project_id):
     form = ProjectForm()
     if form.validate_on_submit():
-        project = models.Project.query.get(project_id)
+        project = Project.query.get(project_id)
         project.name = form.name.data
         project.married = (form.situation.data == "Married")
         project.nb_children = form.nb_children.data
@@ -74,7 +75,7 @@ def project_update(project_id):
 
 @main.route("/project/<int:project_id>/delete", methods=["GET", "POST"])
 def project_delete(project_id):
-    project = models.Project.query.get(project_id)
+    project = Project.query.get(project_id)
     db.session.delete(project)
     db.session.commit()
     return redirect(url_for(".index"))

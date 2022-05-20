@@ -4,44 +4,46 @@ from collections import namedtuple
 
 from . import tax
 from .forms import IncomeForm, CharityForm, RetirementInvestmentForm, ServicesChargesForm, FixedIncomeInvestmentForm, OtherInvestmentsForm, ShareholdingForm
+from .models import *
+from ..main.models import Project
 from .. import db
-from .. import models
+
 
 @tax.route("/project/<int:project_id>/taxstatement/<int:taxstatement_id>/delete", methods=["GET", "POST"])
 def taxstatement_delete(project_id, taxstatement_id):
-    taxstatement = models.TaxStatement.query.get(taxstatement_id)
+    taxstatement = TaxStatement.query.get(taxstatement_id)
     db.session.delete(taxstatement)
     db.session.commit()
     return redirect(url_for("main.project_tax", project_id=project_id))
 
 StatementElement = namedtuple("StatementElement", ["name", "model", "form", "fields"])
 statement_elements = [
-   StatementElement("Income", models.IncomeSegment, IncomeForm, [
+   StatementElement("Income", IncomeSegment, IncomeForm, [
        ("Salary 1 (1AJ)", "salary_1_1AJ"),
        ("Salary 2 (1BJ)", "salary_2_1BJ")
    ]),
-   StatementElement("Charity", models.CharitySegment, CharityForm, [
+   StatementElement("Charity", CharitySegment, CharityForm, [
        ("Charity donation for people in distress (7UD)", "charity_donation_7UD"),
        ("Other charity donations (7UF)", "charity_donation_7UF")
    ]),
-    StatementElement("Retirement investment", models.RetirementInvestmentSegment, RetirementInvestmentForm, [
+    StatementElement("Retirement investment", RetirementInvestmentSegment, RetirementInvestmentForm, [
         ("Investment on PER 1 (6NS)", "per_transfers_1_6NS"),
         ("Investment on PER 2 (6NT)", "per_transfers_2_6NT")
     ]),
-    StatementElement("Service charges", models.ServicesChargesSegment, ServicesChargesForm, [
+    StatementElement("Service charges", ServicesChargesSegment, ServicesChargesForm, [
         ("Children care - 1st child (7GA)", "children_daycare_fees_7GA"),
         ("Home services (7DB)", "home_services_7DB")
     ]),
-    StatementElement("Fixed income investment", models.FixedIncomeInvestmentSegment, FixedIncomeInvestmentForm, [
+    StatementElement("Fixed income investment", FixedIncomeInvestmentSegment, FixedIncomeInvestmentForm, [
         ("Fixed income investments (2TR)", "fixed_income_interests_2TR"),
         ("Fixed income already taxed (2BH)", "fixed_income_interests_already_taxed_2BH"),
         ("Tax already paid on fixed income (2CK)", "interest_tax_already_paid_2CK")
     ]),
-    StatementElement("Other investments", models.OtherInvestmentsSegment, OtherInvestmentsForm, [
+    StatementElement("Other investments", OtherInvestmentsSegment, OtherInvestmentsForm, [
         ("PME investment 1st period (7CF)", "pme_capital_subscription_7CF"),
         ("PME investment 2nd period (7CH)", "pme_capital_subscription_7CH"),
     ]),
-    StatementElement("Shareholding", models.ShareholdingSegment, ShareholdingForm, [
+    StatementElement("Shareholding", ShareholdingSegment, ShareholdingForm, [
         ("Taxable acquisition gain (1TZ)", "taxable_acquisition_gain_1TZ"),
         ("Acquisition gain rebates (1UZ)", "acquisition_gain_rebates_1UZ"),
         ("Acquisition gain 50% rebates (1WZ)", "acquisition_gain_50p_rebates_1WZ"),
@@ -54,8 +56,8 @@ statement_elements = [
 
 @tax.route("/project/<int:project_id>/taxstatement/<int:taxstatement_id>", methods=["GET"])
 def taxstatement(project_id, taxstatement_id):
-    project = models.Project.query.get(project_id)
-    taxstatement = models.TaxStatement.query.get(taxstatement_id)
+    project = Project.query.get(project_id)
+    taxstatement = TaxStatement.query.get(taxstatement_id)
 
     rendering_elements = []
     tax_input = {}
@@ -90,7 +92,7 @@ def upsert_factory(element:StatementElement):
     def upsert_element(project_id, taxstatement_id):
         form = element.form()
         if form.validate_on_submit():
-            taxstatement = models.TaxStatement.query.get(taxstatement_id)
+            taxstatement = TaxStatement.query.get(taxstatement_id)
             elt_id = getattr(taxstatement, elt_name + "_id")
             if elt_id:
                 elt_object = element.model.query.get(elt_id)
