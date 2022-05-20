@@ -6,3 +6,4 @@ flask-migrate
 flask-fontawesome
 python-dateutil
 sqlalchemy
+easyfrenchtax
