@@ -17,6 +17,7 @@ class DevelopmentConfig(Config):
 class TestingConfig(Config):
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = "sqlite:///" + os.path.join(basedir, "eftdb-test.sqlite")
+    WTF_CSRF_ENABLED = False
 
 config = {
     'development': DevelopmentConfig,

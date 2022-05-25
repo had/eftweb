@@ -15,7 +15,9 @@ def index():
     form = ProjectForm()
     if form.validate_on_submit():
         project = Project(
-            name=form.name.data
+            name=form.name.data,
+            married=(form.situation.data == "Married"),
+            nb_children=form.nb_children.data
         )
         db.session.add(project)
         try:

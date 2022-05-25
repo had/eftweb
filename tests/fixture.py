@@ -1,6 +1,5 @@
 import pytest
 from app import create_app, db
-from flask import url_for
 
 @pytest.fixture()
 def app():
@@ -14,9 +13,3 @@ def app():
     yield app
     db.drop_all()
     app_context.pop()
-
-def test_index(app):
-    client = app.test_client()
-    response = client.get(url_for('main.index'))
-    assert "Hello Guest" in response.get_data(as_text=True)
-
