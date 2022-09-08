@@ -4,7 +4,7 @@ from app.stocks import models as stock_models
 
 
 def simulate_tax(year, tax_input):
-    print(tax_input)
+    print("Using this input for tax: ", tax_input)
     tax_result = TaxSimulator(year, tax_input)
     return tax_result.state, tax_result.flags
 

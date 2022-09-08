@@ -1,6 +1,7 @@
 from flask import render_template, redirect, url_for
 import taxhelpers
-from collections import namedtuple
+from collections import namedtuple, defaultdict
+from easyfrenchtax import TaxField
 
 from . import tax
 from .forms import IncomeForm, CharityForm, RetirementInvestmentForm, ServicesChargesForm, FixedIncomeInvestmentForm, OtherInvestmentsForm, ShareholdingForm
@@ -69,19 +70,27 @@ def taxstatement(project_id, taxstatement_id):
             for _, field in elt.fields:
                 value = getattr(elt_object, field)
                 getattr(elt_form, field).data = value
-                tax_input[field] = value
+                field_names_fixups = {
+                    'pme_capital_subscription_7CF': 'sme_capital_subscription_7CF',
+                    'pme_capital_subscription_7CH': 'sme_capital_subscription_7CH'
+                }
+                tax_input[TaxField(field_names_fixups.get(field, field))] = value
         else:
             elt_object = None
         rendering_elements.append((elt.name, elt_object, elt_form, elt.fields, "upsert_"+elt.name.lower().replace(' ','')))
-    tax_input["married"] = project.married
-    tax_input["nb_children"] = project.nb_children
+    tax_input[TaxField.MARRIED] = project.married
+    tax_input[TaxField.NB_CHILDREN] = project.nb_children
+    # TODO: set the proper birth years of children
+    tax_input[TaxField.NB_CHILDREN_LT_6YO] = project.nb_children
+    print(tax_input)
     tax_result, tax_flags = taxhelpers.simulate_tax(taxstatement.year, tax_input)
-    net_taxes = tax_result["net_taxes"]
-    print(net_taxes)
+    total_taxes = tax_result[TaxField.NET_TAXES] + tax_result[TaxField.NET_SOCIAL_TAXES]
+    print(total_taxes)
     return render_template("taxstatement.html",
                            project=project,
                            taxstatement=taxstatement,
                            statement_elements=rendering_elements,
+                           total_taxes=total_taxes,
                            tax_result=tax_result,
                            tax_flags=tax_flags)
 
