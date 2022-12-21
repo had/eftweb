@@ -8,15 +8,29 @@
 <div class="btn-toolbar mb-3" role="toolbar" aria-label="Stock management toolbar">
 <div class="btn-group mr-2" role="group" aria-label="Add stocks and plans">
     <button class="btn btn-outline-primary" data-toggle="modal" data-target="#DirectStocksModal">Add Direct Stocks</button>
-    <button class="btn btn-outline-primary" data-toggle="modal" data-target="#RsuPlanModal">Add RSU plan</button>
+    <div class="btn-group" role="group">
+        <button class="btn btn-outline-primary dropdown-toggle" data-toggle="dropdown">Add RSU plan</button>
+        <div class="dropdown-menu">
+            <a class="dropdown-item" data-toggle="modal" data-target="#RsuPlanModal">Input</a>
+            <a class="dropdown-item" data-toggle="modal" data-target="#RsuImportModal">Import from TSV</a>
+        </div>
+    </div>
     <button class="btn btn-outline-primary" data-toggle="modal" data-target="#StockOptionsModal">Add Stock Option plan</button>
 </div>
 <div class="btn-group mr-2" role="group" aria-label="Sell stocks">
-    <button class="btn btn-primary" data-toggle="modal" data-target="#SellingModal">Declare a selling event</button>
+    <div class="dropdown">
+        <button class="btn btn-primary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown">
+            Declare a selling event
+        </button>
+        <div class="dropdown-menu">
+            <a class="dropdown-item" data-toggle="modal" data-target="#SellingStockModal">Sell direct stocks</a>
+            <a class="dropdown-item" data-toggle="modal" data-target="#SellingRsuModal">Sell RSUs</a>
+        </div>
+    </div>
 </div>
 <div class="btn-group mr-2" role="group" aria-label="Get tax statement">
     <div class="dropdown">
-        <button class="btn btn-success dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-expanded="false">
+        <button class="btn btn-success dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown">
             Tax helper
         </button>
         <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
@@ -100,6 +114,17 @@
     </div>
 </div>
 
+<div class="modal" id="RsuImportModal" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">RSU Import</div>
+            <div class="modal-body">
+                    {{ wtf.render_form(rsu_import_form, action=url_for(".import_rsu_plan", project_id=project.id)) }}
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal" id="RsuVestingModal" role="dialog" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
@@ -111,7 +136,7 @@
     </div>
 </div>
 
-<div class="modal" id="SellingModal" role="dialog" aria-hidden="true">
+<div class="modal" id="SellingStockModal" role="dialog" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
             <div class="modal-header">Selling direct stocks</div>

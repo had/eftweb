@@ -1,4 +1,5 @@
 from flask_wtf import FlaskForm
+from flask_wtf.file import FileField, FileRequired
 from wtforms import StringField, IntegerField, SelectField, SubmitField, DateField, DecimalField, HiddenField
 from wtforms.validators import NumberRange
 
@@ -17,6 +18,12 @@ class RsuPlanForm(FlaskForm):
     grant_date = DateField("Grant date")
     symbol = StringField("Stock symbol")
     stock_currency = StringField("Stock currency")
+    # tsv_file = FileField("Vesting data (optional)")
+    submit = SubmitField("Confirm")
+
+class RsuImportForm(FlaskForm):
+    tsv_file = FileField("RSU data")
+    tp_owner = IntegerField("Taxpayer owner (1 or 2)", validators=[NumberRange(min=1, max=2)])
     submit = SubmitField("Confirm")
 
 class RsuVestingForm(FlaskForm):

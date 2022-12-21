@@ -1,12 +1,12 @@
 from flask import Flask
-from flask_bootstrap import Bootstrap
+from flask_bootstrap import Bootstrap4
 from flask_fontawesome import FontAwesome
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from config import config
 
 db = SQLAlchemy()
-bootstrap = Bootstrap()
+bootstrap = Bootstrap4()
 fa = FontAwesome()
 migrate = Migrate()
 

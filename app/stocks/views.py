@@ -1,11 +1,18 @@
+import csv
+import os
+from datetime import datetime
+from io import TextIOWrapper
+
 import dateutil.relativedelta
 from flask import render_template, redirect, url_for
+from werkzeug.datastructures import FileStorage
+
 import taxhelpers
 from itertools import groupby
 from sqlalchemy.exc import IntegrityError
 
 from . import stocks
-from .forms import DirectStocksForm, RsuPlanForm, RsuVestingForm, DirectStocksSaleForm
+from .forms import DirectStocksForm, RsuPlanForm, RsuVestingForm, DirectStocksSaleForm, RsuImportForm
 from .. import db
 from ..main import models as main_models
 from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale
@@ -16,6 +23,7 @@ def project_stocks(project_id):
     project = main_models.Project.query.get(project_id)
     dstock_form = DirectStocksForm()
     rsuplan_form = RsuPlanForm()
+    rsu_import_form = RsuImportForm()
     rsuvesting_form = RsuVestingForm()
     direct_stocks = DirectStocks.query.filter_by(project_id=project.id).all()
     direct_stocks_per_symbol = {symbol: list(ds) for symbol, ds in groupby(direct_stocks, key=lambda x: x.symbol)}
@@ -30,7 +38,7 @@ def project_stocks(project_id):
     return render_template("project_stocks.html",
                            project=project,
                            direct_stocks=direct_stocks_per_symbol, dstock_form=dstock_form,
-                           rsu_plans=rsu_plans, rsuplan_form=rsuplan_form,
+                           rsu_plans=rsu_plans, rsuplan_form=rsuplan_form, rsu_import_form=rsu_import_form,
                            rsu_vestings=rsu_vestings_per_plan, rsuvesting_form=rsuvesting_form,
                            dstock_sales=dstock_sales, dstock_sale_form=dstock_sale_form,
                            sales_years=years
@@ -75,8 +83,8 @@ def add_rsu_plan(project_id):
             symbol=rsuplan_form.symbol.data,
             stock_currency=rsuplan_form.stock_currency.data
         )
-        db.session.add(rsuplan)
         try:
+            db.session.add(rsuplan)
             db.session.commit()
         except IntegrityError as e:
             print("ERR ", e)
@@ -85,6 +93,45 @@ def add_rsu_plan(project_id):
     else:
         # TODO: pop-up errors back to user?
         print("Validation error:", rsuplan_form.errors)
+    return redirect(url_for('.project_stocks', project_id=project_id))
+
+@stocks.route("/project/<int:project_id>/stocks/rsu/import", methods=["POST"])
+def import_rsu_plan(project_id):
+    rsu_import_form = RsuImportForm()
+    if rsu_import_form.validate_on_submit():
+        rsuplan_file: FileStorage = rsu_import_form.tsv_file.data
+        # Python 3.11 required for the following (because https://docs.python.org/3.11/whatsnew/3.11.html#tempfile)
+        rsuplan_reader = csv.DictReader(TextIOWrapper(rsuplan_file.stream), dialect="excel", delimiter='\t')
+        rsu_plans: dict[str, int] = {}
+        print("Parsing rsu vesting data:")
+        for row in rsuplan_reader:
+            print(row)
+            plan_name = row["Plan name"]
+            if plan_name in rsu_plans:
+                plan_id = rsu_plans[plan_name]
+            else:
+                new_plan = RSUPlan(
+                    project_id=project_id,
+                    name=plan_name,
+                    taxpayer_owner=rsu_import_form.tp_owner.data,
+                    grant_date=datetime.strptime(row["Plan date"], "%d %b %Y").date(),
+                    symbol=row["Symbol"],
+                    stock_currency=row["Currency"]
+                )
+                db.session.add(new_plan)
+                db.session.commit()
+                plan_id =  new_plan.id
+                rsu_plans[plan_name] = plan_id
+            vesting = RSUVesting(
+                rsu_plan_id=plan_id,
+                count=int(row["Count"]),
+                vesting_date=datetime.strptime(row["Acquisition date"], "%d %b %Y").date(),
+                acquisition_price=float(row["Acquisition price"])
+            )
+            db.session.add(vesting)
+        db.session.commit()
+    else:
+        print(rsu_import_form.errors)
     return redirect(url_for('.project_stocks', project_id=project_id))
 
 
