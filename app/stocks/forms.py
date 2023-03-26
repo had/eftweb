@@ -43,3 +43,12 @@ class DirectStocksSaleForm(FlaskForm):
     sell_currency = StringField("Sell price currency")
     fees = DecimalField("Fees (in same currency)")
     submit = SubmitField("Confirm")
+
+class RsuSaleForm(FlaskForm):
+    symbol = StringField("Stock symbol")
+    quantity = IntegerField("Quantity")
+    sell_date = DateField("Sell date")
+    sell_price = DecimalField("Sell price")
+    sell_currency = StringField("Sell price currency")
+    fees = DecimalField("Fees (in same currency)")
+    submit = SubmitField("Confirm")

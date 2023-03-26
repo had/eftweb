@@ -1,5 +1,6 @@
 import csv
 import os
+import pprint
 from datetime import datetime
 from io import TextIOWrapper
 
@@ -12,10 +13,10 @@ from itertools import groupby
 from sqlalchemy.exc import IntegrityError
 
 from . import stocks
-from .forms import DirectStocksForm, RsuPlanForm, RsuVestingForm, DirectStocksSaleForm, RsuImportForm
+from .forms import DirectStocksForm, RsuPlanForm, RsuVestingForm, DirectStocksSaleForm, RsuImportForm, RsuSaleForm
 from .. import db
 from ..main import models as main_models
-from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale
+from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale, RSUSale
 
 
 @stocks.route("/project/<int:project_id>/stocks", methods=["GET"])
@@ -33,14 +34,16 @@ def project_stocks(project_id):
     rsu_vestings_per_plan = {plan_id: list(v) for plan_id, v in groupby(rsu_vestings, key=lambda x: x.rsu_plan_id)}
     dstock_sale_form = DirectStocksSaleForm()
     dstock_sales = DirectStocksSale.query.filter_by(project_id=project.id).all()
-    years = {ds.sell_date.year for ds in dstock_sales}
-    print(years)
+    rsu_sale_form = RsuSaleForm()
+    rsu_sales = RSUSale.query.filter_by(project_id=project.id).all()
+    years = {ds.sell_date.year for ds in dstock_sales} | {rs.sell_date.year for rs in rsu_sales}
     return render_template("project_stocks.html",
                            project=project,
                            direct_stocks=direct_stocks_per_symbol, dstock_form=dstock_form,
                            rsu_plans=rsu_plans, rsuplan_form=rsuplan_form, rsu_import_form=rsu_import_form,
                            rsu_vestings=rsu_vestings_per_plan, rsuvesting_form=rsuvesting_form,
                            dstock_sales=dstock_sales, dstock_sale_form=dstock_sale_form,
+                           rsu_sales=rsu_sales, rsu_sale_form=rsu_sale_form,
                            sales_years=years
                            )
 
@@ -193,6 +196,31 @@ def add_dstocks_sale(project_id):
     return redirect(url_for('.project_stocks', project_id=project_id))
 
 
+@stocks.route("/project/<int:project_id>/stocks/rsu/selling", methods=["POST"])
+def add_rsu_sale(project_id):
+    rsu_sale_form = RsuSaleForm()
+    if rsu_sale_form.validate_on_submit():
+        rsu_sale = RSUSale(
+            project_id=project_id,
+            symbol=rsu_sale_form.symbol.data,
+            quantity=rsu_sale_form.quantity.data,
+            sell_date=rsu_sale_form.sell_date.data,
+            sell_price=rsu_sale_form.sell_price.data,
+            sell_currency=rsu_sale_form.sell_currency.data,
+            fees=rsu_sale_form.fees.data
+        )
+        db.session.add(rsu_sale)
+        try:
+            db.session.commit()
+        except IntegrityError as e:
+            print("ERR ", e)
+            db.session.rollback()
+    else:
+        # TODO: pop-up errors back to user?
+        print("Validation error:", rsu_sale_form.errors)
+    return redirect(url_for('.project_stocks', project_id=project_id))
+
+
 # TODO: find a way to use a DELETE method instead of GET, this is not very nice and RESTful
 @stocks.route("/project/<int:project_id>/stocks/direct/<int:dstocks_id>/delete")
 def rm_direct_stocks(project_id, dstocks_id):
@@ -215,16 +243,32 @@ def rm_dstock_sale(project_id, dstock_sale_id):
     db.session.commit()
     return redirect(url_for('.project_stocks', project_id=project_id))
 
+@stocks.route("/project/<int:project_id>/stocks/rsu/rsu_sale/<int:rsu_sale_id>/delete")
+def rm_rsu_sale(project_id, rsu_sale_id):
+    RSUSale.query.filter_by(id=rsu_sale_id).delete()
+    db.session.commit()
+    return redirect(url_for('.project_stocks', project_id=project_id))
+
 
 @stocks.route("/project/<int:project_id>/stocks/taxhelper/<int:year>")
 def taxed_stock_helper(project_id, year):
     project = main_models.Project.query.get(project_id)
     direct_stocks = DirectStocks.query.filter_by(project_id=project.id).all()
-    # rsu_plans = models.RSUPlan.query.filter_by(project_id=project.id).all()
-    # rsu_plans_id = [p.id for p in rsu_plans]
-    # rsu_vestings = models.RSUVesting.query.filter(models.RSUVesting.rsu_plan_id.in_(rsu_plans_id)).all()
     dstock_sales = DirectStocksSale.query.filter_by(project_id=project.id).all()
-    dstock_sales_that_year = filter(lambda x: x.sell_date.year == year, dstock_sales)
-    tax_report = taxhelpers.taxed_stock_helper(direct_stocks, year, list(dstock_sales_that_year))
-    print(tax_report)
-    return render_template("stock_taxhelper.html", project=project, tax_report=tax_report, year=year)
+    dstock_sales_that_year = list(filter(lambda x: x.sell_date.year == year, dstock_sales))
+    rsu_plans = RSUPlan.query.filter_by(project_id=project.id).all()
+    rsu_plans_id = [p.id for p in rsu_plans]
+    rsu_vestings = RSUVesting.query.filter(RSUVesting.rsu_plan_id.in_(rsu_plans_id)).all()
+    rsu_sales = RSUSale.query.filter_by(project_id=project.id).all()
+    rsu_sales_that_year = list(filter(lambda x: x.sell_date.year == year, rsu_sales))
+    tax_report = taxhelpers.taxed_stock_helper(
+        year,
+        direct_stocks,
+        dstock_sales_that_year,
+        rsu_plans,
+        rsu_vestings,
+        rsu_sales_that_year
+    )
+    pretty_tax_report = pprint.pformat(tax_report)
+    print(pretty_tax_report)
+    return render_template("stock_taxhelper.html", project=project, tax_report=pretty_tax_report, year=year)

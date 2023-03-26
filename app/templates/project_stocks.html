@@ -90,6 +90,14 @@
     {% endfor %}
 </ul>
 
+<h3 class="my-4">RSU sales</h3>
+<ul class="list-group">
+    {% for rsu_sale in rsu_sales %}
+    <li class="list-group-item">{{ rsu_sale.symbol }}  <text class="text-muted">{{ rsu_sale.quantity }} x {{rsu_sale.sell_price}} {{rsu_sale.sell_currency}}</text>
+                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_rsu_sale', project_id=project.id, rsu_sale_id=rsu_sale.id) }}"><i class="fa fa-trash"></i></a>
+    </li>
+    {% endfor %}
+</ul>
 
 {% import 'bootstrap/form.html' as wtf %}
 <div class="modal" id="DirectStocksModal" role="dialog" aria-hidden="true">
@@ -147,6 +155,16 @@
     </div>
 </div>
 
+<div class="modal" id="SellingRsuModal" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">Selling RSUs</div>
+            <div class="modal-body">
+                    {{ wtf.render_form(rsu_sale_form, action=url_for(".add_rsu_sale", project_id=project.id)) }}
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
 $('#RsuVestingModal').on('show.bs.modal', function (event) {
