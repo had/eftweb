@@ -1,5 +1,4 @@
 import csv
-import os
 import pprint
 from datetime import datetime
 from io import TextIOWrapper
@@ -14,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from . import stocks
 from .forms import DirectStocksForm, RsuPlanForm, RsuVestingForm, DirectStocksSaleForm, RsuImportForm, RsuSaleForm
+from .portfolio import RSUPortfolio
 from .. import db
 from ..main import models as main_models
 from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale, RSUSale
@@ -26,25 +26,21 @@ def project_stocks(project_id):
     rsuplan_form = RsuPlanForm()
     rsu_import_form = RsuImportForm()
     rsuvesting_form = RsuVestingForm()
+    rsu_portfolio = RSUPortfolio(project.id)
     direct_stocks = DirectStocks.query.filter_by(project_id=project.id).all()
     direct_stocks_per_symbol = {symbol: list(ds) for symbol, ds in groupby(direct_stocks, key=lambda x: x.symbol)}
-    rsu_plans = RSUPlan.query.filter_by(project_id=project.id).all()
-    rsu_plans_id = [p.id for p in rsu_plans]
-    rsu_vestings = RSUVesting.query.filter(RSUVesting.rsu_plan_id.in_(rsu_plans_id)).all()
-    rsu_vestings_per_plan = {plan_id: list(v) for plan_id, v in groupby(rsu_vestings, key=lambda x: x.rsu_plan_id)}
     dstock_sale_form = DirectStocksSaleForm()
     dstock_sales = DirectStocksSale.query.filter_by(project_id=project.id).all()
     rsu_sale_form = RsuSaleForm()
-    rsu_sales = RSUSale.query.filter_by(project_id=project.id).all()
-    years = {ds.sell_date.year for ds in dstock_sales} | {rs.sell_date.year for rs in rsu_sales}
+    years = {ds.sell_date.year for ds in dstock_sales} | {rs.sell_date.year for rs in rsu_portfolio.sales}
     return render_template("project_stocks.html",
                            project=project,
                            direct_stocks=direct_stocks_per_symbol, dstock_form=dstock_form,
-                           rsu_plans=rsu_plans, rsuplan_form=rsuplan_form, rsu_import_form=rsu_import_form,
-                           rsu_vestings=rsu_vestings_per_plan, rsuvesting_form=rsuvesting_form,
+                           rsuplan_form=rsuplan_form, rsu_import_form=rsu_import_form,
+                           rsuvesting_form=rsuvesting_form,
                            dstock_sales=dstock_sales, dstock_sale_form=dstock_sale_form,
-                           rsu_sales=rsu_sales, rsu_sale_form=rsu_sale_form,
-                           sales_years=years
+                           rsu_sale_form=rsu_sale_form,
+                           sales_years=years, rsu_portfolio=rsu_portfolio
                            )
 
 
@@ -260,6 +256,8 @@ def taxed_stock_helper(project_id, year):
     rsu_plans_id = [p.id for p in rsu_plans]
     rsu_vestings = RSUVesting.query.filter(RSUVesting.rsu_plan_id.in_(rsu_plans_id)).all()
     rsu_sales = RSUSale.query.filter_by(project_id=project.id).all()
+    for rs in rsu_sales:
+        print("DEBUG1 ", rs.__dict__)
     rsu_sales_that_year = list(filter(lambda x: x.sell_date.year == year, rsu_sales))
     tax_report = taxhelpers.taxed_stock_helper(
         year,
@@ -270,5 +268,5 @@ def taxed_stock_helper(project_id, year):
         rsu_sales_that_year
     )
     pretty_tax_report = pprint.pformat(tax_report)
-    print(pretty_tax_report)
+    # taxhelpers.
     return render_template("stock_taxhelper.html", project=project, tax_report=pretty_tax_report, year=year)

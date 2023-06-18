@@ -60,24 +60,27 @@
 {% endfor %}
 </div>
 
-{% if rsu_plans %}
+{% if grouped_rsu_plans %}
 <h3 class="my-4">RSU Plans</h3>
 {% endif %}
 
+{% for symbol, rsu_plans in rsu_portfolio.plans %}
+<h4 class="my-4">{{ symbol }}: {{ rsu_portfolio.stock_symbols[symbol] }}</h4>
 <ul class="list-group">
     {% for rsuplan in rsu_plans %}
-    <li class="list-group-item">{{ rsuplan.symbol }}  <text class="text-muted">granted on {{rsuplan.grant_date}}</text>
+    <li class="list-group-item">{{ rsuplan.name }}  <text class="text-muted">granted on {{rsuplan.grant_date}}</text>
                 <!-- data-rsuplan gets forwarded to the wtform in modal, by some JS -->
-                <a class="btn btn-success btn-sm" data-toggle="modal" data-target="#RsuVestingModal" data-rsuplan="{{rsuplan.id}}"><i class="fa fa-plus" style="color:white"></i></a>
+                <a class="btn btn-success btn-sm" data-toggle="modal" data-target="#RsuVestingModal" data-rsuplan="{{rsuplan.id}}"><i class="fa fa-plus" style="color:white"></i> add vesting</a>
                 <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_rsu_plan', project_id=project.id, rsuplan_id=rsuplan.id) }}"><i class="fa fa-trash"></i></a>
         <ul>
-            {% for vesting in rsu_vestings[rsuplan.id] %}
+            {% for vesting in rsu_portfolio.vestings[rsuplan.id] %}
             <li>{{vesting.vesting_date}} : {{vesting.count}}</li>
             {% endfor %}
         </ul>
     </li>
     {% endfor %}
 </ul>
+{% endfor %}
 
 <hr>
 
@@ -92,7 +95,7 @@
 
 <h3 class="my-4">RSU sales</h3>
 <ul class="list-group">
-    {% for rsu_sale in rsu_sales %}
+    {% for rsu_sale in rsu_portfolio.sales %}
     <li class="list-group-item">{{ rsu_sale.symbol }}  <text class="text-muted">{{ rsu_sale.quantity }} x {{rsu_sale.sell_price}} {{rsu_sale.sell_currency}}</text>
                 <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_rsu_sale', project_id=project.id, rsu_sale_id=rsu_sale.id) }}"><i class="fa fa-trash"></i></a>
     </li>
