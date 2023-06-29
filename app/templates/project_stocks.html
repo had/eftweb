@@ -64,16 +64,16 @@
 <h3 class="my-4">RSU Plans</h3>
 {% endif %}
 
-{% for symbol, rsu_plans in rsu_portfolio.plans %}
+{% for symbol, rsu_plans in rsu_portfolio.plans.items() %}
 <h4 class="my-4">{{ symbol }}: {{ rsu_portfolio.stock_symbols[symbol] }}</h4>
 <ul class="list-group">
-    {% for rsuplan in rsu_plans %}
-    <li class="list-group-item">{{ rsuplan.name }}  <text class="text-muted">granted on {{rsuplan.grant_date}}</text>
+    {% for rsuplan, tax_scheme, vestings in rsu_plans %}
+    <li class="list-group-item">{{ rsuplan.name }}  <text class="text-muted">tax scheme {{tax_scheme}}</text>
                 <!-- data-rsuplan gets forwarded to the wtform in modal, by some JS -->
                 <a class="btn btn-success btn-sm" data-toggle="modal" data-target="#RsuVestingModal" data-rsuplan="{{rsuplan.id}}"><i class="fa fa-plus" style="color:white"></i> add vesting</a>
                 <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_rsu_plan', project_id=project.id, rsuplan_id=rsuplan.id) }}"><i class="fa fa-trash"></i></a>
         <ul>
-            {% for vesting in rsu_portfolio.vestings[rsuplan.id] %}
+            {% for vesting in vestings %}
             <li>{{vesting.vesting_date}} : {{vesting.count}}</li>
             {% endfor %}
         </ul>

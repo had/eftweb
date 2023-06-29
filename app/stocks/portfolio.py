@@ -1,9 +1,11 @@
-import itertools
+from collections import defaultdict
 from datetime import datetime, timedelta
 
 import requests
+from easyfrenchtax import StockHelper
 
 from app.stocks.models import RSUPlan, RSUVesting, RSUSale
+
 
 class Ticker:
     url = "https://www.alphavantage.co/query"
@@ -40,9 +42,26 @@ ticker = Ticker()
 class RSUPortfolio:
     def __init__(self, project_id):
         rsu_plans = RSUPlan.query.filter_by(project_id=project_id).order_by(RSUPlan.symbol).all()
-        self.plans = itertools.groupby(rsu_plans, lambda p: p.symbol)
-        self.stock_symbols = {s: ticker.get_stock_value(s) for s in ([p.symbol for p in rsu_plans])}
-        rsu_plans_id = [p.id for p in rsu_plans]
-        rsu_vestings = RSUVesting.query.filter(RSUVesting.rsu_plan_id.in_(rsu_plans_id)).all()
-        self.vestings = {plan_id: list(v) for plan_id, v in itertools.groupby(rsu_vestings, key=lambda x: x.rsu_plan_id)}
+        self.plans = defaultdict(list)
+        for plan in rsu_plans:
+            plan_tax_scheme = StockHelper._determine_rsu_plans_type(plan.grant_date)
+            vestings =  RSUVesting.query.filter_by(rsu_plan_id=plan.id).all()
+            self.plans[plan.symbol].append((plan, plan_tax_scheme, vestings))
+        self.stock_symbols = {s: ticker.get_stock_value(s) for s in [p.symbol for p in rsu_plans]}
         self.sales = RSUSale.query.filter_by(project_id=project_id).all()
+
+    # def get_rsu_plans(self):
+    #     # self.helper = build_stock_helper(
+    #     #     year=2023,
+    #     #     direct_stocks=[],
+    #     #     dstock_sales_that_year=[],
+    #     #     rsu_plans=self.unsorted_rsu_plans,
+    #     #     rsu_vestings=self.unsorted_rsu_vestings,
+    #     #     rsu_sales_that_year=self.sales
+    #     # )
+    #     res = {}
+    #     for symbol, plans in self.plans:
+    #         plist = []
+    #         for p in plans:
+    #             plan_tax_scheme = StockHelper._determine_rsu_plans_type(p.grant_date)
+    #             plist.append(plan_tax_scheme, p)
