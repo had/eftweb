@@ -78,7 +78,7 @@ def add_rsu_plan(project_id):
             project_id=project_id,
             name=rsuplan_form.name.data,
             taxpayer_owner=rsuplan_form.tp_owner.data,
-            grant_date=rsuplan_form.grant_date.data,
+            approval_date=rsuplan_form.approval_date.data,
             symbol=rsuplan_form.symbol.data,
             stock_currency=rsuplan_form.stock_currency.data
         )
@@ -113,7 +113,7 @@ def import_rsu_plan(project_id):
                     project_id=project_id,
                     name=plan_name,
                     taxpayer_owner=rsu_import_form.tp_owner.data,
-                    grant_date=datetime.strptime(row["Plan date"], "%d %b %Y").date(),
+                    approval_date=datetime.strptime(row["Plan date"], "%d %b %Y").date(),
                     symbol=row["Symbol"],
                     stock_currency=row["Currency"]
                 )

@@ -19,7 +19,7 @@ class RSUPlan(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'))
     name = db.Column(db.String(256), unique=True)
     taxpayer_owner = db.Column(db.Integer)  # 1 or 2, used for some tax return fields
-    grant_date = db.Column(db.Date)
+    approval_date = db.Column(db.Date)
     symbol = db.Column(db.String(16))
     stock_currency = db.Column(db.String(3))
 

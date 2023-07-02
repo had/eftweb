@@ -24,8 +24,8 @@ def build_stock_helper(
         print("Adding direct stocks sale", dss.symbol, dss.quantity, dss.sell_date, dss.sell_price, dss.fees, dss.sell_currency)
         stock_helper.sell_espp(dss.symbol, dss.quantity, dss.sell_date, dss.sell_price, dss.fees, dss.sell_currency)
     for rp in rsu_plans:
-        print("Adding RSU Plan", rp.name, rp.grant_date, rp.symbol, rp.stock_currency)
-        stock_helper.rsu_plan(rp.name, rp.grant_date, rp.symbol, rp.stock_currency)
+        print("Adding RSU Plan", rp.name, rp.approval_date, rp.symbol, rp.stock_currency)
+        stock_helper.rsu_plan(rp.name, rp.approval_date, rp.symbol, rp.stock_currency)
         rsu_plans_dict[rp.id] = rp
     for rv in rsu_vestings:
         plan = rsu_plans_dict[rv.rsu_plan_id]

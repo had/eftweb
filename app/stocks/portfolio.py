@@ -44,24 +44,8 @@ class RSUPortfolio:
         rsu_plans = RSUPlan.query.filter_by(project_id=project_id).order_by(RSUPlan.symbol).all()
         self.plans = defaultdict(list)
         for plan in rsu_plans:
-            plan_tax_scheme = StockHelper._determine_rsu_plans_type(plan.grant_date)
+            plan_tax_scheme = StockHelper._determine_rsu_plans_type(plan.approval_date)
             vestings =  RSUVesting.query.filter_by(rsu_plan_id=plan.id).all()
             self.plans[plan.symbol].append((plan, plan_tax_scheme, vestings))
         self.stock_symbols = {s: ticker.get_stock_value(s) for s in [p.symbol for p in rsu_plans]}
         self.sales = RSUSale.query.filter_by(project_id=project_id).all()
-
-    # def get_rsu_plans(self):
-    #     # self.helper = build_stock_helper(
-    #     #     year=2023,
-    #     #     direct_stocks=[],
-    #     #     dstock_sales_that_year=[],
-    #     #     rsu_plans=self.unsorted_rsu_plans,
-    #     #     rsu_vestings=self.unsorted_rsu_vestings,
-    #     #     rsu_sales_that_year=self.sales
-    #     # )
-    #     res = {}
-    #     for symbol, plans in self.plans:
-    #         plist = []
-    #         for p in plans:
-    #             plan_tax_scheme = StockHelper._determine_rsu_plans_type(p.grant_date)
-    #             plist.append(plan_tax_scheme, p)

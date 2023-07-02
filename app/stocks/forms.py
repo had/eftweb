@@ -15,7 +15,7 @@ class DirectStocksForm(FlaskForm):
 class RsuPlanForm(FlaskForm):
     name = StringField("Name")
     tp_owner = IntegerField("Taxpayer owner (1 or 2)", validators=[NumberRange(min=1, max=2)])
-    grant_date = DateField("Grant date")
+    approval_date = DateField("Approval date")
     symbol = StringField("Stock symbol")
     stock_currency = StringField("Stock currency")
     # tsv_file = FileField("Vesting data (optional)")
