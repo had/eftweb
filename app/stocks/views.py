@@ -32,7 +32,7 @@ def project_stocks(project_id):
     dstock_sale_form = DirectStocksSaleForm()
     dstock_sales = DirectStocksSale.query.filter_by(project_id=project.id).all()
     rsu_sale_form = RsuSaleForm()
-    years = {ds.sell_date.year for ds in dstock_sales} | {rs.sell_date.year for rs in rsu_portfolio.sales}
+    years = {ds.sell_date.year for ds in dstock_sales} | {rs.sell_date.year for rs in rsu_portfolio.raw_sales}
     return render_template("project_stocks.html",
                            project=project,
                            direct_stocks=direct_stocks_per_symbol, dstock_form=dstock_form,

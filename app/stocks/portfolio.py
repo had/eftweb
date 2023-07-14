@@ -1,8 +1,9 @@
 from collections import defaultdict
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta, date
 
 import requests
-from easyfrenchtax import StockHelper
+from easyfrenchtax import StockHelper, RsuTaxScheme
 
 from app.stocks.models import RSUPlan, RSUVesting, RSUSale
 
@@ -39,13 +40,50 @@ class Ticker:
 
 ticker = Ticker()
 
+@dataclass
+class PortfolioRsuVesting:
+    vesting_date: date
+    initial_amount: int
+    currently_available: int
+
+@dataclass
+class PortfolioRsuPlan:
+    plan_id: int
+    name: str
+    tax_scheme: RsuTaxScheme
+    vestings: list[PortfolioRsuVesting]
+
+
 class RSUPortfolio:
     def __init__(self, project_id):
-        rsu_plans = RSUPlan.query.filter_by(project_id=project_id).order_by(RSUPlan.symbol).all()
+        self.raw_plans = RSUPlan.query.filter_by(project_id=project_id).order_by(RSUPlan.symbol).all()
+
+        self.stock_symbols = {s: ticker.get_stock_value(s) for s in [p.symbol for p in self.raw_plans]}
+
         self.plans = defaultdict(list)
-        for plan in rsu_plans:
-            plan_tax_scheme = StockHelper._determine_rsu_plans_type(plan.approval_date)
-            vestings =  RSUVesting.query.filter_by(rsu_plan_id=plan.id).all()
-            self.plans[plan.symbol].append((plan, plan_tax_scheme, vestings))
-        self.stock_symbols = {s: ticker.get_stock_value(s) for s in [p.symbol for p in rsu_plans]}
-        self.sales = RSUSale.query.filter_by(project_id=project_id).all()
+        for p in self.raw_plans:
+            vestings = RSUVesting.query.filter_by(rsu_plan_id=p.id).all()
+            self.plans[p.symbol].append(PortfolioRsuPlan(
+                plan_id=p.id,
+                name=p.name,
+                tax_scheme=StockHelper._determine_rsu_plans_type(p.approval_date),
+                vestings=[PortfolioRsuVesting(
+                    vesting_date=v.vesting_date,
+                    initial_amount=v.count,
+                    currently_available=v.count
+                ) for v in vestings]))
+        self.raw_sales = RSUSale.query.filter_by(project_id=project_id).all()
+
+
+    def get_plans(self):
+        return self.plans
+
+    #
+    # def get_stock_symbols(self) -> dict[str, str]:
+    #     return {s: ticker.get_stock_value(s) for s in [p.stock_symbol for p in self.stock_helper.rsu_plans.values()]}
+    #
+    # def get_plans(self, symbol: str) -> list[PortfolioRsuPlan]:
+    #     return list(filter(lambda p: p.stock_symbol == symbol, self.plans))
+    #
+    # def get_vestings(self, plan: PortfolioRsuPlan) -> list[PortfolioRsuVesting]:
+    #     return [PortfolioRsuVesting(v.acq_date, v.count, v.available) for v in self.stock_helper.rsus[plan.plan.stock_symbol] if v.plan_name == plan.plan.name]
