@@ -68,13 +68,19 @@
 <h4 class="my-4">{{ symbol }}: {{ rsu_portfolio.stock_symbols[symbol] }}</h4>
 <ul class="list-group">
     {% for plan in rsu_plans %}
-    <li class="list-group-item">{{ plan.name }}  <text class="text-muted">tax scheme {{tax_scheme}}</text>
+    <li class="list-group-item">{{ plan.name }}  <text class="text-muted">tax scheme: {{plan.tax_scheme.value}}</text>
                 <!-- data-rsuplan gets forwarded to the wtform in modal, by some JS -->
                 <a class="btn btn-success btn-sm" data-toggle="modal" data-target="#RsuVestingModal" data-rsuplan="{{plan.plan_id}}"><i class="fa fa-plus" style="color:white"></i> add vesting</a>
                 <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_rsu_plan', project_id=project.id, rsuplan_id=plan.plan_id) }}"><i class="fa fa-trash"></i></a>
         <ul>
             {% for vesting in plan.vestings %}
-            <li>{{vesting.vesting_date}} : {{vesting.currently_available}}</li>
+            <li>{{vesting.vesting_date}} :
+                {% if vesting.currently_available != vesting.initial_amount %}
+                    <s>{{vesting.initial_amount}}</s> {{vesting.currently_available}}
+                {% else %}
+                    {{vesting.initial_amount}}
+                {% endif %}
+            </li>
             {% endfor %}
         </ul>
     </li>
@@ -95,7 +101,7 @@
 
 <h3 class="my-4">RSU sales</h3>
 <ul class="list-group">
-    {% for rsu_sale in rsu_portfolio.sales %}
+    {% for rsu_sale in rsu_portfolio.raw_sales %}
     <li class="list-group-item">{{ rsu_sale.symbol }}  <text class="text-muted">{{ rsu_sale.quantity }} x {{rsu_sale.sell_price}} {{rsu_sale.sell_currency}}</text>
                 <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_rsu_sale', project_id=project.id, rsu_sale_id=rsu_sale.id) }}"><i class="fa fa-trash"></i></a>
     </li>
