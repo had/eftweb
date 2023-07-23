@@ -44,77 +44,96 @@
 </div>
 <hr>
 
-{% if direct_stocks %}
-<h3 class="my-4">Direct stocks</h3>
-{% endif %}
-<div class="mx-2">
-{% for symbol, dstocks in direct_stocks.items() %}
-<h6 class="mt-3">{{ symbol }}</h6>
-<ul class="list-group">
-    {% for ds in dstocks %}
-    <li class="list-group-item">{{ds.acquisition_date}} <text class="text-muted">{{ ds.quantity }} x {{ds.acquisition_price}} {{ds.stock_currency}}</text>
-                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_direct_stocks', project_id=project.id, dstocks_id=ds.id) }}"><i class="fa fa-trash"></i></a>
-    </li>
-    {% endfor %}
-</ul>
-{% endfor %}
+{% for symbol, stock_price in symbols_stock.items() %}
+<p class="lead p-3 border border-success">{{ symbol }}   ${{ stock_price }} </p>
+<div class="card-deck mb-3">
+    {% if symbol in rsu_plans %}
+    <div class="card">
+        <div class="card-header">
+            RSUs
+            <a class="btn btn-danger btn-sm float-right" href="">Sell</a>
+        </div>
+        <div class="card-body" id="accordion_rsu_{{symbol}}">
+            {% for plan_name, (tax_scheme, vestings) in rsu_plans[symbol].items() %}
+                <div class="card">
+                    <div class="card-header" id="headingOne">
+                        {{plan_name}} <small class="text-muted">{{tax_scheme}}</small>
+                        <button class="btn btn-link float-right" data-toggle="collapse" data-target="#collapse{{plan_name | replace(' ', '')}}">
+                            <small>more</small>
+                        </button>
+                    </div>
+                    <div id="collapse{{plan_name | replace(' ', '')}}" class="collapse" aria-labelledby="headingOne" data-parent="#accordion_rsu_{{symbol}}">
+                        <div class="card-body py-0">
+                            <ul class="list-group list-group-flush">
+                                {% for v_date, v_init, v_cur in vestings %}<li class="list-group-item">
+                                    {% if v_init != v_cur %}
+                                        v_date: <s>{{v_init}}</s> {{v_cur}}
+                                    {% else %}
+                                        v_date: {{v_init}}
+                                    {% endif %}
+                                </li>{% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% if symbol in stockoptions_plans %}
+    <div class="card">
+        <div class="card-header">
+            Stock Options
+            <a class="btn btn-danger btn-sm float-right" href="">Sell</a>
+        </div>
+        <div class="card-body" id="accordion_so_{{symbol}}">
+            {% for plan_name, (strikeprice, vestings) in stockoptions_plans[symbol].items() %}
+                <div class="card">
+                    <div class="card-header" id="headingOne">
+                        {{plan_name}} <small class="text-muted">strike price: {{strikeprice}}</small>
+                        <button class="btn btn-link float-right" data-toggle="collapse" data-target="#collapse{{plan_name | replace(' ', '')}}">
+                            <small>more</small>
+                        </button>
+                    </div>
+                    <div id="collapse{{plan_name | replace(' ', '')}}" class="collapse" aria-labelledby="headingOne" data-parent="#accordion_so_{{symbol}}">
+                        <div class="card-body py-0">
+                            <ul class="list-group list-group-flush">
+                                {% for v_date, v_init, v_cur in vestings %}<li class="list-group-item">
+                                    {% if v_init != v_cur %}
+                                        {{v_date}}: <s>{{v_init}}</s> {{v_cur}}
+                                    {% else %}
+                                        {{v_date}}: {{v_init}}
+                                    {% endif %}
+                                </li>{% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}        </div>
+    </div>
+    {% endif %}
+    {% if symbol in direct_stocks %}
+    <div class="card">
+        <div class="card-header">
+            Direct stocks
+            <a class="btn btn-danger btn-sm float-right" href="">Sell</a>
+        </div>
+        <div class="card-body">
+            <ul class="list-group list-group-flush">
+                {% for v_date, v_init, v_cur in direct_stocks[symbol] %}<li class="list-group-item">
+                    {% if v_init != v_cur %}
+                        {{v_date}}: <s>{{v_init}}</s> {{v_cur}}
+                    {% else %}
+                        {{v_date}}: {{v_init}}
+                    {% endif %}
+                </li>{% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
-{% if grouped_rsu_plans %}
-<h3 class="my-4">RSU Plans</h3>
-{% endif %}
-
-{% for symbol, rsu_plans in rsu_portfolio.get_plans().items() %}
-<h4 class="my-4">{{ symbol }}: {{ rsu_portfolio.stock_symbols[symbol] }}</h4>
-<ul class="list-group">
-    {% for plan in rsu_plans %}
-    <li class="list-group-item">{{ plan.name }}  <text class="text-muted">tax scheme: {{plan.tax_scheme.value}}</text>
-                <!-- data-rsuplan gets forwarded to the wtform in modal, by some JS -->
-                <a class="btn btn-success btn-sm" data-toggle="modal" data-target="#RsuVestingModal" data-rsuplan="{{plan.plan_id}}"><i class="fa fa-plus" style="color:white"></i> add vesting</a>
-                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_rsu_plan', project_id=project.id, rsuplan_id=plan.plan_id) }}"><i class="fa fa-trash"></i></a>
-        <ul>
-            {% for vesting in plan.vestings %}
-            <li>{{vesting.vesting_date}} :
-                {% if vesting.currently_available != vesting.initial_amount %}
-                    <s>{{vesting.initial_amount}}</s> {{vesting.currently_available}}
-                {% else %}
-                    {{vesting.initial_amount}}
-                {% endif %}
-            </li>
-            {% endfor %}
-        </ul>
-    </li>
-    {% endfor %}
-</ul>
 {% endfor %}
-
-<hr>
-
-<h3 class="my-4">Direct stock sales</h3>
-<ul class="list-group">
-    {% for dstock_sale in dstock_sales %}
-    <li class="list-group-item">{{ dstock_sale.symbol }}  <text class="text-muted">{{ dstock_sale.quantity }} x {{dstock_sale.sell_price}} {{dstock_sale.sell_currency}}</text>
-                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_dstock_sale', project_id=project.id, dstock_sale_id=dstock_sale.id) }}"><i class="fa fa-trash"></i></a>
-    </li>
-    {% endfor %}
-</ul>
-
-<h3 class="my-4">RSU sales</h3>
-<ul class="list-group">
-    {% for rsu_sale in rsu_portfolio.sales %}
-    <li class="list-group-item"> <strong>{{ rsu_sale.symbol }}</strong>  <text class="text-muted">{{ rsu_sale.sell_date }}</text>
-                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_rsu_sale', project_id=project.id, rsu_sale_id=rsu_sale.sale_id) }}"><i class="fa fa-trash"></i></a>
-    <dl class="row">
-      <dt class="col-sm-3">Sell order</dt>
-        <dd class="col-sm-9">{{rsu_sale.quantity}} x {{rsu_sale.sell_price}} {{rsu_sale.sell_currency}}</dd>
-      <dt class="col-sm-3">Gross proceeds</dt>
-        <dd class="col-sm-9">{{rsu_sale.sell_price_eur * rsu_sale.quantity}}€</dd>
-      <dt class="col-sm-3">Net proceeds</dt>
-        <dd class="col-sm-9">{{rsu_sale.sell_price_eur * rsu_sale.quantity - rsu_sale.taxes}}€</dd>
-    </dl>
-    </li>
-    {% endfor %}
-</ul>
 
 {% import 'bootstrap/form.html' as wtf %}
 <div class="modal" id="DirectStocksModal" role="dialog" aria-hidden="true">

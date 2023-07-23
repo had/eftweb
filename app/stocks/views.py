@@ -19,6 +19,70 @@ from ..main import models as main_models
 from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale, RSUSale
 
 
+@stocks.route("/project2/<int:project_id>/stocks", methods=["GET"])
+def project_stocks_proto(project_id):
+    project = main_models.Project.query.get(project_id)
+    dstock_form = DirectStocksForm()
+    rsuplan_form = RsuPlanForm()
+    rsu_import_form = RsuImportForm()
+    rsuvesting_form = RsuVestingForm()
+    rsu_portfolio = RSUPortfolio(project.id)
+    direct_stocks = DirectStocks.query.filter_by(project_id=project.id).all()
+    direct_stocks_per_symbol = {symbol: list(ds) for symbol, ds in groupby(direct_stocks, key=lambda x: x.symbol)}
+    dstock_sale_form = DirectStocksSaleForm()
+    dstock_sales = DirectStocksSale.query.filter_by(project_id=project.id).all()
+    rsu_sale_form = RsuSaleForm()
+    years = {ds.sell_date.year for ds in dstock_sales} | {rs.sell_date.year for rs in rsu_portfolio.sales}
+    symbols_stock = {
+        "CRTO": 33.10,
+        "DDOG": 113.54,
+        "PZZA": 80.56
+    }
+    rsu_plans = {
+        "CRTO" : {
+            "Plan 2016": ("Macron I", [
+                ("2018-06-29", 350, 0),
+                ("2018-10-01", 44, 0),
+                ("2018-12-01", 44, 0),
+                ("2019-03-28", 44, 0)
+            ]),
+            "Plan 2017": ("Macron II", [
+                ("2018-06-29", 200, 110),
+                ("2018-10-01", 44, 44),
+                ("2018-12-01", 44, 44),
+                ("2019-03-28", 44, 44)
+            ])
+        }
+    }
+    stockoptions_plans = {
+        "DDOG" : {
+            "SO 2019": ("$5.73", [
+                ("2019-03-28", 180, 0),
+                ("2019-06-28", 180, 0),
+                ("2019-09-28", 180, 50),
+                ("2019-12-28", 180, 180)
+            ])
+        }
+    }
+    direct_stocks = {
+        "PZZA": [
+            ("2017-03-18", 180, 100),
+            ("2018-01-25", 250, 250)
+        ]
+    }
+    return render_template("project_stocks2.html",
+                           project=project,
+                           dstock_form=dstock_form,
+                           rsuplan_form=rsuplan_form, rsu_import_form=rsu_import_form,
+                           rsuvesting_form=rsuvesting_form,
+                           dstock_sales=dstock_sales, dstock_sale_form=dstock_sale_form,
+                           rsu_sale_form=rsu_sale_form,
+                           sales_years=years, rsu_portfolio=rsu_portfolio,
+                           symbols_stock=symbols_stock, rsu_plans=rsu_plans, stockoptions_plans=stockoptions_plans,
+                           direct_stocks=direct_stocks
+                           )
+
+
 @stocks.route("/project/<int:project_id>/stocks", methods=["GET"])
 def project_stocks(project_id):
     project = main_models.Project.query.get(project_id)
@@ -32,7 +96,7 @@ def project_stocks(project_id):
     dstock_sale_form = DirectStocksSaleForm()
     dstock_sales = DirectStocksSale.query.filter_by(project_id=project.id).all()
     rsu_sale_form = RsuSaleForm()
-    years = {ds.sell_date.year for ds in dstock_sales} | {rs.sell_date.year for rs in rsu_portfolio.raw_sales}
+    years = {ds.sell_date.year for ds in dstock_sales} | {rs.sell_date.year for rs in rsu_portfolio.sales}
     return render_template("project_stocks.html",
                            project=project,
                            direct_stocks=direct_stocks_per_symbol, dstock_form=dstock_form,
