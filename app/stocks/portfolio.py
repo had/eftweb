@@ -15,6 +15,7 @@ class Ticker:
     url = "https://www.alphavantage.co/query"
     params = {"function": "GLOBAL_QUOTE","apikey": "EO7TR7UYV9S82B0F"}
     cache = {}
+
     def __init__(self, caching_time=timedelta(minutes=1)):
         self.caching_time = caching_time
 
@@ -113,7 +114,7 @@ class RSUPortfolio:
 
     def process_sale(self, sale_event: RSUSale):
         sell_date = sale_event.sell_date
-        sell_price_eur = round(self.cc.convert(sale_event.sell_price, sale_event.sell_currency, "EUR", date=sell_date), 2)
+        sell_price_eur = round(self.cc.convert(sale_event.sell_price, sale_event.sell_currency.upper(), "EUR", date=sell_date), 2)
         to_sell = sale_event.quantity
 
         # Acquisitions are sorted by date, this is the rule set by the tax office (FIFO, or PEPS="premier entré premier

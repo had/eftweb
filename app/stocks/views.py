@@ -1,7 +1,4 @@
-import csv
 import pprint
-from datetime import datetime
-from io import TextIOWrapper
 
 import dateutil.relativedelta
 from flask import render_template, redirect, url_for
@@ -12,8 +9,10 @@ from itertools import groupby
 from sqlalchemy.exc import IntegrityError
 
 from . import stocks
-from .forms import DirectStocksForm, RsuPlanForm, RsuVestingForm, DirectStocksSaleForm, RsuImportForm, RsuSaleForm
+from .forms import DirectStocksForm, RsuPlanForm, RsuVestingForm, DirectStocksSaleForm, RsuImportForm, RsuSaleForm, \
+    DirectStocksImportForm, StockOptionsImportForm
 from .portfolio import RSUPortfolio
+from .tsv_importer import import_rsu_tsv, import_dstocks_tsv
 from .. import db
 from ..main import models as main_models
 from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale, RSUSale
@@ -89,6 +88,8 @@ def project_stocks(project_id):
     dstock_form = DirectStocksForm()
     rsuplan_form = RsuPlanForm()
     rsu_import_form = RsuImportForm()
+    directstocks_import_form = DirectStocksImportForm()
+    stockoptions_import_form = StockOptionsImportForm()
     rsuvesting_form = RsuVestingForm()
     rsu_portfolio = RSUPortfolio(project.id)
     direct_stocks = DirectStocks.query.filter_by(project_id=project.id).all()
@@ -100,10 +101,12 @@ def project_stocks(project_id):
     return render_template("project_stocks.html",
                            project=project,
                            direct_stocks=direct_stocks_per_symbol, dstock_form=dstock_form,
-                           rsuplan_form=rsuplan_form, rsu_import_form=rsu_import_form,
+                           rsuplan_form=rsuplan_form,
                            rsuvesting_form=rsuvesting_form,
                            dstock_sales=dstock_sales, dstock_sale_form=dstock_sale_form,
                            rsu_sale_form=rsu_sale_form,
+                           rsu_import_form=rsu_import_form, directstocks_import_form=directstocks_import_form,
+                           stockoptions_import_form=stockoptions_import_form,
                            sales_years=years, rsu_portfolio=rsu_portfolio
                            )
 
@@ -163,38 +166,31 @@ def import_rsu_plan(project_id):
     rsu_import_form = RsuImportForm()
     if rsu_import_form.validate_on_submit():
         rsuplan_file: FileStorage = rsu_import_form.tsv_file.data
-        # Python 3.11 required for the following (because https://docs.python.org/3.11/whatsnew/3.11.html#tempfile)
-        rsuplan_reader = csv.DictReader(TextIOWrapper(rsuplan_file.stream), dialect="excel", delimiter='\t')
-        rsu_plans: dict[str, int] = {}
-        print("Parsing rsu vesting data:")
-        for row in rsuplan_reader:
-            print(row)
-            plan_name = row["Plan name"]
-            if plan_name in rsu_plans:
-                plan_id = rsu_plans[plan_name]
-            else:
-                new_plan = RSUPlan(
-                    project_id=project_id,
-                    name=plan_name,
-                    taxpayer_owner=rsu_import_form.tp_owner.data,
-                    approval_date=datetime.strptime(row["Plan date"], "%d %b %Y").date(),
-                    symbol=row["Symbol"],
-                    stock_currency=row["Currency"]
-                )
-                db.session.add(new_plan)
-                db.session.commit()
-                plan_id =  new_plan.id
-                rsu_plans[plan_name] = plan_id
-            vesting = RSUVesting(
-                rsu_plan_id=plan_id,
-                count=int(row["Count"]),
-                vesting_date=datetime.strptime(row["Acquisition date"], "%d %b %Y").date(),
-                acquisition_price=float(row["Acquisition price"])
-            )
-            db.session.add(vesting)
-        db.session.commit()
+        import_rsu_tsv(rsuplan_file, project_id, db)
+
     else:
         print(rsu_import_form.errors)
+    return redirect(url_for('.project_stocks', project_id=project_id))
+
+@stocks.route("/project/<int:project_id>/stocks/direct/import", methods=["POST"])
+def import_dstocks(project_id):
+    directstocks_import_form = DirectStocksImportForm()
+    if directstocks_import_form.validate_on_submit():
+        dstocks_file: FileStorage = directstocks_import_form.tsv_file.data
+        import_dstocks_tsv(dstocks_file, project_id, db)
+    else:
+        print(directstocks_import_form.errors)
+    return redirect(url_for('.project_stocks', project_id=project_id))
+
+@stocks.route("/project/<int:project_id>/stocks/options/import", methods=["POST"])
+def import_stockoptions(project_id):
+    # stockoptions_import_form = StockOptionsImportForm()
+    # if stockoptions_import_form.validate_on_submit():
+    #     dstocks_file: FileStorage = stockoptions_import_form.tsv_file.data
+    #     owner = stockoptions_import_form.tp_owner.data
+    #     import_stockoptions_tsv(dstocks_file, owner, project_id, db)
+    # else:
+    #     print(directstocks_import_form.errors)
     return redirect(url_for('.project_stocks', project_id=project_id))
 
 

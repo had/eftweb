@@ -18,8 +18,8 @@ def build_stock_helper(
     stock_helper = StockHelper()
     rsu_plans_dict = {}
     for ds in direct_stocks:
-        print("Adding direct stocks", ds.taxpayer_owner, ds.symbol, ds.quantity, ds.acquisition_date, ds.acquisition_price, ds.stock_currency)
-        stock_helper.add_espp(ds.taxpayer_owner, ds.symbol, ds.quantity, ds.acquisition_date, ds.acquisition_price, ds.stock_currency)
+        print("Adding direct stocks", ds.symbol, ds.quantity, ds.acquisition_date, ds.acquisition_price, ds.stock_currency)
+        stock_helper.add_espp(ds.symbol, ds.quantity, ds.acquisition_date, ds.acquisition_price, ds.stock_currency)
     for dss in dstock_sales_that_year:
         print("Adding direct stocks sale", dss.symbol, dss.quantity, dss.sell_date, dss.sell_price, dss.fees, dss.sell_currency)
         stock_helper.sell_espp(dss.symbol, dss.quantity, dss.sell_date, dss.sell_price, dss.fees, dss.sell_currency)
@@ -30,7 +30,7 @@ def build_stock_helper(
     for rv in rsu_vestings:
         plan = rsu_plans_dict[rv.rsu_plan_id]
         print("Adding RSU Vesting", rv.rsu_plan_id, rv.count, rv.vesting_date, rv.acquisition_price)
-        stock_helper.rsu_vesting(plan.taxpayer_owner, plan.symbol, plan.name, rv.count, rv.vesting_date,
+        stock_helper.rsu_vesting(plan.symbol, plan.name, rv.count, rv.vesting_date,
                                  rv.acquisition_price, plan.stock_currency)
     for rs in rsu_sales_that_year:
         print("Adding RSU sale", rs.symbol, rs.quantity, rs.sell_date, rs.sell_price, rs.fees, rs.sell_currency)

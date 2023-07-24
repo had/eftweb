@@ -5,7 +5,7 @@ class DirectStocks(db.Model):
     __tablename__ = "direct_stocks"
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'))
-    taxpayer_owner = db.Column(db.Integer)  # 1 or 2, used for some tax return fields
+    taxpayer_owner = db.Column(db.Integer)  # TODO: remove
     symbol = db.Column(db.String(16))
     quantity = db.Column(db.Integer)
     acquisition_date = db.Column(db.Date)
@@ -18,7 +18,7 @@ class RSUPlan(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'))
     name = db.Column(db.String(256), unique=True)
-    taxpayer_owner = db.Column(db.Integer)  # 1 or 2, used for some tax return fields
+    taxpayer_owner = db.Column(db.Integer)  # TODO: remove
     approval_date = db.Column(db.Date)
     symbol = db.Column(db.String(16))
     stock_currency = db.Column(db.String(3))
@@ -42,7 +42,7 @@ class StockOptions(db.Model):
     symbol = db.Column(db.String(16))
     stock_currency = db.Column(db.String(3))
     strike_price = db.Column(db.Float)
-    strike_price_currency = db.Column(db.String(3))
+    strike_price_currency = db.Column(db.String(3)) # TODO: remove
 
 
 class DirectStocksSale(db.Model):

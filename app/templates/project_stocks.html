@@ -7,7 +7,13 @@
 {% block page_content %}
 <div class="btn-toolbar mb-3" role="toolbar" aria-label="Stock management toolbar">
 <div class="btn-group mr-2" role="group" aria-label="Add stocks and plans">
-    <button class="btn btn-outline-primary" data-toggle="modal" data-target="#DirectStocksModal">Add Direct Stocks</button>
+    <div class="btn-group" role="group">
+        <button class="btn btn-outline-primary dropdown-toggle" data-toggle="dropdown">Add Direct Stocks</button>
+        <div class="dropdown-menu">
+            <a class="dropdown-item" data-toggle="modal" data-target="#DirectStocksModal">Input</a>
+            <a class="dropdown-item" data-toggle="modal" data-target="#DirectStocksImportModal">Import from TSV</a>
+        </div>
+    </div>
     <div class="btn-group" role="group">
         <button class="btn btn-outline-primary dropdown-toggle" data-toggle="dropdown">Add RSU plan</button>
         <div class="dropdown-menu">
@@ -15,7 +21,12 @@
             <a class="dropdown-item" data-toggle="modal" data-target="#RsuImportModal">Import from TSV</a>
         </div>
     </div>
-    <button class="btn btn-outline-primary" data-toggle="modal" data-target="#StockOptionsModal">Add Stock Option plan</button>
+    <div class="btn-group" role="group">
+        <button class="btn btn-outline-primary dropdown-toggle" data-toggle="dropdown">Add Stock Option plan</button>
+        <div class="dropdown-menu">
+            <a class="dropdown-item" data-toggle="modal" data-target="#StockOptionsImportModal">Import from TSV</a>
+        </div>
+    </div>
 </div>
 <div class="btn-group mr-2" role="group" aria-label="Sell stocks">
     <div class="dropdown">
@@ -145,6 +156,28 @@
             <div class="modal-header">RSU Import</div>
             <div class="modal-body">
                     {{ wtf.render_form(rsu_import_form, action=url_for(".import_rsu_plan", project_id=project.id)) }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="DirectStocksImportModal" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">Direct stocks Import</div>
+            <div class="modal-body">
+                    {{ wtf.render_form(directstocks_import_form, action=url_for(".import_dstocks", project_id=project.id)) }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="StockOptionsImportModal" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">Stock Options Import</div>
+            <div class="modal-body">
+                    {{ wtf.render_form(stockoptions_import_form, action=url_for(".import_stockoptions", project_id=project.id)) }}
             </div>
         </div>
     </div>

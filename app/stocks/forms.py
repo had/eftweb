@@ -23,6 +23,14 @@ class RsuPlanForm(FlaskForm):
 
 class RsuImportForm(FlaskForm):
     tsv_file = FileField("RSU data")
+    submit = SubmitField("Confirm")
+
+class DirectStocksImportForm(FlaskForm):
+    tsv_file = FileField("Direct Stocks data")
+    submit = SubmitField("Confirm")
+
+class StockOptionsImportForm(FlaskForm):
+    tsv_file = FileField("Stock Options data")
     tp_owner = IntegerField("Taxpayer owner (1 or 2)", validators=[NumberRange(min=1, max=2)])
     submit = SubmitField("Confirm")
 
