@@ -183,6 +183,7 @@ class StockOptionsPortfolio:
 
 @dataclass
 class PortfolioDirectStock:
+    stock_id: int
     symbol: str
     acquisition_date: date
     acquisition_price: float
@@ -200,6 +201,7 @@ class StockPortfolio:
         self.stocks = defaultdict(list)
         for ds in raw_stocks:
             self.stocks[ds.symbol].append(PortfolioDirectStock(
+                stock_id=ds.id,
                 symbol=ds.symbol,
                 acquisition_date=ds.acquisition_date,
                 acquisition_price=ds.acquisition_price,

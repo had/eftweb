@@ -16,7 +16,7 @@ from .ticker import ticker
 from .tsv_importer import import_rsu_tsv, import_dstocks_tsv, import_stockoptions_tsv
 from .. import db
 from ..main import models as main_models
-from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale, RSUSale
+from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale, RSUSale, StockOptionVesting, StockOptionPlan
 
 
 @stocks.route("/project2/<int:project_id>/stocks", methods=["GET"])
@@ -32,14 +32,14 @@ def project_stocks_proto(project_id):
     rsu_portfolio = RSUPortfolio(project.id)
     rsu_plans = {
         symbol: {
-            plan.name: (plan.tax_scheme.value, [
+            plan.name: (plan.plan_id, plan.tax_scheme.value, [
                 (v.vesting_date, v.initial_amount, v.currently_available) for v in plan.vestings
             ]) for plan in plans}
         for symbol, plans in rsu_portfolio.plans.items()}
     stockoption_portfolio = StockOptionsPortfolio(project.id)
     stockoptions_plans = {
         symbol: {
-            plan.name: (f"{plan.strike_price} {plan.currency}", [
+            plan.name: (plan.plan_id, f"{plan.strike_price} {plan.currency}", [
                 (v.vesting_date, v.initial_amount, v.currently_available) for v in plan.vestings
             ]) for plan in plans}
         for symbol, plans in stockoption_portfolio.plans.items()}
@@ -47,7 +47,7 @@ def project_stocks_proto(project_id):
     directstocks_portfolio = StockPortfolio(project.id)
     directstocks = {
         symbol: [
-            (s.acquisition_date, s.initial_amount, s.currently_available)
+            (s.stock_id, s.acquisition_date, s.initial_amount, s.currently_available)
             for s in stocks
         ]
         for symbol, stocks in directstocks_portfolio.stocks.items()}
@@ -281,6 +281,13 @@ def rm_rsu_plan(project_id, rsuplan_id):
     db.session.commit()
     return redirect(url_for('.project_stocks', project_id=project_id))
 
+
+@stocks.route("/project/<int:project_id>/stocks/options/<int:stockoption_plan_id>/delete")
+def rm_stockoptions_plan(project_id, stockoption_plan_id):
+    StockOptionVesting.query.filter_by(stockoption_plan_id=stockoption_plan_id).delete()
+    StockOptionPlan.query.filter_by(id=stockoption_plan_id).delete()
+    db.session.commit()
+    return redirect(url_for('.project_stocks', project_id=project_id))
 
 @stocks.route("/project/<int:project_id>/stocks/rsu/dstock_sale/<int:dstock_sale_id>/delete")
 def rm_dstock_sale(project_id, dstock_sale_id):

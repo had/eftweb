@@ -51,15 +51,16 @@
     <div class="card">
         <div class="card-header">
             RSUs
-            <a class="btn btn-danger btn-sm float-right" href="">Sell</a>
+            <a class="btn btn-success btn-sm float-right" href="">Sell</a>
         </div>
         <div class="card-body" id="accordion_rsu_{{symbol}}">
-            {% for plan_name, (tax_scheme, vestings) in rsu_plans[symbol].items() %}
+            {% for plan_name, (rsu_plan_id, tax_scheme, vestings) in rsu_plans[symbol].items() %}
                 <div class="card">
                     <div class="card-header" id="headingOne">
                         {{plan_name}} <small class="text-muted">{{tax_scheme}}</small>
+                        <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_rsu_plan', project_id=project.id, rsuplan_id=rsu_plan_id) }}"><i class="fa fa-trash"></i></a>
                         <button class="btn btn-link float-right" data-toggle="collapse" data-target="#collapse{{plan_name | replace(' ', '')}}">
-                            <small>more</small>
+                            <small>see vestings</small>
                         </button>
                     </div>
                     <div id="collapse{{plan_name | replace(' ', '')}}" class="collapse" aria-labelledby="headingOne" data-parent="#accordion_rsu_{{symbol}}">
@@ -84,15 +85,16 @@
     <div class="card">
         <div class="card-header">
             Stock Options
-            <a class="btn btn-danger btn-sm float-right" href="">Sell</a>
+            <a class="btn btn-success btn-sm float-right" href="">Sell</a>
         </div>
         <div class="card-body" id="accordion_so_{{symbol}}">
-            {% for plan_name, (strikeprice, vestings) in stockoptions_plans[symbol].items() %}
+            {% for plan_name, (stockoption_plan_id, strikeprice, vestings) in stockoptions_plans[symbol].items() %}
                 <div class="card">
                     <div class="card-header" id="headingOne">
                         {{plan_name}} <small class="text-muted">strike price: {{strikeprice}}</small>
+                        <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_stockoptions_plan', project_id=project.id, stockoption_plan_id=stockoption_plan_id) }}"><i class="fa fa-trash"></i></a>
                         <button class="btn btn-link float-right" data-toggle="collapse" data-target="#collapse{{plan_name | replace(' ', '')}}">
-                            <small>more</small>
+                            <small>see vestings</small>
                         </button>
                     </div>
                     <div id="collapse{{plan_name | replace(' ', '')}}" class="collapse" aria-labelledby="headingOne" data-parent="#accordion_so_{{symbol}}">
@@ -116,16 +118,17 @@
     <div class="card">
         <div class="card-header">
             Direct stocks
-            <a class="btn btn-danger btn-sm float-right" href="">Sell</a>
+            <a class="btn btn-success btn-sm float-right" href="">Sell</a>
         </div>
         <div class="card-body">
             <ul class="list-group list-group-flush">
-                {% for v_date, v_init, v_cur in directstocks[symbol] %}<li class="list-group-item">
-                    {% if v_init != v_cur %}
-                        {{v_date}}: <s>{{v_init}}</s> {{v_cur}}
+                {% for s_id, s_date, s_init, s_cur in directstocks[symbol] %}<li class="list-group-item">
+                    {% if s_init != s_cur %}
+                        {{s_date}}: <s>{{s_init}}</s> {{s_cur}}
                     {% else %}
-                        {{v_date}}: {{v_init}}
+                        {{s_date}}: {{s_init}}
                     {% endif %}
+                    <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_direct_stocks', project_id=project.id, dstocks_id=s_id) }}"><i class="fa fa-trash"></i></a>
                 </li>{% endfor %}
             </ul>
         </div>
