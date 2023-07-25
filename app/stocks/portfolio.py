@@ -1,48 +1,15 @@
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timedelta, date
+from datetime import  date
 from typing import DefaultDict, Optional
 
 from currency_converter import CurrencyConverter
 
-import requests
 from easyfrenchtax import StockHelper, RsuTaxScheme
 
-from app.stocks.models import RSUPlan, RSUVesting, RSUSale
+from app.stocks.models import RSUPlan, RSUVesting, RSUSale, StockOptionPlan, StockOptionVesting, DirectStocks
+from app.stocks.ticker import ticker
 
-
-class Ticker:
-    url = "https://www.alphavantage.co/query"
-    params = {"function": "GLOBAL_QUOTE","apikey": "EO7TR7UYV9S82B0F"}
-    cache = {}
-
-    def __init__(self, caching_time=timedelta(minutes=1)):
-        self.caching_time = caching_time
-
-    def get_stock_value(self, symbol: str) -> str:
-        print(self.cache)
-        if symbol in self.cache:
-            price, timestamp = self.cache[symbol]
-            current_time = datetime.now()
-            if current_time - timestamp <= self.caching_time:
-                return price
-        params = self.params.copy()
-        params["symbol"] = symbol
-        response = requests.get(self.url, params=params)
-        if response.status_code == 200:
-            data = response.json()
-            try:
-                price = f"${data['Global Quote']['05. price']}"
-                timestamp = datetime.now()
-                self.cache[symbol] = (price, timestamp)
-                return price
-            except:
-                print("Error :", data)
-        else:
-            print("Error:", response.status_code)
-            return "(error retrieve price)"
-
-ticker = Ticker()
 
 @dataclass
 class PortfolioRsuVesting:
@@ -83,11 +50,10 @@ class RSUPortfolio:
     plans: DefaultDict[str, list[PortfolioRsuPlan]]
     sales: list[RSUPortfolioSale]
 
-    def __init__(self, project_id):
+    def __init__(self, project_id: int):
         # currency converter (USD/EUR in particular)
         self.cc = CurrencyConverter(fallback_on_wrong_date=True, fallback_on_missing_rate=True)
-        raw_plans = RSUPlan.query.filter_by(project_id=project_id).order_by(RSUPlan.symbol).all()
-        self.stock_symbols = {s: ticker.get_stock_value(s) for s in [p.symbol for p in raw_plans]}
+        raw_plans = RSUPlan.query.filter_by(project_id=project_id).all()
         self.plans = defaultdict(list)
         for p in raw_plans:
             vestings = RSUVesting.query.filter_by(rsu_plan_id=p.id).all()
@@ -103,11 +69,12 @@ class RSUPortfolio:
                     acquisition_price_eur=self.cc.convert(v.acquisition_price, p.stock_currency, "EUR")
                 ) for v in vestings]))
         raw_sales = RSUSale.query.filter_by(project_id=project_id).all()
-        # self.sales_fragment = []
         self.sales = []
         for s in raw_sales:
             portfolio_sale = self.process_sale(s)
             self.process_taxes(portfolio_sale)
+        # TODO: refactor out
+        self.stock_symbols = {s: ticker.get_stock_value(s) for s in [p.symbol for p in raw_plans]}
 
     def get_plans(self):
         return self.plans
@@ -172,3 +139,71 @@ class RSUPortfolio:
         cgt = helper.compute_capital_gain_tax(portfolio_sale.sell_date.year)
         income_tax, social_tax = helper.estimate_tax(agt, cgt, 0.30)
         portfolio_sale.taxes = income_tax + social_tax
+
+
+@dataclass
+class PortfolioStockOptionVesting:
+    vesting_date: date
+    initial_amount: int
+    currently_available: int
+
+@dataclass
+class PortfolioStockOptionPlan:
+    plan_id: int
+    name: str
+    symbol: str
+    owner: int
+    strike_price: float
+    currency: str
+    vestings: list[PortfolioStockOptionVesting]
+
+
+class StockOptionsPortfolio:
+    plans: DefaultDict[str, list[PortfolioStockOptionPlan]]
+
+    def __init__(self, project_id: int):
+        raw_plans = StockOptionPlan.query.filter_by(project_id=project_id).all()
+        self.plans = defaultdict(list)
+        for p in raw_plans:
+            vestings = StockOptionVesting.query.filter_by(stockoption_plan_id=p.id).all()
+            self.plans[p.symbol].append(PortfolioStockOptionPlan(
+                plan_id=p.id,
+                name=p.name,
+                symbol=p.symbol,
+                owner=p.taxpayer_owner,
+                strike_price=p.strike_price,
+                currency=p.stock_currency,
+                vestings=[PortfolioStockOptionVesting(
+                    vesting_date=v.vesting_date,
+                    initial_amount=v.count,
+                    currently_available=v.count,
+                ) for v in vestings]))
+
+
+
+@dataclass
+class PortfolioDirectStock:
+    symbol: str
+    acquisition_date: date
+    acquisition_price: float
+    currency: str
+    initial_amount: int
+    currently_available: int
+
+
+class StockPortfolio:
+    stocks: DefaultDict[str, list[PortfolioDirectStock]]
+
+
+    def __init__(self, project_id: int):
+        raw_stocks = DirectStocks.query.filter_by(project_id=project_id).all()
+        self.stocks = defaultdict(list)
+        for ds in raw_stocks:
+            self.stocks[ds.symbol].append(PortfolioDirectStock(
+                symbol=ds.symbol,
+                acquisition_date=ds.acquisition_date,
+                acquisition_price=ds.acquisition_price,
+                currency=ds.stock_currency,
+                initial_amount=ds.quantity,
+                currently_available=ds.quantity
+            ))

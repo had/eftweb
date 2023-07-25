@@ -11,8 +11,9 @@ from sqlalchemy.exc import IntegrityError
 from . import stocks
 from .forms import DirectStocksForm, RsuPlanForm, RsuVestingForm, DirectStocksSaleForm, RsuImportForm, RsuSaleForm, \
     DirectStocksImportForm, StockOptionsImportForm
-from .portfolio import RSUPortfolio
-from .tsv_importer import import_rsu_tsv, import_dstocks_tsv
+from .portfolio import RSUPortfolio, StockOptionsPortfolio, StockPortfolio
+from .ticker import ticker
+from .tsv_importer import import_rsu_tsv, import_dstocks_tsv, import_stockoptions_tsv
 from .. import db
 from ..main import models as main_models
 from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale, RSUSale
@@ -25,60 +26,48 @@ def project_stocks_proto(project_id):
     rsuplan_form = RsuPlanForm()
     rsu_import_form = RsuImportForm()
     rsuvesting_form = RsuVestingForm()
-    rsu_portfolio = RSUPortfolio(project.id)
-    direct_stocks = DirectStocks.query.filter_by(project_id=project.id).all()
-    direct_stocks_per_symbol = {symbol: list(ds) for symbol, ds in groupby(direct_stocks, key=lambda x: x.symbol)}
     dstock_sale_form = DirectStocksSaleForm()
-    dstock_sales = DirectStocksSale.query.filter_by(project_id=project.id).all()
     rsu_sale_form = RsuSaleForm()
-    years = {ds.sell_date.year for ds in dstock_sales} | {rs.sell_date.year for rs in rsu_portfolio.sales}
-    symbols_stock = {
-        "CRTO": 33.10,
-        "DDOG": 113.54,
-        "PZZA": 80.56
-    }
+
+    rsu_portfolio = RSUPortfolio(project.id)
     rsu_plans = {
-        "CRTO" : {
-            "Plan 2016": ("Macron I", [
-                ("2018-06-29", 350, 0),
-                ("2018-10-01", 44, 0),
-                ("2018-12-01", 44, 0),
-                ("2019-03-28", 44, 0)
-            ]),
-            "Plan 2017": ("Macron II", [
-                ("2018-06-29", 200, 110),
-                ("2018-10-01", 44, 44),
-                ("2018-12-01", 44, 44),
-                ("2019-03-28", 44, 44)
-            ])
-        }
-    }
+        symbol: {
+            plan.name: (plan.tax_scheme.value, [
+                (v.vesting_date, v.initial_amount, v.currently_available) for v in plan.vestings
+            ]) for plan in plans}
+        for symbol, plans in rsu_portfolio.plans.items()}
+    stockoption_portfolio = StockOptionsPortfolio(project.id)
     stockoptions_plans = {
-        "DDOG" : {
-            "SO 2019": ("$5.73", [
-                ("2019-03-28", 180, 0),
-                ("2019-06-28", 180, 0),
-                ("2019-09-28", 180, 50),
-                ("2019-12-28", 180, 180)
-            ])
-        }
-    }
-    direct_stocks = {
-        "PZZA": [
-            ("2017-03-18", 180, 100),
-            ("2018-01-25", 250, 250)
+        symbol: {
+            plan.name: (f"{plan.strike_price} {plan.currency}", [
+                (v.vesting_date, v.initial_amount, v.currently_available) for v in plan.vestings
+            ]) for plan in plans}
+        for symbol, plans in stockoption_portfolio.plans.items()}
+
+    directstocks_portfolio = StockPortfolio(project.id)
+    directstocks = {
+        symbol: [
+            (s.acquisition_date, s.initial_amount, s.currently_available)
+            for s in stocks
         ]
-    }
+        for symbol, stocks in directstocks_portfolio.stocks.items()}
+
+    symbols = set().union(rsu_plans.keys(), stockoptions_plans.keys(), directstocks.keys())
+    symbols_stock = {symbol: ticker.get_stock_value(symbol) for symbol in symbols}
+
+    # years = {ds.sell_date.year for ds in dstock_sales} | {rs.sell_date.year for rs in rsu_portfolio.sales}
+    years = {}
+
     return render_template("project_stocks2.html",
                            project=project,
                            dstock_form=dstock_form,
                            rsuplan_form=rsuplan_form, rsu_import_form=rsu_import_form,
                            rsuvesting_form=rsuvesting_form,
-                           dstock_sales=dstock_sales, dstock_sale_form=dstock_sale_form,
+                           dstock_sale_form=dstock_sale_form,
                            rsu_sale_form=rsu_sale_form,
                            sales_years=years, rsu_portfolio=rsu_portfolio,
                            symbols_stock=symbols_stock, rsu_plans=rsu_plans, stockoptions_plans=stockoptions_plans,
-                           direct_stocks=direct_stocks
+                           directstocks=directstocks
                            )
 
 
@@ -166,7 +155,7 @@ def import_rsu_plan(project_id):
     rsu_import_form = RsuImportForm()
     if rsu_import_form.validate_on_submit():
         rsuplan_file: FileStorage = rsu_import_form.tsv_file.data
-        import_rsu_tsv(rsuplan_file, project_id, db)
+        import_rsu_tsv(rsuplan_file, project_id)
 
     else:
         print(rsu_import_form.errors)
@@ -177,20 +166,20 @@ def import_dstocks(project_id):
     directstocks_import_form = DirectStocksImportForm()
     if directstocks_import_form.validate_on_submit():
         dstocks_file: FileStorage = directstocks_import_form.tsv_file.data
-        import_dstocks_tsv(dstocks_file, project_id, db)
+        import_dstocks_tsv(dstocks_file, project_id)
     else:
         print(directstocks_import_form.errors)
     return redirect(url_for('.project_stocks', project_id=project_id))
 
 @stocks.route("/project/<int:project_id>/stocks/options/import", methods=["POST"])
 def import_stockoptions(project_id):
-    # stockoptions_import_form = StockOptionsImportForm()
-    # if stockoptions_import_form.validate_on_submit():
-    #     dstocks_file: FileStorage = stockoptions_import_form.tsv_file.data
-    #     owner = stockoptions_import_form.tp_owner.data
-    #     import_stockoptions_tsv(dstocks_file, owner, project_id, db)
-    # else:
-    #     print(directstocks_import_form.errors)
+    stockoptions_import_form = StockOptionsImportForm()
+    if stockoptions_import_form.validate_on_submit():
+        dstocks_file: FileStorage = stockoptions_import_form.tsv_file.data
+        owner = stockoptions_import_form.tp_owner.data
+        import_stockoptions_tsv(dstocks_file, owner, project_id)
+    else:
+        print(directstocks_import_form.errors)
     return redirect(url_for('.project_stocks', project_id=project_id))
 
 

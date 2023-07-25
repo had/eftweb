@@ -45,7 +45,7 @@
 <hr>
 
 {% for symbol, stock_price in symbols_stock.items() %}
-<p class="lead p-3 border border-success">{{ symbol }}   ${{ stock_price }} </p>
+<p class="lead p-3 border border-success">{{ symbol }}   {{ stock_price }} </p>
 <div class="card-deck mb-3">
     {% if symbol in rsu_plans %}
     <div class="card">
@@ -112,7 +112,7 @@
             {% endfor %}        </div>
     </div>
     {% endif %}
-    {% if symbol in direct_stocks %}
+    {% if symbol in directstocks %}
     <div class="card">
         <div class="card-header">
             Direct stocks
@@ -120,7 +120,7 @@
         </div>
         <div class="card-body">
             <ul class="list-group list-group-flush">
-                {% for v_date, v_init, v_cur in direct_stocks[symbol] %}<li class="list-group-item">
+                {% for v_date, v_init, v_cur in directstocks[symbol] %}<li class="list-group-item">
                     {% if v_init != v_cur %}
                         {{v_date}}: <s>{{v_init}}</s> {{v_cur}}
                     {% else %}
