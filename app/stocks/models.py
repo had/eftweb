@@ -1,3 +1,5 @@
+from easyfrenchtax import StockType
+
 from .. import db
 
 
@@ -61,6 +63,18 @@ class StockOptionVesting(db.Model):
     count = db.Column(db.Integer)
     vesting_date = db.Column(db.Date)
 
+
+class SaleEvent(db.Model):
+    __tablename__ = "sale_events"
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'))
+    type = db.Column(db.Enum(StockType))
+    symbol = db.Column(db.String(16))
+    quantity = db.Column(db.Integer)
+    sell_date = db.Column(db.Date)
+    sell_price = db.Column(db.Float)
+    sell_currency = db.Column(db.String(3))
+    fees = db.Column(db.Float)  # in sell_currency
 
 class DirectStocksSale(db.Model):
     __tablename__ = "direct_stocks_sales"

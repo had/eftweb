@@ -1,4 +1,6 @@
 import pprint
+from collections import defaultdict
+from datetime import date
 
 import dateutil.relativedelta
 from flask import render_template, redirect, url_for
@@ -10,24 +12,25 @@ from sqlalchemy.exc import IntegrityError
 
 from . import stocks
 from .forms import DirectStocksForm, RsuPlanForm, RsuVestingForm, DirectStocksSaleForm, RsuImportForm, RsuSaleForm, \
-    DirectStocksImportForm, StockOptionsImportForm
+    DirectStocksImportForm, StockOptionsImportForm, SaleForm
 from .portfolio import RSUPortfolio, StockOptionsPortfolio, StockPortfolio
 from .ticker import ticker
 from .tsv_importer import import_rsu_tsv, import_dstocks_tsv, import_stockoptions_tsv
 from .. import db
 from ..main import models as main_models
-from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale, RSUSale, StockOptionVesting, StockOptionPlan
+from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale, RSUSale, StockOptionVesting, StockOptionPlan, \
+    SaleEvent
 
 
 @stocks.route("/project2/<int:project_id>/stocks", methods=["GET"])
 def project_stocks_proto(project_id):
     project = main_models.Project.query.get(project_id)
     dstock_form = DirectStocksForm()
-    rsuplan_form = RsuPlanForm()
     rsu_import_form = RsuImportForm()
-    rsuvesting_form = RsuVestingForm()
-    dstock_sale_form = DirectStocksSaleForm()
-    rsu_sale_form = RsuSaleForm()
+    directstocks_import_form = DirectStocksImportForm()
+    stockoptions_import_form = StockOptionsImportForm()
+    sale_form = SaleForm()
+    sale_form.sell_date.data = date.today()
 
     rsu_portfolio = RSUPortfolio(project.id)
     rsu_plans = {
@@ -36,6 +39,13 @@ def project_stocks_proto(project_id):
                 (v.vesting_date, v.initial_amount, v.currently_available) for v in plan.vestings
             ]) for plan in plans}
         for symbol, plans in rsu_portfolio.plans.items()}
+    rsu_sales = defaultdict(list)
+    for sale in rsu_portfolio.sales:
+        rsu_sales[sale.symbol].append(f"{sale.sell_date} : {sale.quantity} x {sale.sell_price} {sale.sell_currency} <br> => net €{sale.sell_price_eur*sale.quantity-sale.taxes}")
+    rsu_sales_html = {}
+    for symbol, sales_str in rsu_sales.items():
+     rsu_sales_html[symbol] = "<ul class='p-0'><li>" + "</li><li>".join(sales_str[:3]) + "</li></ul>"
+
     stockoption_portfolio = StockOptionsPortfolio(project.id)
     stockoptions_plans = {
         symbol: {
@@ -61,13 +71,12 @@ def project_stocks_proto(project_id):
     return render_template("project_stocks2.html",
                            project=project,
                            dstock_form=dstock_form,
-                           rsuplan_form=rsuplan_form, rsu_import_form=rsu_import_form,
-                           rsuvesting_form=rsuvesting_form,
-                           dstock_sale_form=dstock_sale_form,
-                           rsu_sale_form=rsu_sale_form,
+                           rsu_import_form=rsu_import_form, directstocks_import_form=directstocks_import_form,
+                           stockoptions_import_form=stockoptions_import_form, sale_form=sale_form,
                            sales_years=years, rsu_portfolio=rsu_portfolio,
                            symbols_stock=symbols_stock, rsu_plans=rsu_plans, stockoptions_plans=stockoptions_plans,
-                           directstocks=directstocks
+                           directstocks=directstocks,
+                           rsu_sales=rsu_sales, rsu_sales_html=rsu_sales_html
                            )
 
 
@@ -263,6 +272,32 @@ def add_rsu_sale(project_id):
     else:
         # TODO: pop-up errors back to user?
         print("Validation error:", rsu_sale_form.errors)
+    return redirect(url_for('.project_stocks', project_id=project_id))
+
+@stocks.route("/project/<int:project_id>/stocks/sell", methods=["POST"])
+def sell_stocks(project_id):
+    sale_form = SaleForm()
+    if sale_form.validate_on_submit():
+        sale = SaleEvent(
+            project_id=project_id,
+            type=sale_form.stock_type.data,
+            symbol=sale_form.symbol.data,
+            quantity=sale_form.quantity.data,
+            sell_date=sale_form.sell_date.data,
+            sell_price=sale_form.sell_price.data,
+            sell_currency=sale_form.sell_currency.data,
+            fees=0
+        )
+        db.session.add(sale)
+        try:
+            db.session.commit()
+        except IntegrityError as e:
+            print("ERR ", e)
+            db.session.rollback()
+    else:
+        print(sale_form.sell_date.data)
+        # TODO: pop-up errors back to user?
+        print("Validation error:", sale_form.errors)
     return redirect(url_for('.project_stocks', project_id=project_id))
 
 

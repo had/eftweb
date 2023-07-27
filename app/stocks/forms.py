@@ -60,3 +60,12 @@ class RsuSaleForm(FlaskForm):
     sell_currency = StringField("Sell price currency")
     fees = DecimalField("Fees (in same currency)")
     submit = SubmitField("Confirm")
+
+class SaleForm(FlaskForm):
+    symbol = StringField("Stock symbol")
+    stock_type = SelectField("Stock type", choices=["RSU", "ESPP", "STOCKOPTIONS"])
+    quantity = IntegerField("Quantity")
+    sell_date = DateField("Sell date")
+    sell_price = DecimalField("Sell price")
+    sell_currency = StringField("Sell price currency")
+    submit = SubmitField("Confirm")

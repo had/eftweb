@@ -5,9 +5,9 @@ from typing import DefaultDict, Optional
 
 from currency_converter import CurrencyConverter
 
-from easyfrenchtax import StockHelper, RsuTaxScheme
+from easyfrenchtax import StockHelper, RsuTaxScheme, StockType
 
-from app.stocks.models import RSUPlan, RSUVesting, RSUSale, StockOptionPlan, StockOptionVesting, DirectStocks
+from app.stocks.models import RSUPlan, RSUVesting, RSUSale, StockOptionPlan, StockOptionVesting, DirectStocks, SaleEvent
 from app.stocks.ticker import ticker
 
 
@@ -68,7 +68,7 @@ class RSUPortfolio:
                     currently_available=v.count,
                     acquisition_price_eur=self.cc.convert(v.acquisition_price, p.stock_currency, "EUR")
                 ) for v in vestings]))
-        raw_sales = RSUSale.query.filter_by(project_id=project_id).all()
+        raw_sales = SaleEvent.query.filter_by(project_id=project_id, type=StockType.RSU).all()
         self.sales = []
         for s in raw_sales:
             portfolio_sale = self.process_sale(s)
