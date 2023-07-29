@@ -88,7 +88,11 @@
     <div class="card">
         <div class="card-header">
             Stock Options
-            <a class="btn btn-success btn-sm float-right" href="">Sell</a>
+            {% if symbol in stockoptions_sales %}
+            -  <a id="stockoptions_tooltip" data-toggle="tooltip" title="{{stockoptions_sales_html[symbol]}}"> <small class="text-danger">{{stockoptions_sales[symbol] | length}} sales </small></a>
+                <script>$('#stockoptions_tooltip').tooltip({ html: true })</script>
+            {% endif %}
+            <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="STOCKOPTIONS" data-symbol="{{symbol}}">Sell</a>
         </div>
         <div class="card-body" id="accordion_so_{{symbol}}">
             {% for plan_name, (stockoption_plan_id, strikeprice, vestings) in stockoptions_plans[symbol].items() %}
@@ -121,7 +125,11 @@
     <div class="card">
         <div class="card-header">
             Direct stocks
-            <a class="btn btn-success btn-sm float-right" href="">Sell</a>
+            {% if symbol in directstocks_sales %}
+            -  <a id="directstocks_tooltip" data-toggle="tooltip" title="{{directstocks_sales_html[symbol]}}"> <small class="text-danger">{{directstocks_sales[symbol] | length}} sales </small></a>
+                <script>$('#directstocks_tooltip').tooltip({ html: true })</script>
+            {% endif %}
+            <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="ESPP" data-symbol="{{symbol}}">Sell</a>
         </div>
         <div class="card-body">
             <ul class="list-group list-group-flush">

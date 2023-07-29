@@ -209,3 +209,8 @@ class StockPortfolio:
                 initial_amount=ds.quantity,
                 currently_available=ds.quantity
             ))
+        raw_sales = SaleEvent.query.filter_by(project_id=project_id, type=StockType.ESPP).all()
+        self.sales = []
+        for s in raw_sales:
+            portfolio_sale = self.process_sale(s)
+            self.process_taxes(portfolio_sale)

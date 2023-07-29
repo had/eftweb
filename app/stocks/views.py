@@ -61,6 +61,12 @@ def project_stocks_proto(project_id):
             for s in stocks
         ]
         for symbol, stocks in directstocks_portfolio.stocks.items()}
+    directstocks_sales = defaultdict(list)
+    for sale in directstocks_portfolio.sales:
+        directstocks_sales[sale.symbol].append(f"{sale.sell_date} : {sale.quantity} x {sale.sell_price} {sale.sell_currency} <br> => net €{sale.sell_price_eur*sale.quantity-sale.taxes}")
+    directstocks_sales_html = {}
+    for symbol, sales_str in directstocks_sales.items():
+     directstocks_sales_html[symbol] = "<ul class='p-0'><li>" + "</li><li>".join(sales_str[:3]) + "</li></ul>"
 
     symbols = set().union(rsu_plans.keys(), stockoptions_plans.keys(), directstocks.keys())
     symbols_stock = {symbol: ticker.get_stock_value(symbol) for symbol in symbols}
