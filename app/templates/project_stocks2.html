@@ -125,7 +125,7 @@
     <div class="card">
         <div class="card-header">
             Direct stocks
-            {% if symbol in directstocks_sales %}
+                {% if symbol in directstocks_sales %}
             -  <a id="directstocks_tooltip" data-toggle="tooltip" title="{{directstocks_sales_html[symbol]}}"> <small class="text-danger">{{directstocks_sales[symbol] | length}} sales </small></a>
                 <script>$('#directstocks_tooltip').tooltip({ html: true })</script>
             {% endif %}

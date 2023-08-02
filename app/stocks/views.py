@@ -82,7 +82,8 @@ def project_stocks_proto(project_id):
                            sales_years=years, rsu_portfolio=rsu_portfolio,
                            symbols_stock=symbols_stock, rsu_plans=rsu_plans, stockoptions_plans=stockoptions_plans,
                            directstocks=directstocks,
-                           rsu_sales=rsu_sales, rsu_sales_html=rsu_sales_html
+                           rsu_sales=rsu_sales, rsu_sales_html=rsu_sales_html,
+                           directstocks_sales=directstocks_sales, directstocks_sales_html=directstocks_sales_html
                            )
 
 
