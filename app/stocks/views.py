@@ -22,8 +22,8 @@ from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale, RSUSale
     SaleEvent
 
 
-@stocks.route("/project2/<int:project_id>/stocks", methods=["GET"])
-def project_stocks_proto(project_id):
+@stocks.route("/project/<int:project_id>/stocks", methods=["GET"])
+def project_stocks(project_id):
     project = main_models.Project.query.get(project_id)
     dstock_form = DirectStocksForm()
     rsu_import_form = RsuImportForm()
@@ -87,7 +87,7 @@ def project_stocks_proto(project_id):
                            )
 
 
-@stocks.route("/project/<int:project_id>/stocks", methods=["GET"])
+# @stocks.route("/project/<int:project_id>/stocks", methods=["GET"])
 def project_stocks(project_id):
     project = main_models.Project.query.get(project_id)
     dstock_form = DirectStocksForm()

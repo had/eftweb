@@ -71,9 +71,9 @@
                             <ul class="list-group list-group-flush">
                                 {% for v_date, v_init, v_cur in vestings %}<li class="list-group-item">
                                     {% if v_init != v_cur %}
-                                        v_date: <s>{{v_init}}</s> {{v_cur}}
+                                        {{v_date}}: <s>{{v_init}}</s> {{v_cur}}
                                     {% else %}
-                                        v_date: {{v_init}}
+                                        {{v_date}}: {{v_init}}
                                     {% endif %}
                                 </li>{% endfor %}
                             </ul>
