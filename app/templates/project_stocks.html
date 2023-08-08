@@ -17,7 +17,6 @@
     <div class="btn-group" role="group">
         <button class="btn btn-outline-primary dropdown-toggle" data-toggle="dropdown">Add RSU plan</button>
         <div class="dropdown-menu">
-            <a class="dropdown-item" data-toggle="modal" data-target="#RsuPlanModal">Input</a>
             <a class="dropdown-item" data-toggle="modal" data-target="#RsuImportModal">Import from TSV</a>
         </div>
     </div>
@@ -25,17 +24,6 @@
         <button class="btn btn-outline-primary dropdown-toggle" data-toggle="dropdown">Add Stock Option plan</button>
         <div class="dropdown-menu">
             <a class="dropdown-item" data-toggle="modal" data-target="#StockOptionsImportModal">Import from TSV</a>
-        </div>
-    </div>
-</div>
-<div class="btn-group mr-2" role="group" aria-label="Sell stocks">
-    <div class="dropdown">
-        <button class="btn btn-primary dropdown-toggle" type="button" id="dropdownSellingButton" data-toggle="dropdown">
-            Declare a selling event
-        </button>
-        <div class="dropdown-menu">
-            <a class="dropdown-item" data-toggle="modal" data-target="#SellingStockModal">Sell direct stocks</a>
-            <a class="dropdown-item" data-toggle="modal" data-target="#SellingRsuModal">Sell RSUs</a>
         </div>
     </div>
 </div>
@@ -55,77 +43,111 @@
 </div>
 <hr>
 
-{% if direct_stocks %}
-<h3 class="my-4">Direct stocks</h3>
-{% endif %}
-<div class="mx-2">
-{% for symbol, dstocks in direct_stocks.items() %}
-<h6 class="mt-3">{{ symbol }}</h6>
-<ul class="list-group">
-    {% for ds in dstocks %}
-    <li class="list-group-item">{{ds.acquisition_date}} <text class="text-muted">{{ ds.quantity }} x {{ds.acquisition_price}} {{ds.stock_currency}}</text>
-                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_direct_stocks', project_id=project.id, dstocks_id=ds.id) }}"><i class="fa fa-trash"></i></a>
-    </li>
-    {% endfor %}
-</ul>
-{% endfor %}
+{% for symbol, stock_price in symbols_stock.items() %}
+<p class="lead p-3 border border-success">{{ symbol }}   {{ stock_price }} </p>
+<div class="card-deck mb-3">
+    {% if symbol in rsu_plans %}
+    <div class="card">
+        <div class="card-header">
+            RSUs
+            {% if symbol in rsu_sales %}
+            -  <a id="rsusales_tooltip" data-toggle="tooltip" title="{{rsu_sales[symbol] | sales_to_tooltip}}"> <small class="text-danger">{{rsu_sales[symbol] | length}} sales </small></a>
+                <script>$('#rsusales_tooltip').tooltip({ html: true })</script>
+            {% endif %}
+            <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="RSU" data-symbol="{{symbol}}">Sell</a>
+        </div>
+        <div class="card-body" id="accordion_rsu_{{symbol}}">
+            {% for plan_name, (rsu_plan_id, tax_scheme, vestings) in rsu_plans[symbol].items() %}
+                <div class="card">
+                    <div class="card-header" id="headingOne">
+                        {{plan_name}} <small class="text-muted">{{tax_scheme}}</small>
+                        <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_rsu_plan', project_id=project.id, rsuplan_id=rsu_plan_id) }}"><i class="fa fa-trash"></i></a>
+                        <button class="btn btn-link float-right" data-toggle="collapse" data-target="#collapse{{plan_name | replace(' ', '')}}">
+                            <small>see vestings</small>
+                        </button>
+                    </div>
+                    <div id="collapse{{plan_name | replace(' ', '')}}" class="collapse" aria-labelledby="headingOne" data-parent="#accordion_rsu_{{symbol}}">
+                        <div class="card-body py-0">
+                            <ul class="list-group list-group-flush">
+                                {% for v_date, v_init, v_cur in vestings %}<li class="list-group-item">
+                                    {% if v_init != v_cur %}
+                                        {{v_date}}: <s>{{v_init}}</s> {{v_cur}}
+                                    {% else %}
+                                        {{v_date}}: {{v_init}}
+                                    {% endif %}
+                                </li>{% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% if symbol in stockoptions_plans %}
+    <div class="card">
+        <div class="card-header">
+            Stock Options
+            {% if symbol in stockoptions_sales %}
+            -  <a id="stockoptions_tooltip" data-toggle="tooltip" title="{{stockoptions_sales[symbol] | sales_to_tooltip}}"> <small class="text-danger">{{stockoptions_sales[symbol] | length}} sales </small></a>
+                <script>$('#stockoptions_tooltip').tooltip({ html: true })</script>
+            {% endif %}
+            <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="STOCKOPTIONS" data-symbol="{{symbol}}">Sell</a>
+        </div>
+        <div class="card-body" id="accordion_so_{{symbol}}">
+            {% for plan_name, (stockoption_plan_id, strikeprice, vestings) in stockoptions_plans[symbol].items() %}
+                <div class="card">
+                    <div class="card-header" id="headingOne">
+                        {{plan_name}} <small class="text-muted">strike price: {{strikeprice}}</small>
+                        <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_stockoptions_plan', project_id=project.id, stockoption_plan_id=stockoption_plan_id) }}"><i class="fa fa-trash"></i></a>
+                        <button class="btn btn-link float-right" data-toggle="collapse" data-target="#collapse{{plan_name | replace(' ', '')}}">
+                            <small>see vestings</small>
+                        </button>
+                    </div>
+                    <div id="collapse{{plan_name | replace(' ', '')}}" class="collapse" aria-labelledby="headingOne" data-parent="#accordion_so_{{symbol}}">
+                        <div class="card-body py-0">
+                            <ul class="list-group list-group-flush">
+                                {% for v_date, v_init, v_cur in vestings %}<li class="list-group-item">
+                                    {% if v_init != v_cur %}
+                                        {{v_date}}: <s>{{v_init}}</s> {{v_cur}}
+                                    {% else %}
+                                        {{v_date}}: {{v_init}}
+                                    {% endif %}
+                                </li>{% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}        </div>
+    </div>
+    {% endif %}
+    {% if symbol in directstocks %}
+    <div class="card">
+        <div class="card-header">
+            Direct stocks
+                {% if symbol in directstocks_sales %}
+            -  <a id="directstocks_tooltip" data-toggle="tooltip" title="{{directstocks_sales[symbol] | sales_to_tooltip}}"> <small class="text-danger">{{directstocks_sales[symbol] | length}} sales </small></a>
+                <script>$('#directstocks_tooltip').tooltip({ html: true })</script>
+            {% endif %}
+            <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="ESPP" data-symbol="{{symbol}}">Sell</a>
+        </div>
+        <div class="card-body">
+            <ul class="list-group list-group-flush">
+                {% for s_id, s_date, s_init, s_cur in directstocks[symbol] %}<li class="list-group-item">
+                    {% if s_init != s_cur %}
+                        {{s_date}}: <s>{{s_init}}</s> {{s_cur}}
+                    {% else %}
+                        {{s_date}}: {{s_init}}
+                    {% endif %}
+                    <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_direct_stocks', project_id=project.id, dstocks_id=s_id) }}"><i class="fa fa-trash"></i></a>
+                </li>{% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
-{% if grouped_rsu_plans %}
-<h3 class="my-4">RSU Plans</h3>
-{% endif %}
-
-{% for symbol, rsu_plans in rsu_portfolio.get_plans().items() %}
-<h4 class="my-4">{{ symbol }}: {{ rsu_portfolio.stock_symbols[symbol] }}</h4>
-<ul class="list-group">
-    {% for plan in rsu_plans %}
-    <li class="list-group-item">{{ plan.name }}  <text class="text-muted">tax scheme: {{plan.tax_scheme.value}}</text>
-                <!-- data-rsuplan gets forwarded to the wtform in modal, by some JS -->
-                <a class="btn btn-success btn-sm" data-toggle="modal" data-target="#RsuVestingModal" data-rsuplan="{{plan.plan_id}}"><i class="fa fa-plus" style="color:white"></i> add vesting</a>
-                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_rsu_plan', project_id=project.id, rsuplan_id=plan.plan_id) }}"><i class="fa fa-trash"></i></a>
-        <ul>
-            {% for vesting in plan.vestings %}
-            <li>{{vesting.vesting_date}} :
-                {% if vesting.currently_available != vesting.initial_amount %}
-                    <s>{{vesting.initial_amount}}</s> {{vesting.currently_available}}
-                {% else %}
-                    {{vesting.initial_amount}}
-                {% endif %}
-            </li>
-            {% endfor %}
-        </ul>
-    </li>
-    {% endfor %}
-</ul>
 {% endfor %}
-
-<hr>
-
-<h3 class="my-4">Direct stock sales</h3>
-<ul class="list-group">
-    {% for dstock_sale in dstock_sales %}
-    <li class="list-group-item">{{ dstock_sale.symbol }}  <text class="text-muted">{{ dstock_sale.quantity }} x {{dstock_sale.sell_price}} {{dstock_sale.sell_currency}}</text>
-                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_dstock_sale', project_id=project.id, dstock_sale_id=dstock_sale.id) }}"><i class="fa fa-trash"></i></a>
-    </li>
-    {% endfor %}
-</ul>
-
-<h3 class="my-4">RSU sales</h3>
-<ul class="list-group">
-    {% for rsu_sale in rsu_portfolio.sales %}
-    <li class="list-group-item"> <strong>{{ rsu_sale.symbol }}</strong>  <text class="text-muted">{{ rsu_sale.sell_date }}</text>
-                <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_rsu_sale', project_id=project.id, rsu_sale_id=rsu_sale.sale_id) }}"><i class="fa fa-trash"></i></a>
-    <dl class="row">
-      <dt class="col-sm-3">Sell order</dt>
-        <dd class="col-sm-9">{{rsu_sale.quantity}} x {{rsu_sale.sell_price}} {{rsu_sale.sell_currency}}</dd>
-      <dt class="col-sm-3">Gross proceeds</dt>
-        <dd class="col-sm-9">{{rsu_sale.sell_price_eur * rsu_sale.quantity}}€</dd>
-      <dt class="col-sm-3">Net proceeds</dt>
-        <dd class="col-sm-9">{{rsu_sale.sell_price_eur * rsu_sale.quantity - rsu_sale.taxes}}€</dd>
-    </dl>
-    </li>
-    {% endfor %}
-</ul>
 
 {% import 'bootstrap/form.html' as wtf %}
 <div class="modal" id="DirectStocksModal" role="dialog" aria-hidden="true">
@@ -134,28 +156,6 @@
             <div class="modal-header">Direct Stocks</div>
             <div class="modal-body">
                     {{ wtf.render_form(dstock_form, action=url_for(".add_direct_stocks", project_id=project.id)) }}
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal" id="RsuPlanModal" role="dialog" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header">RSU Plan</div>
-            <div class="modal-body">
-                    {{ wtf.render_form(rsuplan_form, action=url_for(".add_rsu_plan", project_id=project.id)) }}
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal" id="RsuImportModal" role="dialog" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header">RSU Import</div>
-            <div class="modal-body">
-                    {{ wtf.render_form(rsu_import_form, action=url_for(".import_rsu_plan", project_id=project.id)) }}
             </div>
         </div>
     </div>
@@ -172,6 +172,18 @@
     </div>
 </div>
 
+<div class="modal" id="RsuImportModal" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">RSU Import</div>
+            <div class="modal-body">
+                    {{ wtf.render_form(rsu_import_form, action=url_for(".import_rsu_plan", project_id=project.id)) }}
+            </div>
+        </div>
+    </div>
+</div>
+
+
 <div class="modal" id="StockOptionsImportModal" role="dialog" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
@@ -183,43 +195,23 @@
     </div>
 </div>
 
-<div class="modal" id="RsuVestingModal" role="dialog" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header">RSU Plan</div>
-            <div class="modal-body">
-                    {{ wtf.render_form(rsuvesting_form, action=url_for(".add_rsu_vesting", project_id=project.id)) }}
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal" id="SellingStockModal" role="dialog" aria-hidden="true">
+<div class="modal" id="SellingModal" role="dialog" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
             <div class="modal-header">Selling direct stocks</div>
             <div class="modal-body">
-                    {{ wtf.render_form(dstock_sale_form, action=url_for(".add_dstocks_sale", project_id=project.id)) }}
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal" id="SellingRsuModal" role="dialog" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header">Selling RSUs</div>
-            <div class="modal-body">
-                    {{ wtf.render_form(rsu_sale_form, action=url_for(".add_rsu_sale", project_id=project.id)) }}
+                    {{ wtf.render_form(sale_form, action=url_for(".sell_stocks", project_id=project.id)) }}
             </div>
         </div>
     </div>
 </div>
 
 <script>
-$('#RsuVestingModal').on('show.bs.modal', function (event) {
-  let planId = $(event.relatedTarget).data('rsuplan')
-  $(this).find('.modal-body #rsuplan_id').val(planId)
+$('#SellingModal').on('show.bs.modal', function (event) {
+  let stockType = $(event.relatedTarget).data('stocktype')
+  $(this).find('.modal-body #stock_type').val(stockType)
+  let symbol = $(event.relatedTarget).data('symbol')
+  $(this).find('.modal-body #symbol').val(symbol)
 })
 </script>
 

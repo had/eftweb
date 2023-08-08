@@ -33,18 +33,6 @@ class RSUVesting(db.Model):
     acquisition_price = db.Column(db.Float)  # expressed in rsu_plans.stock_currency
 
 
-class StockOptions(db.Model):
-    __tablename__ = "stock_options"
-    id = db.Column(db.Integer, primary_key=True)
-    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'))
-    taxpayer_owner = db.Column(db.Integer)  # 1 or 2, used for some tax return fields
-    grant_date = db.Column(db.Date)
-    symbol = db.Column(db.String(16))
-    stock_currency = db.Column(db.String(3))
-    strike_price = db.Column(db.Float)
-    strike_price_currency = db.Column(db.String(3))  # TODO: remove
-
-
 class StockOptionPlan(db.Model):
     __tablename__ = "stockoption_plans"
     id = db.Column(db.Integer, primary_key=True)
@@ -75,6 +63,7 @@ class SaleEvent(db.Model):
     sell_price = db.Column(db.Float)
     sell_currency = db.Column(db.String(3))
     fees = db.Column(db.Float)  # in sell_currency
+
 
 class DirectStocksSale(db.Model):
     __tablename__ = "direct_stocks_sales"

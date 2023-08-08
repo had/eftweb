@@ -12,23 +12,6 @@ from app.stocks.ticker import ticker
 
 
 @dataclass
-class PortfolioRsuVesting:
-    vesting_date: date
-    initial_amount: int
-    currently_available: int
-    acquisition_price_eur: float
-
-
-@dataclass
-class PortfolioRsuPlan:
-    plan_id: int
-    name: str
-    symbol: str
-    tax_scheme: RsuTaxScheme
-    vestings: list[PortfolioRsuVesting]
-
-
-@dataclass
 class PortfolioSalesFragment:
     nb_stocks_sold: int
     acq_date: date
@@ -48,6 +31,23 @@ class PortfolioSale:
     sell_price_eur: float
     taxes: Optional[int] = None
     owner: Optional[int] = None
+
+
+@dataclass
+class PortfolioRsuVesting:
+    vesting_date: date
+    initial_amount: int
+    currently_available: int
+    acquisition_price_eur: float
+
+
+@dataclass
+class PortfolioRsuPlan:
+    plan_id: int
+    name: str
+    symbol: str
+    tax_scheme: RsuTaxScheme
+    vestings: list[PortfolioRsuVesting]
 
 
 cc = CurrencyConverter(fallback_on_wrong_date=True, fallback_on_missing_rate=True)
@@ -81,9 +81,6 @@ class RSUPortfolio:
             self.process_taxes(portfolio_sale)
         # TODO: refactor out
         self.stock_symbols = {s: ticker.get_stock_value(s) for s in [p.symbol for p in raw_plans]}
-
-    def get_plans(self):
-        return self.plans
 
     def process_sale(self, sale_event: SaleEvent):
         sell_date = sale_event.sell_date

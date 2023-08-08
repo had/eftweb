@@ -1,6 +1,6 @@
 from flask import render_template, redirect, url_for
 import taxhelpers
-from collections import namedtuple, defaultdict
+from collections import namedtuple
 from easyfrenchtax import TaxField
 
 from . import tax

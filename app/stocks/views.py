@@ -1,5 +1,4 @@
 import pprint
-from collections import defaultdict
 from datetime import date
 
 import dateutil.relativedelta
@@ -7,7 +6,6 @@ from flask import render_template, redirect, url_for
 from werkzeug.datastructures import FileStorage
 
 import taxhelpers
-from itertools import groupby
 from sqlalchemy.exc import IntegrityError
 
 from . import stocks
@@ -69,7 +67,7 @@ def project_stocks(project_id):
     # years = {ds.sell_date.year for ds in dstock_sales} | {rs.sell_date.year for rs in rsu_portfolio.sales}
     years = {}
 
-    return render_template("project_stocks2.html",
+    return render_template("project_stocks.html",
                            project=project,
                            dstock_form=dstock_form,
                            rsu_import_form=rsu_import_form, directstocks_import_form=directstocks_import_form,
@@ -79,35 +77,6 @@ def project_stocks(project_id):
                            directstocks=directstocks,
                            rsu_sales=rsu_portfolio.sales, stockoptions_sales=stockoption_portfolio.sales,
                            directstocks_sales=directstocks_portfolio.sales,
-                           )
-
-
-# @stocks.route("/project/<int:project_id>/stocks", methods=["GET"])
-def project_stocks(project_id):
-    project = main_models.Project.query.get(project_id)
-    dstock_form = DirectStocksForm()
-    rsuplan_form = RsuPlanForm()
-    rsu_import_form = RsuImportForm()
-    directstocks_import_form = DirectStocksImportForm()
-    stockoptions_import_form = StockOptionsImportForm()
-    rsuvesting_form = RsuVestingForm()
-    rsu_portfolio = RSUPortfolio(project.id)
-    direct_stocks = DirectStocks.query.filter_by(project_id=project.id).all()
-    direct_stocks_per_symbol = {symbol: list(ds) for symbol, ds in groupby(direct_stocks, key=lambda x: x.symbol)}
-    dstock_sale_form = DirectStocksSaleForm()
-    dstock_sales = DirectStocksSale.query.filter_by(project_id=project.id).all()
-    rsu_sale_form = RsuSaleForm()
-    years = {ds.sell_date.year for ds in dstock_sales} | {rs.sell_date.year for rs in rsu_portfolio.sales}
-    return render_template("project_stocks.html",
-                           project=project,
-                           direct_stocks=direct_stocks_per_symbol, dstock_form=dstock_form,
-                           rsuplan_form=rsuplan_form,
-                           rsuvesting_form=rsuvesting_form,
-                           dstock_sales=dstock_sales, dstock_sale_form=dstock_sale_form,
-                           rsu_sale_form=rsu_sale_form,
-                           rsu_import_form=rsu_import_form, directstocks_import_form=directstocks_import_form,
-                           stockoptions_import_form=stockoptions_import_form,
-                           sales_years=years, rsu_portfolio=rsu_portfolio
                            )
 
 
@@ -361,5 +330,5 @@ def taxed_stock_helper(project_id, year):
         rsu_sales_that_year
     )
     pretty_tax_report = pprint.pformat(tax_report)
-    # taxhelpers.
+
     return render_template("stock_taxhelper.html", project=project, tax_report=pretty_tax_report, year=year)

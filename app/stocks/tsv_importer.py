@@ -3,7 +3,7 @@ from io import TextIOWrapper
 from datetime import datetime, date
 from werkzeug.datastructures import FileStorage
 
-from app.stocks.models import RSUPlan, RSUVesting, DirectStocks, StockOptions, StockOptionPlan, StockOptionVesting
+from app.stocks.models import RSUPlan, RSUVesting, DirectStocks, StockOptionPlan, StockOptionVesting
 from app.stocks.ticker import ticker
 from .. import db
 
