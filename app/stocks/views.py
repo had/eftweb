@@ -21,6 +21,13 @@ from ..main import models as main_models
 from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale, RSUSale, StockOptionVesting, StockOptionPlan, \
     SaleEvent
 
+@stocks.app_template_filter()
+def sales_to_tooltip(sales):
+    print("***** ", sales)
+    html_list = []
+    for s in sales[:3]:
+        html_list.append(f"{s.sell_date} : {s.quantity} x {s.sell_price} {s.sell_currency} <br> => net €{round(s.sell_price_eur*s.quantity-s.taxes, 2)}")
+    return "<ul class='p-0'><li>" + "</li><li>".join(html_list) + "</li></ul>"
 
 @stocks.route("/project/<int:project_id>/stocks", methods=["GET"])
 def project_stocks(project_id):
@@ -39,12 +46,6 @@ def project_stocks(project_id):
                 (v.vesting_date, v.initial_amount, v.currently_available) for v in plan.vestings
             ]) for plan in plans}
         for symbol, plans in rsu_portfolio.plans.items()}
-    rsu_sales = defaultdict(list)
-    for sale in rsu_portfolio.sales:
-        rsu_sales[sale.symbol].append(f"{sale.sell_date} : {sale.quantity} x {sale.sell_price} {sale.sell_currency} <br> => net €{sale.sell_price_eur*sale.quantity-sale.taxes}")
-    rsu_sales_html = {}
-    for symbol, sales_str in rsu_sales.items():
-     rsu_sales_html[symbol] = "<ul class='p-0'><li>" + "</li><li>".join(sales_str[:3]) + "</li></ul>"
 
     stockoption_portfolio = StockOptionsPortfolio(project.id)
     stockoptions_plans = {
@@ -61,12 +62,6 @@ def project_stocks(project_id):
             for s in stocks
         ]
         for symbol, stocks in directstocks_portfolio.stocks.items()}
-    directstocks_sales = defaultdict(list)
-    for sale in directstocks_portfolio.sales:
-        directstocks_sales[sale.symbol].append(f"{sale.sell_date} : {sale.quantity} x {sale.sell_price} {sale.sell_currency} <br> => net €{sale.sell_price_eur*sale.quantity-sale.taxes}")
-    directstocks_sales_html = {}
-    for symbol, sales_str in directstocks_sales.items():
-     directstocks_sales_html[symbol] = "<ul class='p-0'><li>" + "</li><li>".join(sales_str[:3]) + "</li></ul>"
 
     symbols = set().union(rsu_plans.keys(), stockoptions_plans.keys(), directstocks.keys())
     symbols_stock = {symbol: ticker.get_stock_value(symbol) for symbol in symbols}
@@ -82,8 +77,8 @@ def project_stocks(project_id):
                            sales_years=years, rsu_portfolio=rsu_portfolio,
                            symbols_stock=symbols_stock, rsu_plans=rsu_plans, stockoptions_plans=stockoptions_plans,
                            directstocks=directstocks,
-                           rsu_sales=rsu_sales, rsu_sales_html=rsu_sales_html,
-                           directstocks_sales=directstocks_sales, directstocks_sales_html=directstocks_sales_html
+                           rsu_sales=rsu_portfolio.sales, stockoptions_sales=stockoption_portfolio.sales,
+                           directstocks_sales=directstocks_portfolio.sales,
                            )
 
 
@@ -195,7 +190,7 @@ def import_stockoptions(project_id):
         owner = stockoptions_import_form.tp_owner.data
         import_stockoptions_tsv(dstocks_file, owner, project_id)
     else:
-        print(directstocks_import_form.errors)
+        print(stockoptions_import_form.errors)
     return redirect(url_for('.project_stocks', project_id=project_id))
 
 

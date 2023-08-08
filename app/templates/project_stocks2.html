@@ -51,7 +51,7 @@
         <div class="card-header">
             RSUs
             {% if symbol in rsu_sales %}
-            -  <a id="rsusales_tooltip" data-toggle="tooltip" title="{{rsu_sales_html[symbol]}}"> <small class="text-danger">{{rsu_sales[symbol] | length}} sales </small></a>
+            -  <a id="rsusales_tooltip" data-toggle="tooltip" title="{{rsu_sales[symbol] | sales_to_tooltip}}"> <small class="text-danger">{{rsu_sales[symbol] | length}} sales </small></a>
                 <script>$('#rsusales_tooltip').tooltip({ html: true })</script>
             {% endif %}
             <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="RSU" data-symbol="{{symbol}}">Sell</a>
@@ -89,7 +89,7 @@
         <div class="card-header">
             Stock Options
             {% if symbol in stockoptions_sales %}
-            -  <a id="stockoptions_tooltip" data-toggle="tooltip" title="{{stockoptions_sales_html[symbol]}}"> <small class="text-danger">{{stockoptions_sales[symbol] | length}} sales </small></a>
+            -  <a id="stockoptions_tooltip" data-toggle="tooltip" title="{{stockoptions_sales[symbol] | sales_to_tooltip}}"> <small class="text-danger">{{stockoptions_sales[symbol] | length}} sales </small></a>
                 <script>$('#stockoptions_tooltip').tooltip({ html: true })</script>
             {% endif %}
             <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="STOCKOPTIONS" data-symbol="{{symbol}}">Sell</a>
@@ -126,7 +126,7 @@
         <div class="card-header">
             Direct stocks
                 {% if symbol in directstocks_sales %}
-            -  <a id="directstocks_tooltip" data-toggle="tooltip" title="{{directstocks_sales_html[symbol]}}"> <small class="text-danger">{{directstocks_sales[symbol] | length}} sales </small></a>
+            -  <a id="directstocks_tooltip" data-toggle="tooltip" title="{{directstocks_sales[symbol] | sales_to_tooltip}}"> <small class="text-danger">{{directstocks_sales[symbol] | length}} sales </small></a>
                 <script>$('#directstocks_tooltip').tooltip({ html: true })</script>
             {% endif %}
             <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="ESPP" data-symbol="{{symbol}}">Sell</a>
