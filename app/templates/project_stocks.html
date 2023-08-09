@@ -43,8 +43,8 @@
 </div>
 <hr>
 
-{% for symbol, stock_price in symbols_stock.items() %}
-<p class="lead p-3 border border-success">{{ symbol }}   {{ stock_price }} </p>
+{% for symbol, (stock_price, stock_currency) in symbols_stock.items() %}
+<p class="lead p-3 border border-success">{{ symbol }}   ${{ stock_price }} </p>
 <div class="card-deck mb-3">
     {% if symbol in rsu_plans %}
     <div class="card">
@@ -54,7 +54,7 @@
             -  <a id="rsusales_tooltip" data-toggle="tooltip" title="{{rsu_sales[symbol] | sales_to_tooltip}}"> <small class="text-danger">{{rsu_sales[symbol] | length}} sales </small></a>
                 <script>$('#rsusales_tooltip').tooltip({ html: true })</script>
             {% endif %}
-            <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="RSU" data-symbol="{{symbol}}">Sell</a>
+            <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="RSU" data-symbol="{{symbol}}" data-stockvalue="{{ stock_price }}" data-stockcurrency="{{ stock_currency }}">Sell</a>
         </div>
         <div class="card-body" id="accordion_rsu_{{symbol}}">
             {% for plan_name, (rsu_plan_id, tax_scheme, vestings) in rsu_plans[symbol].items() %}
@@ -92,7 +92,7 @@
             -  <a id="stockoptions_tooltip" data-toggle="tooltip" title="{{stockoptions_sales[symbol] | sales_to_tooltip}}"> <small class="text-danger">{{stockoptions_sales[symbol] | length}} sales </small></a>
                 <script>$('#stockoptions_tooltip').tooltip({ html: true })</script>
             {% endif %}
-            <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="STOCKOPTIONS" data-symbol="{{symbol}}">Sell</a>
+            <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="STOCKOPTIONS" data-symbol="{{symbol}}" data-stockvalue="{{ stock_price }}" data-stockcurrency="{{ stock_currency }}">Sell</a>
         </div>
         <div class="card-body" id="accordion_so_{{symbol}}">
             {% for plan_name, (stockoption_plan_id, strikeprice, vestings) in stockoptions_plans[symbol].items() %}
@@ -129,7 +129,7 @@
             -  <a id="directstocks_tooltip" data-toggle="tooltip" title="{{directstocks_sales[symbol] | sales_to_tooltip}}"> <small class="text-danger">{{directstocks_sales[symbol] | length}} sales </small></a>
                 <script>$('#directstocks_tooltip').tooltip({ html: true })</script>
             {% endif %}
-            <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="ESPP" data-symbol="{{symbol}}">Sell</a>
+            <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="ESPP" data-symbol="{{symbol}}" data-stockvalue="{{ stock_price }}"  data-stockcurrency="{{ stock_currency }}">Sell</a>
         </div>
         <div class="card-body">
             <ul class="list-group list-group-flush">
@@ -212,6 +212,10 @@ $('#SellingModal').on('show.bs.modal', function (event) {
   $(this).find('.modal-body #stock_type').val(stockType)
   let symbol = $(event.relatedTarget).data('symbol')
   $(this).find('.modal-body #symbol').val(symbol)
+  let stockvalue = $(event.relatedTarget).data('stockvalue')
+  $(this).find('.modal-body #sell_price').val(stockvalue)
+  let stockcurrency = $(event.relatedTarget).data('stockcurrency')
+  $(this).find('.modal-body #sell_currency').val(stockcurrency)
 })
 </script>
 

@@ -9,8 +9,7 @@ import taxhelpers
 from sqlalchemy.exc import IntegrityError
 
 from . import stocks
-from .forms import DirectStocksForm, RsuPlanForm, RsuVestingForm, DirectStocksSaleForm, RsuImportForm, RsuSaleForm, \
-    DirectStocksImportForm, StockOptionsImportForm, SaleForm
+from .forms import DirectStocksForm, RsuImportForm, DirectStocksImportForm, StockOptionsImportForm, SaleForm
 from .portfolio import RSUPortfolio, StockOptionsPortfolio, StockPortfolio
 from .ticker import ticker
 from .tsv_importer import import_rsu_tsv, import_dstocks_tsv, import_stockoptions_tsv
@@ -21,7 +20,6 @@ from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale, RSUSale
 
 @stocks.app_template_filter()
 def sales_to_tooltip(sales):
-    print("***** ", sales)
     html_list = []
     for s in sales[:3]:
         html_list.append(f"{s.sell_date} : {s.quantity} x {s.sell_price} {s.sell_currency} <br> => net €{round(s.sell_price_eur*s.quantity-s.taxes, 2)}")
@@ -64,8 +62,7 @@ def project_stocks(project_id):
     symbols = set().union(rsu_plans.keys(), stockoptions_plans.keys(), directstocks.keys())
     symbols_stock = {symbol: ticker.get_stock_value(symbol) for symbol in symbols}
 
-    # years = {ds.sell_date.year for ds in dstock_sales} | {rs.sell_date.year for rs in rsu_portfolio.sales}
-    years = {}
+    years = rsu_portfolio.get_years() | stockoption_portfolio.get_years() | directstocks_portfolio.get_years()
 
     return render_template("project_stocks.html",
                            project=project,
@@ -106,30 +103,6 @@ def add_direct_stocks(project_id):
     return redirect(url_for('.project_stocks', project_id=project_id))
 
 
-@stocks.route("/project/<int:project_id>/stocks/rsu", methods=["POST"])
-def add_rsu_plan(project_id):
-    rsuplan_form = RsuPlanForm()
-    if rsuplan_form.validate_on_submit():
-        rsuplan = RSUPlan(
-            project_id=project_id,
-            name=rsuplan_form.name.data,
-            taxpayer_owner=rsuplan_form.tp_owner.data,
-            approval_date=rsuplan_form.approval_date.data,
-            symbol=rsuplan_form.symbol.data,
-            stock_currency=rsuplan_form.stock_currency.data
-        )
-        try:
-            db.session.add(rsuplan)
-            db.session.commit()
-        except IntegrityError as e:
-            print("ERR ", e)
-            db.session.rollback()
-        print("Added rsu plan:", rsuplan)
-    else:
-        # TODO: pop-up errors back to user?
-        print("Validation error:", rsuplan_form.errors)
-    return redirect(url_for('.project_stocks', project_id=project_id))
-
 @stocks.route("/project/<int:project_id>/stocks/rsu/import", methods=["POST"])
 def import_rsu_plan(project_id):
     rsu_import_form = RsuImportForm()
@@ -162,88 +135,6 @@ def import_stockoptions(project_id):
         print(stockoptions_import_form.errors)
     return redirect(url_for('.project_stocks', project_id=project_id))
 
-
-@stocks.route("/project/<int:project_id>/stocks/rsu/vesting", methods=["POST"])
-def add_rsu_vesting(project_id):
-    rsuvesting_form = RsuVestingForm()
-    if rsuvesting_form.validate_on_submit():
-        rsuplan_id = rsuvesting_form.rsuplan_id.data
-        periodicity = rsuvesting_form.periodicity.data
-        qty = rsuvesting_form.quantity.data
-        vdate = rsuvesting_form.vesting_date.data
-        acq_price = rsuvesting_form.acquisition_price.data
-        if periodicity == 'No':
-            rsuvesting = RSUVesting(
-                rsu_plan_id=rsuplan_id,
-                count=qty,
-                vesting_date=vdate,
-                acquisition_price=acq_price
-            )
-            db.session.add(rsuvesting)
-        else:
-            delta = dateutil.relativedelta.relativedelta(months=+3 if periodicity == "Quarterly" else +1)
-            for _ in range(rsuvesting_form.number_of_periods.data):
-                rsuvesting = RSUVesting(
-                    rsu_plan_id=rsuplan_id,
-                    count=qty,
-                    vesting_date=vdate,
-                    acquisition_price=acq_price
-                )
-                db.session.add(rsuvesting)
-                print(rsuvesting)
-                vdate += delta
-        db.session.commit()
-    return redirect(url_for('.project_stocks', project_id=project_id))
-
-
-@stocks.route("/project/<int:project_id>/stocks/direct/selling", methods=["POST"])
-def add_dstocks_sale(project_id):
-    dstock_sale_form = DirectStocksSaleForm()
-    if dstock_sale_form.validate_on_submit():
-        dstock_sale = DirectStocksSale(
-            project_id=project_id,
-            symbol=dstock_sale_form.symbol.data,
-            quantity=dstock_sale_form.quantity.data,
-            sell_date=dstock_sale_form.sell_date.data,
-            sell_price=dstock_sale_form.sell_price.data,
-            sell_currency=dstock_sale_form.sell_currency.data,
-            fees=dstock_sale_form.fees.data
-        )
-        db.session.add(dstock_sale)
-        try:
-            db.session.commit()
-        except IntegrityError as e:
-            print("ERR ", e)
-            db.session.rollback()
-    else:
-        # TODO: pop-up errors back to user?
-        print("Validation error:", dstock_sale_form.errors)
-    return redirect(url_for('.project_stocks', project_id=project_id))
-
-
-@stocks.route("/project/<int:project_id>/stocks/rsu/selling", methods=["POST"])
-def add_rsu_sale(project_id):
-    rsu_sale_form = RsuSaleForm()
-    if rsu_sale_form.validate_on_submit():
-        rsu_sale = RSUSale(
-            project_id=project_id,
-            symbol=rsu_sale_form.symbol.data,
-            quantity=rsu_sale_form.quantity.data,
-            sell_date=rsu_sale_form.sell_date.data,
-            sell_price=rsu_sale_form.sell_price.data,
-            sell_currency=rsu_sale_form.sell_currency.data,
-            fees=rsu_sale_form.fees.data
-        )
-        db.session.add(rsu_sale)
-        try:
-            db.session.commit()
-        except IntegrityError as e:
-            print("ERR ", e)
-            db.session.rollback()
-    else:
-        # TODO: pop-up errors back to user?
-        print("Validation error:", rsu_sale_form.errors)
-    return redirect(url_for('.project_stocks', project_id=project_id))
 
 @stocks.route("/project/<int:project_id>/stocks/sell", methods=["POST"])
 def sell_stocks(project_id):

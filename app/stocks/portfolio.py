@@ -79,8 +79,9 @@ class RSUPortfolio:
         for s in raw_sales:
             portfolio_sale = self.process_sale(s)
             self.process_taxes(portfolio_sale)
-        # TODO: refactor out
-        self.stock_symbols = {s: ticker.get_stock_value(s) for s in [p.symbol for p in raw_plans]}
+
+    def get_years(self) -> set[int]:
+        return {s.sell_date.year for sl in self.sales.values() for s in sl}
 
     def process_sale(self, sale_event: SaleEvent):
         sell_date = sale_event.sell_date
@@ -190,6 +191,9 @@ class StockOptionsPortfolio:
             portfolio_sale = self.process_sale(s)
             self.process_taxes(portfolio_sale)
 
+    def get_years(self) -> set[int]:
+        return {s.sell_date.year for sl in self.sales.values() for s in sl}
+
     def process_sale(self, sale_event: SaleEvent):
         sell_date = sale_event.sell_date
         sell_price_eur = round(
@@ -286,6 +290,9 @@ class StockPortfolio:
         for s in raw_sales:
             portfolio_sale = self.process_sale(s)
             self.process_taxes(portfolio_sale)
+
+    def get_years(self) -> set[int]:
+        return {s.sell_date.year for sl in self.sales.values() for s in sl}
 
     def process_sale(self, sale_event: SaleEvent):
         sell_date = sale_event.sell_date
