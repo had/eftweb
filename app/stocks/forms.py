@@ -29,8 +29,7 @@ class StockOptionsImportForm(FlaskForm):
 class SaleForm(FlaskForm):
     symbol = StringField("Stock symbol")
     stock_type = SelectField("Stock type", choices=["RSU", "ESPP", "STOCKOPTIONS"])
-    quantity = IntegerField("Quantity")
-    quantity_2 = IntegerRangeField("Quantity")
+    quantity = IntegerRangeField("Quantity")
     sell_date = DateField("Sell date")
     sell_price = DecimalField("Sell price")
     sell_currency = StringField("Sell price currency")

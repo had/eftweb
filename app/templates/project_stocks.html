@@ -54,7 +54,14 @@
             -  <a id="rsusales_tooltip" data-toggle="tooltip" title="{{rsu_sales[symbol] | sales_to_tooltip}}"> <small class="text-danger">{{rsu_sales[symbol] | length}} sales </small></a>
                 <script>$('#rsusales_tooltip').tooltip({ html: true })</script>
             {% endif %}
-            <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="RSU" data-symbol="{{symbol}}" data-stockvalue="{{ stock_price }}" data-stockcurrency="{{ stock_currency }}">Sell</a>
+            <a class="btn btn-success btn-sm float-right"
+               data-toggle="modal"
+               data-target="#SellingModal"
+               data-stocktype="RSU"
+               data-symbol="{{symbol}}"
+               data-stockavailable="{{rsu_plans[symbol].values() | plans_to_available_stocks }}"
+               data-stockvalue="{{ stock_price }}"
+               data-stockcurrency="{{ stock_currency }}">Sell</a>
         </div>
         <div class="card-body" id="accordion_rsu_{{symbol}}">
             {% for plan_name, (rsu_plan_id, tax_scheme, vestings) in rsu_plans[symbol].items() %}
@@ -92,7 +99,13 @@
             -  <a id="stockoptions_tooltip" data-toggle="tooltip" title="{{stockoptions_sales[symbol] | sales_to_tooltip}}"> <small class="text-danger">{{stockoptions_sales[symbol] | length}} sales </small></a>
                 <script>$('#stockoptions_tooltip').tooltip({ html: true })</script>
             {% endif %}
-            <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="STOCKOPTIONS" data-symbol="{{symbol}}" data-stockvalue="{{ stock_price }}" data-stockcurrency="{{ stock_currency }}">Sell</a>
+            <a class="btn btn-success btn-sm float-right"
+               data-toggle="modal"
+               data-target="#SellingModal"
+               data-stocktype="STOCKOPTIONS"
+               data-symbol="{{symbol}}"
+               data-stockvalue="{{ stock_price }}"
+               data-stockcurrency="{{ stock_currency }}">Sell</a>
         </div>
         <div class="card-body" id="accordion_so_{{symbol}}">
             {% for plan_name, (stockoption_plan_id, strikeprice, vestings) in stockoptions_plans[symbol].items() %}
@@ -129,7 +142,13 @@
             -  <a id="directstocks_tooltip" data-toggle="tooltip" title="{{directstocks_sales[symbol] | sales_to_tooltip}}"> <small class="text-danger">{{directstocks_sales[symbol] | length}} sales </small></a>
                 <script>$('#directstocks_tooltip').tooltip({ html: true })</script>
             {% endif %}
-            <a class="btn btn-success btn-sm float-right" data-toggle="modal" data-target="#SellingModal" data-stocktype="ESPP" data-symbol="{{symbol}}" data-stockvalue="{{ stock_price }}"  data-stockcurrency="{{ stock_currency }}">Sell</a>
+            <a class="btn btn-success btn-sm float-right"
+               data-toggle="modal"
+               data-target="#SellingModal"
+               data-stocktype="ESPP"
+               data-symbol="{{symbol}}"
+               data-stockvalue="{{ stock_price }}"
+               data-stockcurrency="{{ stock_currency }}">Sell</a>
         </div>
         <div class="card-body">
             <ul class="list-group list-group-flush">
@@ -200,13 +219,43 @@
         <div class="modal-content">
             <div class="modal-header">Selling direct stocks</div>
             <div class="modal-body">
-                    {{ wtf.render_form(sale_form, action=url_for(".sell_stocks", project_id=project.id)) }}
+                <form action="{{ url_for('.sell_stocks', project_id=project.id) }}" method="post" class="form" role="form">
+                    {{ sale_form.csrf_token() }}
+                    {{ wtf.render_field(sale_form.symbol)  }}
+                    {{ wtf.render_field(sale_form.stock_type)  }}
+                    {{ wtf.render_field(sale_form.quantity)  }}
+                    <input id="quantity_edit" name="quantity_edit" type="number" value="">
+                    {{ wtf.render_field(sale_form.sell_date)  }}
+                    {{ wtf.render_field(sale_form.sell_price)  }}
+                    {{ wtf.render_field(sale_form.sell_currency)  }}
+                    {{ wtf.render_field(sale_form.submit)  }}
+                </form>
             </div>
         </div>
     </div>
 </div>
 
 <script>
+$(document).ready(function() {
+  // connect sell modal quantity range input and text input
+  var quantityRangeInput = $('#SellingModal').find('.modal-body #quantity');
+  var quantityTextInput = $('#SellingModal').find('.modal-body #quantity_edit');
+
+  quantityRangeInput.on('input', function() {
+    quantityTextInput.val(quantityRangeInput.val());
+  });
+
+  quantityTextInput.on('input', function() {
+    var enteredValue = parseFloat(quantityTextInput.val());
+    var maxValue = parseFloat(quantityRangeInput.attr('max'));
+    // Validate the entered value against the maximum value
+    if (enteredValue > maxValue) {
+      quantityTextInput.val(maxValue);
+    }
+    quantityRangeInput.val(quantityTextInput.val());
+  });
+});
+
 $('#SellingModal').on('show.bs.modal', function (event) {
   let stockType = $(event.relatedTarget).data('stocktype')
   $(this).find('.modal-body #stock_type').val(stockType)
@@ -216,6 +265,9 @@ $('#SellingModal').on('show.bs.modal', function (event) {
   $(this).find('.modal-body #sell_price').val(stockvalue)
   let stockcurrency = $(event.relatedTarget).data('stockcurrency')
   $(this).find('.modal-body #sell_currency').val(stockcurrency)
+  let available_stocks = $(event.relatedTarget).data('stockavailable')
+  $(this).find('.modal-body #quantity')[0].max = available_stocks
+  $(this).find('.modal-body #quantity')[0].value = 0
 })
 </script>
 

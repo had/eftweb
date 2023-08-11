@@ -25,6 +25,15 @@ def sales_to_tooltip(sales):
         html_list.append(f"{s.sell_date} : {s.quantity} x {s.sell_price} {s.sell_currency} <br> => net €{round(s.sell_price_eur*s.quantity-s.taxes, 2)}")
     return "<ul class='p-0'><li>" + "</li><li>".join(html_list) + "</li></ul>"
 
+@stocks.app_template_filter()
+def plans_to_available_stocks(plans):
+    available_stocks = 0
+    for _, _, vestings in plans:
+        for vdate, _, available in vestings:
+            if vdate <= date.today():
+                available_stocks += available
+    return available_stocks
+
 @stocks.route("/project/<int:project_id>/stocks", methods=["GET"])
 def project_stocks(project_id):
     project = main_models.Project.query.get(project_id)
