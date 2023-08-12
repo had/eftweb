@@ -73,6 +73,12 @@ def project_stocks(project_id):
 
     years = rsu_portfolio.get_years() | stockoption_portfolio.get_years() | directstocks_portfolio.get_years()
 
+    sales = {
+        "RSU": rsu_portfolio.sales,
+        "STOCKOPTIONS": stockoption_portfolio.sales,
+        "DIRECTSTOCKS": directstocks_portfolio.sales
+    }
+
     return render_template("project_stocks.html",
                            project=project,
                            dstock_form=dstock_form,
@@ -81,8 +87,7 @@ def project_stocks(project_id):
                            sales_years=years, rsu_portfolio=rsu_portfolio,
                            symbols_stock=symbols_stock, rsu_plans=rsu_plans, stockoptions_plans=stockoptions_plans,
                            directstocks=directstocks,
-                           rsu_sales=rsu_portfolio.sales, stockoptions_sales=stockoption_portfolio.sales,
-                           directstocks_sales=directstocks_portfolio.sales,
+                           sales=sales
                            )
 
 

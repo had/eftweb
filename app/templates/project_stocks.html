@@ -50,9 +50,13 @@
     <div class="card">
         <div class="card-header">
             RSUs
-            {% if symbol in rsu_sales %}
-            -  <a id="rsusales_tooltip" data-toggle="tooltip" title="{{rsu_sales[symbol] | sales_to_tooltip}}"> <small class="text-danger">{{rsu_sales[symbol] | length}} sales </small></a>
-                <script>$('#rsusales_tooltip').tooltip({ html: true })</script>
+            {% if symbol in sales['RSU'] %}
+                - <span id="rsusales_tooltip" data-toggle="tooltip" title="{{sales['RSU'][symbol] | sales_to_tooltip}}">
+                    <a href="#" data-toggle="modal" data-target="#SalesListModal" data-stocktype="RSU" data-symbol="{{symbol}}">
+                        <small class="text-danger">{{sales['RSU'][symbol] | length}} sales </small>
+                    </a>
+                </span>
+            <script>$('#rsusales_tooltip').tooltip({ html: true })</script>
             {% endif %}
             <a class="btn btn-success btn-sm float-right"
                data-toggle="modal"
@@ -95,8 +99,12 @@
     <div class="card">
         <div class="card-header">
             Stock Options
-            {% if symbol in stockoptions_sales %}
-            -  <a id="stockoptions_tooltip" data-toggle="tooltip" title="{{stockoptions_sales[symbol] | sales_to_tooltip}}"> <small class="text-danger">{{stockoptions_sales[symbol] | length}} sales </small></a>
+            {% if symbol in sales["STOCKOPTIONS"] %}
+            -   <span id="stockoptions_tooltip" data-toggle="tooltip" title="{{sales['STOCKOPTIONS'][symbol] | sales_to_tooltip}}">
+                    <a href="#" data-toggle="modal" data-target="#SalesListModal" data-stocktype="STOCKOPTIONS" data-symbol="{{symbol}}">
+                        <small class="text-danger">{{sales['STOCKOPTIONS'][symbol] | length}} sales </small>
+                    </a>
+                </span>
                 <script>$('#stockoptions_tooltip').tooltip({ html: true })</script>
             {% endif %}
             <a class="btn btn-success btn-sm float-right"
@@ -138,8 +146,12 @@
     <div class="card">
         <div class="card-header">
             Direct stocks
-                {% if symbol in directstocks_sales %}
-            -  <a id="directstocks_tooltip" data-toggle="tooltip" title="{{directstocks_sales[symbol] | sales_to_tooltip}}"> <small class="text-danger">{{directstocks_sales[symbol] | length}} sales </small></a>
+                {% if symbol in sales["DIRECTSTOCKS"] %}
+            - <span id="directstocks_tooltip" data-toggle="tooltip" title="{{sales['DIRECTSTOCKS'][symbol] | sales_to_tooltip}}">
+                    <a href="#" data-toggle="modal" data-target="#SalesListModal" data-stocktype="DIRECTSTOCKS" data-symbol="{{symbol}}">
+                        <small class="text-danger">{{sales['DIRECTSTOCKS'][symbol] | length}} sales </small>
+                    </a>
+                </span>
                 <script>$('#directstocks_tooltip').tooltip({ html: true })</script>
             {% endif %}
             <a class="btn btn-success btn-sm float-right"
@@ -235,9 +247,40 @@
     </div>
 </div>
 
+<div class="modal fade" id="SalesListModal">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="sellModalLabel">Sell events</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Amount of Stocks</th>
+              <th>FMV</th>
+              <th>Total in €</th>
+              <th>Taxes</th>
+              <th>Net Proceeds</th>
+              <th></th> <!-- Delete Button Column -->
+            </tr>
+          </thead>
+          <tbody id="salesListTable">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
 <script>
 $(document).ready(function() {
-  // connect sell modal quantity range input and text input
+  // 1. connect sell modal quantity range input and text input
   var quantityRangeInput = $('#SellingModal').find('.modal-body #quantity');
   var quantityTextInput = $('#SellingModal').find('.modal-body #quantity_edit');
 
@@ -253,6 +296,39 @@ $(document).ready(function() {
       quantityTextInput.val(maxValue);
     }
     quantityRangeInput.val(quantityTextInput.val());
+  });
+
+  // 2. prepare data for sell listing
+  var allSellData = {{ sales | tojson }};
+  console.log(allSellData);
+
+  $('#SalesListModal').on('show.bs.modal', function (event) {
+    let target = $(event.relatedTarget)
+    let stockType = target.data('stocktype');
+    let symbol = target.data('symbol');
+    var sellData = allSellData[stockType][symbol]
+
+    var modalContent = $(this).find('.modal-body #salesListTable');
+    modalContent.empty();
+
+    for (var i = 0; i < sellData.length; i++) {
+        var rowData = sellData[i]
+        var row = `
+            <tr>
+              <td>${rowData["quantity"]}</td>
+              <td>${rowData["sell_price"]} USD</td>
+              <td>${rowData["quantity"] * rowData["sell_price_eur"]}</td>
+              <td>${rowData["taxes"]}</td>
+              <td>${(rowData["quantity"] * rowData["sell_price_eur"] - rowData["taxes"]).toFixed(2)}</td>
+              <td>
+                <button class="btn btn-danger btn-sm">
+                  <i class="fas fa-trash"></i> <!-- Trash Icon -->
+                </button>
+              </td>
+            </tr>
+        `;
+        modalContent.append(row);
+    }
   });
 });
 
