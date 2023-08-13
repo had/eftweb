@@ -64,7 +64,7 @@ class SaleEvent(db.Model):
     sell_currency = db.Column(db.String(3))
     fees = db.Column(db.Float)  # in sell_currency
 
-
+# TODO cleanup
 class DirectStocksSale(db.Model):
     __tablename__ = "direct_stocks_sales"
     id = db.Column(db.Integer, primary_key=True)
@@ -76,7 +76,7 @@ class DirectStocksSale(db.Model):
     sell_currency = db.Column(db.String(3))
     fees = db.Column(db.Float)  # in sell_currency
 
-
+# TODO cleanup
 class RSUSale(db.Model):
     __tablename__ = "rsu_sales"
     id = db.Column(db.Integer, primary_key=True)

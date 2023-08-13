@@ -300,7 +300,6 @@ $(document).ready(function() {
 
   // 2. prepare data for sell listing
   var allSellData = {{ sales | tojson }};
-  console.log(allSellData);
 
   $('#SalesListModal').on('show.bs.modal', function (event) {
     let target = $(event.relatedTarget)
@@ -321,9 +320,9 @@ $(document).ready(function() {
               <td>${rowData["taxes"]}</td>
               <td>${(rowData["quantity"] * rowData["sell_price_eur"] - rowData["taxes"]).toFixed(2)}</td>
               <td>
-                <button class="btn btn-danger btn-sm">
-                  <i class="fas fa-trash"></i> <!-- Trash Icon -->
-                </button>
+                <a class="btn btn-danger btn-sm" href="{{ url_for('.rm_sell_event', project_id=project.id) }}?id=${rowData["sale_id"]}">
+                  <i class="fas fa-trash"></i>
+                </a>
               </td>
             </tr>
         `;

@@ -2,7 +2,7 @@ import pprint
 from datetime import date
 
 import dateutil.relativedelta
-from flask import render_template, redirect, url_for
+from flask import render_template, redirect, url_for, request
 from werkzeug.datastructures import FileStorage
 
 import taxhelpers
@@ -200,9 +200,10 @@ def rm_stockoptions_plan(project_id, stockoption_plan_id):
     db.session.commit()
     return redirect(url_for('.project_stocks', project_id=project_id))
 
-@stocks.route("/project/<int:project_id>/stocks/rsu/dstock_sale/<int:dstock_sale_id>/delete")
-def rm_dstock_sale(project_id, dstock_sale_id):
-    DirectStocksSale.query.filter_by(id=dstock_sale_id).delete()
+@stocks.route("/project/<int:project_id>/stocks/sell/delete")
+def rm_sell_event(project_id):
+    sale_id = request.args.get("id")
+    SaleEvent.query.filter_by(id=sale_id).delete()
     db.session.commit()
     return redirect(url_for('.project_stocks', project_id=project_id))
 
