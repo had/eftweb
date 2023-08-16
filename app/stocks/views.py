@@ -10,13 +10,14 @@ from sqlalchemy.exc import IntegrityError
 
 from . import stocks
 from .forms import DirectStocksForm, RsuImportForm, DirectStocksImportForm, StockOptionsImportForm, SaleForm
-from .portfolio import RSUPortfolio, StockOptionsPortfolio, StockPortfolio, PortfolioRsuPlan
+from .portfolio import RSUPortfolio, StockOptionsPortfolio, StockPortfolio, PortfolioRsuPlan, PortfolioDirectStockPlan
 from .ticker import ticker
 from .tsv_importer import import_rsu_tsv, import_dstocks_tsv, import_stockoptions_tsv
 from .. import db
 from ..main import models as main_models
 from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale, RSUSale, StockOptionVesting, StockOptionPlan, \
-    SaleEvent
+    SaleEvent, DirectStocksPlan
+
 
 @stocks.app_template_filter()
 def sales_to_tooltip(sales):
@@ -26,12 +27,16 @@ def sales_to_tooltip(sales):
     return "<ul class='p-0'><li>" + "</li><li>".join(html_list) + "</li></ul>"
 
 @stocks.app_template_filter()
-def plans_to_available_stocks(plans: list[PortfolioRsuPlan]):
+def plans_to_available_stocks(plans):
     available_stocks = 0
     for p in plans:
-        for v in p.vestings:
-            if v.vesting_date <= date.today():
-                available_stocks += v.currently_available
+        if isinstance(p, PortfolioDirectStockPlan):
+            for s in p.stocks:
+                available_stocks += s.currently_available
+        else:
+            for v in p.vestings:
+                if v.vesting_date <= date.today():
+                    available_stocks += v.currently_available
     return available_stocks
 
 @stocks.route("/project/<int:project_id>/stocks", methods=["GET"])
@@ -51,14 +56,9 @@ def project_stocks(project_id):
     stockoptions_plans = stockoption_portfolio.plans
 
     directstocks_portfolio = StockPortfolio(project.id)
-    directstocks = {
-        symbol: [
-            (s.stock_id, s.acquisition_date, s.initial_amount, s.currently_available)
-            for s in stocks
-        ]
-        for symbol, stocks in directstocks_portfolio.stocks.items()}
+    directstocks_plans = directstocks_portfolio.plans
 
-    symbols = set().union(rsu_plans.keys(), stockoptions_plans.keys(), directstocks.keys())
+    symbols = set().union(rsu_plans.keys(), stockoptions_plans.keys(), directstocks_plans.keys())
     symbols_stock = {symbol: ticker.get_stock_value(symbol) for symbol in symbols}
 
     years = rsu_portfolio.get_years() | stockoption_portfolio.get_years() | directstocks_portfolio.get_years()
@@ -76,7 +76,7 @@ def project_stocks(project_id):
                            stockoptions_import_form=stockoptions_import_form, sale_form=sale_form,
                            sales_years=years, symbols_stock=symbols_stock,
                            rsu_plans=rsu_plans, stockoptions_plans=stockoptions_plans,
-                           directstocks=directstocks,
+                           directstocks_plans=directstocks_plans,
                            sales=sales
                            )
 
@@ -168,9 +168,10 @@ def sell_stocks(project_id):
 
 
 # TODO: find a way to use a DELETE method instead of GET, this is not very nice and RESTful
-@stocks.route("/project/<int:project_id>/stocks/direct/<int:dstocks_id>/delete")
-def rm_direct_stocks(project_id, dstocks_id):
-    DirectStocks.query.filter_by(id=dstocks_id).delete()
+@stocks.route("/project/<int:project_id>/stocks/direct/<int:dsplan_id>/delete")
+def rm_dstock_plan(project_id, dsplan_id):
+    DirectStocks.query.filter_by(direct_stocks_plan_id=dsplan_id).delete()
+    DirectStocksPlan.query.filter_by(id=dsplan_id).delete()
     db.session.commit()
     return redirect(url_for('.project_stocks', project_id=project_id))
 
@@ -194,12 +195,6 @@ def rm_stockoptions_plan(project_id, stockoption_plan_id):
 def rm_sell_event(project_id):
     sale_id = request.args.get("id")
     SaleEvent.query.filter_by(id=sale_id).delete()
-    db.session.commit()
-    return redirect(url_for('.project_stocks', project_id=project_id))
-
-@stocks.route("/project/<int:project_id>/stocks/rsu/rsu_sale/<int:rsu_sale_id>/delete")
-def rm_rsu_sale(project_id, rsu_sale_id):
-    RSUSale.query.filter_by(id=rsu_sale_id).delete()
     db.session.commit()
     return redirect(url_for('.project_stocks', project_id=project_id))
 

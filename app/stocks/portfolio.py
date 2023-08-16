@@ -7,7 +7,8 @@ from currency_converter import CurrencyConverter
 
 from easyfrenchtax import StockHelper, RsuTaxScheme, StockType
 
-from app.stocks.models import RSUPlan, RSUVesting, StockOptionPlan, StockOptionVesting, DirectStocks, SaleEvent
+from app.stocks.models import RSUPlan, RSUVesting, StockOptionPlan, StockOptionVesting, DirectStocks, SaleEvent, \
+    DirectStocksPlan
 from app.stocks.ticker import ticker
 
 
@@ -259,32 +260,40 @@ class StockOptionsPortfolio:
 
 @dataclass
 class PortfolioDirectStock:
-    stock_id: int
-    symbol: str
     acquisition_date: date
     acquisition_price: float
-    currency: str
     initial_amount: int
     currently_available: int
 
+@dataclass
+class PortfolioDirectStockPlan:
+    plan_id: int
+    name: str
+    symbol: str
+    currency: str
+    stocks: list[PortfolioDirectStock]
+
 
 class StockPortfolio:
-    stocks: DefaultDict[str, list[PortfolioDirectStock]]
+    plans: DefaultDict[str, list[PortfolioDirectStockPlan]]
     sales: DefaultDict[str, list[PortfolioSale]]
 
     def __init__(self, project_id: int):
-        raw_stocks = DirectStocks.query.filter_by(project_id=project_id).all()
-        self.stocks = defaultdict(list)
-        for ds in raw_stocks:
-            self.stocks[ds.symbol].append(PortfolioDirectStock(
-                stock_id=ds.id,
-                symbol=ds.symbol,
-                acquisition_date=ds.acquisition_date,
-                acquisition_price=ds.acquisition_price,
-                currency=ds.stock_currency,
-                initial_amount=ds.quantity,
-                currently_available=ds.quantity
-            ))
+        raw_plans = DirectStocksPlan.query.filter_by(project_id=project_id).all()
+        self.plans = defaultdict(list)
+        for p in raw_plans:
+            stocks = DirectStocks.query.filter_by(direct_stocks_plan_id=p.id).all()
+            self.plans[p.symbol].append(PortfolioDirectStockPlan(
+                plan_id=p.id,
+                name=p.name,
+                symbol=p.symbol,
+                currency=p.stock_currency,
+                stocks=[PortfolioDirectStock(
+                    acquisition_date=s.acquisition_date,
+                    acquisition_price=s.acquisition_price,
+                    initial_amount=s.quantity,
+                    currently_available=s.quantity
+                ) for s in stocks]))
         raw_sales = SaleEvent.query.filter_by(project_id=project_id, type=StockType.ESPP).all()
         self.sales = defaultdict(list)
         for s in raw_sales:
@@ -302,8 +311,8 @@ class StockPortfolio:
 
         # Acquisitions are sorted by date
         ds_before_sell_date = sorted(
-            [ds for ds in self.stocks[sale_event.symbol] if ds.acquisition_date < sell_date],
-            key=lambda ds: ds.acquisition_date
+            [s for p in self.plans[sale_event.symbol] for s in p.stocks if s.acquisition_date < sell_date],
+            key=lambda s: s.acquisition_date
         )
         sales_fragment = []
         for ds in ds_before_sell_date:

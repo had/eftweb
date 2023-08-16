@@ -70,14 +70,14 @@
         <div class="card-body" id="accordion_rsu_{{symbol}}">
             {% for plan in rsu_plans[symbol] %}
                 <div class="card">
-                    <div class="card-header" id="headingOne">
+                    <div class="card-header">
                         {{plan.name}} <small class="text-muted">{{plan.tax_scheme.value}}</small>
                         <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_rsu_plan', project_id=project.id, rsuplan_id=plan.plan_id) }}"><i class="fa fa-trash"></i></a>
                         <button class="btn btn-link float-right" data-toggle="collapse" data-target="#collapse{{plan.name | replace(' ', '')}}">
                             <small>see vestings</small>
                         </button>
                     </div>
-                    <div id="collapse{{plan.name | replace(' ', '')}}" class="collapse" aria-labelledby="headingOne" data-parent="#accordion_rsu_{{symbol}}">
+                    <div id="collapse{{plan.name | replace(' ', '')}}" class="collapse" data-parent="#accordion_rsu_{{symbol}}">
                         <div class="card-body py-0">
                             <ul class="list-group list-group-flush">
                                 {% for v in plan.vestings %}<li class="list-group-item">
@@ -112,6 +112,7 @@
                data-target="#SellingModal"
                data-stocktype="STOCKOPTIONS"
                data-symbol="{{symbol}}"
+               data-stockavailable="{{stockoptions_plans[symbol] | plans_to_available_stocks }}"
                data-stockvalue="{{ stock_price }}"
                data-stockcurrency="{{ stock_currency }}">Sell</a>
         </div>
@@ -142,7 +143,7 @@
             {% endfor %}        </div>
     </div>
     {% endif %}
-    {% if symbol in directstocks %}
+    {% if symbol in directstocks_plans %}
     <div class="card">
         <div class="card-header">
             Direct stocks
@@ -159,20 +160,35 @@
                data-target="#SellingModal"
                data-stocktype="ESPP"
                data-symbol="{{symbol}}"
+               data-stockavailable="{{directstocks_plans[symbol] | plans_to_available_stocks }}"
                data-stockvalue="{{ stock_price }}"
                data-stockcurrency="{{ stock_currency }}">Sell</a>
         </div>
-        <div class="card-body">
-            <ul class="list-group list-group-flush">
-                {% for s_id, s_date, s_init, s_cur in directstocks[symbol] %}<li class="list-group-item">
-                    {% if s_init != s_cur %}
-                        {{s_date}}: <s>{{s_init}}</s> {{s_cur}}
-                    {% else %}
-                        {{s_date}}: {{s_init}}
-                    {% endif %}
-                    <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_direct_stocks', project_id=project.id, dstocks_id=s_id) }}"><i class="fa fa-trash"></i></a>
-                </li>{% endfor %}
-            </ul>
+        <div class="card-body" id="accordion_ds_{{symbol}}">
+            {% for plan in directstocks_plans[symbol] %}
+                <div class="card">
+                    <div class="card-header">
+                        {{plan.name}}
+                         <a class="btn btn-danger btn-sm float-right" href="{{ url_for('.rm_dstock_plan', project_id=project.id, dsplan_id=plan.plan_id) }}"><i class="fa fa-trash"></i></a>
+                        <button class="btn btn-link float-right" data-toggle="collapse" data-target="#collapse{{plan.name | replace(' ', '')}}">
+                            <small>see details</small>
+                        </button>
+                    </div>
+                    <div id="collapse{{plan.name | replace(' ', '')}}" class="collapse" data-parent="#accordion_so_{{symbol}}">
+                        <div class="card-body py-0">
+                            <ul class="list-group list-group-flush">
+                                {% for s in plan.stocks %}<li class="list-group-item">
+                                    {% if s.initial_amount != s.currently_available %}
+                                        {{s.acquisition_date}}: <s>{{s.initial_amount}}</s> {{s.currently_available}}
+                                    {% else %}
+                                        {{s.acquisition_date}}: {{s.initial_amount}}
+                                    {% endif %}
+                                </li>{% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
         </div>
     </div>
     {% endif %}
