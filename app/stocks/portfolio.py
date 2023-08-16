@@ -42,7 +42,7 @@ class PortfolioRsuVesting:
 
 
 @dataclass
-class PortfolioRsuPlan:
+class   PortfolioRsuPlan:
     plan_id: int
     name: str
     symbol: str

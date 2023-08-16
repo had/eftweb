@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from . import stocks
 from .forms import DirectStocksForm, RsuImportForm, DirectStocksImportForm, StockOptionsImportForm, SaleForm
-from .portfolio import RSUPortfolio, StockOptionsPortfolio, StockPortfolio
+from .portfolio import RSUPortfolio, StockOptionsPortfolio, StockPortfolio, PortfolioRsuPlan
 from .ticker import ticker
 from .tsv_importer import import_rsu_tsv, import_dstocks_tsv, import_stockoptions_tsv
 from .. import db
@@ -26,12 +26,12 @@ def sales_to_tooltip(sales):
     return "<ul class='p-0'><li>" + "</li><li>".join(html_list) + "</li></ul>"
 
 @stocks.app_template_filter()
-def plans_to_available_stocks(plans):
+def plans_to_available_stocks(plans: list[PortfolioRsuPlan]):
     available_stocks = 0
-    for _, _, vestings in plans:
-        for vdate, _, available in vestings:
-            if vdate <= date.today():
-                available_stocks += available
+    for p in plans:
+        for v in p.vestings:
+            if v.vesting_date <= date.today():
+                available_stocks += v.currently_available
     return available_stocks
 
 @stocks.route("/project/<int:project_id>/stocks", methods=["GET"])
@@ -45,20 +45,10 @@ def project_stocks(project_id):
     sale_form.sell_date.data = date.today()
 
     rsu_portfolio = RSUPortfolio(project.id)
-    rsu_plans = {
-        symbol: {
-            plan.name: (plan.plan_id, plan.tax_scheme.value, [
-                (v.vesting_date, v.initial_amount, v.currently_available) for v in plan.vestings
-            ]) for plan in plans}
-        for symbol, plans in rsu_portfolio.plans.items()}
+    rsu_plans = rsu_portfolio.plans
 
     stockoption_portfolio = StockOptionsPortfolio(project.id)
-    stockoptions_plans = {
-        symbol: {
-            plan.name: (plan.plan_id, f"{plan.strike_price} {plan.currency}", [
-                (v.vesting_date, v.initial_amount, v.currently_available) for v in plan.vestings
-            ]) for plan in plans}
-        for symbol, plans in stockoption_portfolio.plans.items()}
+    stockoptions_plans = stockoption_portfolio.plans
 
     directstocks_portfolio = StockPortfolio(project.id)
     directstocks = {
@@ -84,8 +74,8 @@ def project_stocks(project_id):
                            dstock_form=dstock_form,
                            rsu_import_form=rsu_import_form, directstocks_import_form=directstocks_import_form,
                            stockoptions_import_form=stockoptions_import_form, sale_form=sale_form,
-                           sales_years=years, rsu_portfolio=rsu_portfolio,
-                           symbols_stock=symbols_stock, rsu_plans=rsu_plans, stockoptions_plans=stockoptions_plans,
+                           sales_years=years, symbols_stock=symbols_stock,
+                           rsu_plans=rsu_plans, stockoptions_plans=stockoptions_plans,
                            directstocks=directstocks,
                            sales=sales
                            )
