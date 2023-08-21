@@ -143,8 +143,22 @@ class RSUPortfolio:
             )
         agt = helper.compute_acquisition_gain_tax(portfolio_sale.sell_date.year)
         cgt = helper.compute_capital_gain_tax(portfolio_sale.sell_date.year)
-        income_tax, social_tax = helper.estimate_tax(agt, cgt, 0.30)
+        income_tax, social_tax = helper.estimate_tax(agt, cgt, 0.41)
         portfolio_sale.taxes = income_tax + social_tax
+
+    def tax_helper(self, helper: StockHelper):
+        for sales in self.sales.values():
+            for pf_sale in sales:
+                for f in pf_sale.fragments:
+                    helper.sell_rsus_2(
+                        symbol=pf_sale.symbol,
+                        nb_stocks_sold=f.nb_stocks_sold,
+                        acq_date=f.acq_date,
+                        unit_acquisition_price=f.unit_acquisition_price,
+                        sell_date=pf_sale.sell_date,
+                        sell_price_eur=pf_sale.sell_price_eur,
+                        tax_scheme=f.tax_scheme
+                    )
 
 
 @dataclass
@@ -254,7 +268,7 @@ class StockOptionsPortfolio:
             )
         agt = helper.compute_acquisition_gain_tax(portfolio_sale.sell_date.year)
         cgt = helper.compute_capital_gain_tax(portfolio_sale.sell_date.year)
-        income_tax, social_tax = helper.estimate_tax(agt, cgt, 0.30)
+        income_tax, social_tax = helper.estimate_tax(agt, cgt, 0.41)
         portfolio_sale.taxes = income_tax + social_tax
 
 
@@ -355,5 +369,5 @@ class StockPortfolio:
             )
         agt = helper.compute_acquisition_gain_tax(portfolio_sale.sell_date.year)
         cgt = helper.compute_capital_gain_tax(portfolio_sale.sell_date.year)
-        income_tax, social_tax = helper.estimate_tax(agt, cgt, 0.30)
+        income_tax, social_tax = helper.estimate_tax(agt, cgt, 0.41)
         portfolio_sale.taxes = income_tax + social_tax

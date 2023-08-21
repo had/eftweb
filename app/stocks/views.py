@@ -49,13 +49,13 @@ def project_stocks(project_id):
     sale_form = SaleForm()
     sale_form.sell_date.data = date.today()
 
-    rsu_portfolio = RSUPortfolio(project.id)
+    rsu_portfolio = RSUPortfolio(project_id)
     rsu_plans = rsu_portfolio.plans
 
-    stockoption_portfolio = StockOptionsPortfolio(project.id)
+    stockoption_portfolio = StockOptionsPortfolio(project_id)
     stockoptions_plans = stockoption_portfolio.plans
 
-    directstocks_portfolio = StockPortfolio(project.id)
+    directstocks_portfolio = StockPortfolio(project_id)
     directstocks_plans = directstocks_portfolio.plans
 
     symbols = set().union(rsu_plans.keys(), stockoptions_plans.keys(), directstocks_plans.keys())
@@ -202,24 +202,23 @@ def rm_sell_event(project_id):
 @stocks.route("/project/<int:project_id>/stocks/taxhelper/<int:year>")
 def taxed_stock_helper(project_id, year):
     project = main_models.Project.query.get(project_id)
-    direct_stocks = DirectStocks.query.filter_by(project_id=project.id).all()
-    dstock_sales = DirectStocksSale.query.filter_by(project_id=project.id).all()
-    dstock_sales_that_year = list(filter(lambda x: x.sell_date.year == year, dstock_sales))
-    rsu_plans = RSUPlan.query.filter_by(project_id=project.id).all()
-    rsu_plans_id = [p.id for p in rsu_plans]
-    rsu_vestings = RSUVesting.query.filter(RSUVesting.rsu_plan_id.in_(rsu_plans_id)).all()
-    rsu_sales = RSUSale.query.filter_by(project_id=project.id).all()
-    for rs in rsu_sales:
-        print("DEBUG1 ", rs.__dict__)
-    rsu_sales_that_year = list(filter(lambda x: x.sell_date.year == year, rsu_sales))
-    tax_report = taxhelpers.taxed_stock_helper(
-        year,
-        direct_stocks,
-        dstock_sales_that_year,
-        rsu_plans,
-        rsu_vestings,
-        rsu_sales_that_year
-    )
+    rsu_portfolio = RSUPortfolio(project.id)
+    rsu_sales = [pf_sale
+                 for sales in rsu_portfolio.sales.values()
+                 for pf_sale in sales
+                 if pf_sale.sell_date.year == year]
+    stockoption_portfolio = StockOptionsPortfolio(project.id)
+    stockoptions_sales = [pf_sale
+                          for sales in stockoption_portfolio.sales.values()
+                          for pf_sale in sales
+                          if pf_sale.sell_date.year == year]
+    directstocks_portfolio = StockPortfolio(project.id)
+    directstocks_sales = [pf_sale
+                          for sales in directstocks_portfolio.sales.values()
+                          for pf_sale in sales
+                          if pf_sale.sell_date.year == year]
+
+    tax_report = taxhelpers.taxed_stock_helper(year, rsu_sales, stockoptions_sales, directstocks_sales)
     pretty_tax_report = pprint.pformat(tax_report)
 
     return render_template("stock_taxhelper.html", project=project, tax_report=pretty_tax_report, year=year)
