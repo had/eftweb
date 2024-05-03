@@ -276,7 +276,8 @@
         <table class="table">
           <thead>
             <tr>
-              <th>Amount of Stocks</th>
+              <th>Date</th>
+              <th>Qty</th>
               <th>FMV</th>
               <th>Total in €</th>
               <th>Taxes</th>
@@ -327,9 +328,11 @@ $(document).ready(function() {
     modalContent.empty();
 
     for (var i = 0; i < sellData.length; i++) {
+
         var rowData = sellData[i]
         var row = `
             <tr>
+              <td>${rowData["sell_date"]}</td>
               <td>${rowData["quantity"]}</td>
               <td>${rowData["sell_price"]} USD</td>
               <td>${(rowData["quantity"] * rowData["sell_price_eur"]).toFixed(2)}</td>

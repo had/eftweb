@@ -1,17 +1,28 @@
+import datetime
 from flask import Flask
 from flask_bootstrap import Bootstrap4
 from flask_fontawesome import FontAwesome
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from config import config
+from flask.json import JSONEncoder
 
 db = SQLAlchemy()
 bootstrap = Bootstrap4()
 fa = FontAwesome()
 migrate = Migrate()
 
+class CustomJSONEncoder(JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime.date):
+            return obj.strftime('%Y-%m-%d')
+        return super().default(obj)
+
+
 def create_app(config_name):
     app = Flask(__name__)
+    app.json_encoder = CustomJSONEncoder
+
     app.config.from_object(config[config_name])
 
     bootstrap.init_app(app)
