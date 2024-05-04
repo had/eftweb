@@ -219,6 +219,19 @@ def taxed_stock_helper(project_id, year):
                           if pf_sale.sell_date.year == year]
 
     tax_report = taxhelpers.taxed_stock_helper(year, rsu_sales, stockoptions_sales, directstocks_sales)
-    pretty_tax_report = pprint.pformat(tax_report)
+    form_2042C = pprint.pformat(tax_report['2042C'])
+    form_2074 = []
+    for title_2074 in tax_report['2074']:
+        title = []
+        for field, value in title_2074.items():
+            field_id = field.split('_')[-1]
+            field_name = ' '.join(field.split('_')[:-1]).capitalize()
+            title.append((field_id, field_name, value))
+        form_2074.append(title)
+    print(form_2074)
 
-    return render_template("stock_taxhelper.html", project=project, tax_report=pretty_tax_report, year=year)
+    return render_template("stock_taxhelper.html",
+                           project=project,
+                           form_2042C=form_2042C,
+                           form_2074=form_2074,
+                           year=year)

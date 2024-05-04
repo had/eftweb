@@ -7,7 +7,32 @@
 
         {{ bootstrap.load_css() }}
         {{ fontawesome_html() }}
-
+        <style>
+          .form-frame {
+            background-color: #e3f2fd;
+            padding: 20px;
+            border-radius: 10px;
+          }
+          .form-table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          .form-table th, .form-table td {
+            border: 1px solid #fff;
+            padding: 10px;
+          }
+          .form-table th:first-child, .form-table td:first-child {
+            border-right: none; /* Remove right border from first column */
+          }
+          .form-table th:nth-child(2), .form-table td:nth-child(2) {
+            border-left: none; /* Remove left border from second column */
+          }
+          .value-textbox {
+            background-color: #fff;
+            border: none;
+            width: 100%;
+          }
+          </style>
         <title>Easy French Tax</title>
     </head>
     <body>

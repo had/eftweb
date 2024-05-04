@@ -6,7 +6,31 @@
 {% endblock %}
 {% block page_content %}
 
-<pre>{{ tax_report }}</pre>
+<pre>{{ form_2042C }}</pre>
+{%for line_2074 in form_2074 %}
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-md-8">
+        <div class="form-frame">
+          <table class="form-table">
+            <tr>
+              <th></th>
+              <th></th>
+              <th>Title {{loop.index}}</th>
+            </tr>
+            {% for fields in line_2074 %}
+              <tr>
+                <td>{{fields.0}}</td>
+                <td>{{fields.1}}</td>
+                <td><input type="text" class="value-textbox" value="{{fields.2}}" readonly></td>
+              </tr>
+            {% endfor %}
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endfor %}
 
 {% endblock %}
 
