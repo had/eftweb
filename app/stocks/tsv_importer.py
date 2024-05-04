@@ -33,7 +33,8 @@ def import_rsu_tsv(tsv_filename: FileStorage, project_id: int):
                 db.session.commit()
                 plan_id = new_plan.id
                 rsu_plans[plan_name] = plan_id
-            except IntegrityError:
+            except IntegrityError as e:
+                print(e)
                 db.session.rollback()
                 return
 
