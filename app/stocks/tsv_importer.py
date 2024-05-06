@@ -1,11 +1,14 @@
 import csv
+import json
 from io import TextIOWrapper
 from datetime import datetime, date
 
+from easyfrenchtax import StockType
 from sqlalchemy.exc import IntegrityError
 from werkzeug.datastructures import FileStorage
 
-from app.stocks.models import RSUPlan, RSUVesting, DirectStocks, DirectStocksPlan, StockOptionPlan, StockOptionVesting
+from app.stocks.models import RSUPlan, RSUVesting, DirectStocks, DirectStocksPlan, StockOptionPlan, StockOptionVesting, \
+    SaleEvent
 from app.stocks.ticker import ticker
 from .. import db
 
@@ -117,3 +120,46 @@ def import_stockoptions_tsv(tsv_filename: FileStorage, owner: int, project_id: i
         print(vesting)
         db.session.add(vesting)
     db.session.commit()
+
+ETRADE_TRANSACTION_TYPE_MAPPING = {
+    'P': StockType.ESPP,
+    'R': StockType.RSU,
+    'S': StockType.STOCKOPTIONS
+}
+def import_etrade_sell_events_tsv(tsv_filename: FileStorage, project_id: int):
+    try:
+        outer_json = json.loads(tsv_filename.read())
+    except json.JSONDecodeError as e:
+        print(f'Error decoding sell_events JSON: {str(e)}')
+    sell_events = outer_json["data"]["pse"]["list"]
+    print(f'Found {len(sell_events)} sell events')
+    for ev in sell_events:
+        transaction_type_code = ev['transTypeCode']
+        symbol = ev['tickerSymbol']
+        quantity = int(ev['numberOfShares'])
+        sell_date = datetime.strptime(ev['actionDate'], "%m/%d/%Y").date()
+        sell_price = round(float(ev['executedPrice']), 2)
+        sell_currency = ev['currencyCode']
+        if transaction_type_code in ETRADE_TRANSACTION_TYPE_MAPPING:
+            stock_type: StockType = ETRADE_TRANSACTION_TYPE_MAPPING[transaction_type_code]
+            print(f"On {sell_date}, sold type {stock_type.name}, {quantity} x {symbol} at {sell_currency} {sell_price}")
+            new_sale = SaleEvent(
+                project_id=project_id,
+                type=stock_type,
+                symbol=symbol,
+                quantity=quantity,
+                sell_date=sell_date,
+                sell_price=sell_price,
+                sell_currency=sell_currency,
+                fees=0
+            )
+            try:
+                db.session.add(new_sale)
+            except IntegrityError:
+                db.session.rollback()
+                return
+        else:
+            print(f"Rejecting line (unknown transaction type code {transaction_type_code} / {ev['transType']})")
+            continue
+    db.session.commit()
+

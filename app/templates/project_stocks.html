@@ -40,6 +40,9 @@
     </div>
 
 </div>
+<div class="btn-group" role="group">
+    <button class="btn btn-primary" data-toggle="modal" data-target="#SellEventsImportModal">Import sell events</button>
+</div>
 </div>
 <hr>
 
@@ -245,7 +248,7 @@
 <div class="modal" id="SellingModal" role="dialog" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
-            <div class="modal-header">Selling direct stocks</div>
+            <div class="modal-header">Selling stocks</div>
             <div class="modal-body">
                 <form action="{{ url_for('.sell_stocks', project_id=project.id) }}" method="post" class="form" role="form">
                     {{ sale_form.csrf_token() }}
@@ -293,6 +296,15 @@
   </div>
 </div>
 
+<div class="modal" id="SellEventsImportModal" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">Sell events Import</div>
+            <div class="modal-body">
+                    {{ wtf.render_form(sell_events_import_form, action=url_for(".import_sell_events", project_id=project.id)) }}
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>

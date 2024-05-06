@@ -9,10 +9,12 @@ import taxhelpers
 from sqlalchemy.exc import IntegrityError
 
 from . import stocks
-from .forms import DirectStocksForm, RsuImportForm, DirectStocksImportForm, StockOptionsImportForm, SaleForm
+from .forms import DirectStocksForm, RsuImportForm, DirectStocksImportForm, StockOptionsImportForm, SaleForm, \
+    SellEventsImportForm
 from .portfolio import RSUPortfolio, StockOptionsPortfolio, StockPortfolio, PortfolioRsuPlan, PortfolioDirectStockPlan
 from .ticker import ticker
-from .tsv_importer import import_rsu_tsv, import_dstocks_tsv, import_stockoptions_tsv
+from .tsv_importer import import_rsu_tsv, import_dstocks_tsv, import_stockoptions_tsv, \
+    import_etrade_sell_events_tsv
 from .. import db
 from ..main import models as main_models
 from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale, RSUSale, StockOptionVesting, StockOptionPlan, \
@@ -48,6 +50,7 @@ def project_stocks(project_id):
     stockoptions_import_form = StockOptionsImportForm()
     sale_form = SaleForm()
     sale_form.sell_date.data = date.today()
+    sell_events_import_form = SellEventsImportForm()
 
     rsu_portfolio = RSUPortfolio(project_id)
     rsu_plans = rsu_portfolio.plans
@@ -74,6 +77,7 @@ def project_stocks(project_id):
                            dstock_form=dstock_form,
                            rsu_import_form=rsu_import_form, directstocks_import_form=directstocks_import_form,
                            stockoptions_import_form=stockoptions_import_form, sale_form=sale_form,
+                           sell_events_import_form=sell_events_import_form,
                            sales_years=years, symbols_stock=symbols_stock,
                            rsu_plans=rsu_plans, stockoptions_plans=stockoptions_plans,
                            directstocks_plans=directstocks_plans,
@@ -139,6 +143,16 @@ def import_stockoptions(project_id):
         print(stockoptions_import_form.errors)
     return redirect(url_for('.project_stocks', project_id=project_id))
 
+@stocks.route("/project/<int:project_id>/stocks/sell/import", methods=["POST"])
+def import_sell_events(project_id):
+    sell_events_import_form = SellEventsImportForm()
+    if sell_events_import_form.validate_on_submit():
+        sell_events_file: FileStorage = sell_events_import_form.tsv_file.data
+        print("Loading Sell Events from " + sell_events_file.name)
+        import_etrade_sell_events_tsv(sell_events_file, project_id)
+    else:
+        print(sell_events_import_form.errors)
+    return redirect(url_for('.project_stocks', project_id=project_id))
 
 @stocks.route("/project/<int:project_id>/stocks/sell", methods=["POST"])
 def sell_stocks(project_id):
@@ -197,7 +211,6 @@ def rm_sell_event(project_id):
     SaleEvent.query.filter_by(id=sale_id).delete()
     db.session.commit()
     return redirect(url_for('.project_stocks', project_id=project_id))
-
 
 @stocks.route("/project/<int:project_id>/stocks/taxhelper/<int:year>")
 def taxed_stock_helper(project_id, year):

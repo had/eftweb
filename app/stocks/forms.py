@@ -34,3 +34,7 @@ class SaleForm(FlaskForm):
     sell_price = DecimalField("Sell price")
     sell_currency = StringField("Sell price currency")
     submit = SubmitField("Confirm")
+
+class SellEventsImportForm(FlaskForm):
+    tsv_file = FileField("Sell events data")
+    submit = SubmitField("Confirm")
