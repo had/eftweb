@@ -14,6 +14,7 @@ from app.stocks.ticker import ticker
 
 @dataclass
 class PortfolioSalesFragment:
+    plan_name: str
     nb_stocks_sold: int
     acq_date: date
     unit_acquisition_price: float
@@ -43,7 +44,7 @@ class PortfolioRsuVesting:
 
 
 @dataclass
-class   PortfolioRsuPlan:
+class PortfolioRsuPlan:
     plan_id: int
     name: str
     symbol: str
@@ -105,9 +106,10 @@ class RSUPortfolio:
             sell_from_acq = min(to_sell, vesting.currently_available)
             tax_scheme = plan.tax_scheme
             sales_fragment.append(PortfolioSalesFragment(
+                plan_name=plan.name,
                 nb_stocks_sold=sell_from_acq,
                 acq_date=vesting.vesting_date,
-                unit_acquisition_price=vesting.acquisition_price_eur,
+                unit_acquisition_price=round(vesting.acquisition_price_eur,2),
                 tax_scheme=tax_scheme
             ))
             vesting.currently_available = vesting.currently_available - sell_from_acq
@@ -132,7 +134,7 @@ class RSUPortfolio:
     def process_taxes(self, portfolio_sale: PortfolioSale):
         helper = StockHelper()
         for f in portfolio_sale.fragments:
-            helper.sell_rsus_2(
+            helper.sell_rsus(
                 symbol=portfolio_sale.symbol,
                 nb_stocks_sold=f.nb_stocks_sold,
                 acq_date=f.acq_date,
@@ -150,7 +152,7 @@ class RSUPortfolio:
         for sales in self.sales.values():
             for pf_sale in sales:
                 for f in pf_sale.fragments:
-                    helper.sell_rsus_2(
+                    helper.sell_rsus(
                         symbol=pf_sale.symbol,
                         nb_stocks_sold=f.nb_stocks_sold,
                         acq_date=f.acq_date,
@@ -228,6 +230,7 @@ class StockOptionsPortfolio:
                 continue
             sell_from_acq = min(to_sell, vesting.currently_available)
             sales_fragment.append(PortfolioSalesFragment(
+                plan_name=plan.name,
                 nb_stocks_sold=sell_from_acq,
                 acq_date=vesting.vesting_date,
                 unit_acquisition_price=round(
@@ -258,7 +261,7 @@ class StockOptionsPortfolio:
     def process_taxes(self, portfolio_sale: PortfolioSale):
         helper = StockHelper()
         for f in portfolio_sale.fragments:
-            helper.sell_stockoptions_2(
+            helper.sell_stockoptions(
                 symbol=portfolio_sale.symbol,
                 nb_stocks_sold=f.nb_stocks_sold,
                 unit_acquisition_price=f.unit_acquisition_price,
@@ -325,15 +328,16 @@ class StockPortfolio:
 
         # Acquisitions are sorted by date
         ds_before_sell_date = sorted(
-            [s for p in self.plans[sale_event.symbol] for s in p.stocks if s.acquisition_date < sell_date],
-            key=lambda s: s.acquisition_date
+            [(p,s) for p in self.plans[sale_event.symbol] for s in p.stocks if s.acquisition_date < sell_date],
+            key=lambda p_s: p_s[1].acquisition_date
         )
         sales_fragment = []
-        for ds in ds_before_sell_date:
+        for plan, ds in ds_before_sell_date:
             if ds.currently_available == 0:
                 continue
             sell_from_acq = min(to_sell, ds.currently_available)
             sales_fragment.append(PortfolioSalesFragment(
+                plan_name=plan.name,
                 nb_stocks_sold=sell_from_acq,
                 acq_date=ds.acquisition_date,
                 unit_acquisition_price=ds.acquisition_price,
@@ -360,7 +364,7 @@ class StockPortfolio:
     def process_taxes(self, portfolio_sale: PortfolioSale):
         helper = StockHelper()
         for f in portfolio_sale.fragments:
-            helper.sell_espp_2(
+            helper.sell_espp(
                 symbol=portfolio_sale.symbol,
                 nb_stocks_sold=f.nb_stocks_sold,
                 unit_acquisition_price=f.unit_acquisition_price,
