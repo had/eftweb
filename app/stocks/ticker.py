@@ -1,3 +1,5 @@
+import atexit
+import json
 from datetime import datetime, timedelta, date
 from typing import Tuple
 
@@ -12,6 +14,7 @@ class Ticker:
     stockvalue_cache = {}
     history_params = {"function": "TIME_SERIES_DAILY", "outputsize": "full", "apikey": "EO7TR7UYV9S82B0F"}
     history_cache = {}
+    cache_filename = '_eftweb_ticker_cache.json'
 
     # if True, we use the OVERVIEW function to get the currency of a given stock
     # this is usually set to False otherwise we quickly hit the limits of the "free" plan (10 calls per minute)
@@ -20,6 +23,11 @@ class Ticker:
     def __init__(self, caching_time=timedelta(minutes=1), history_caching_time=timedelta(days=1)):
         self.caching_time = caching_time
         self.history_caching_time = history_caching_time
+        try:
+            self.stockvalue_cache = json.load(open(self.cache_filename, 'r'))
+        except (IOError, ValueError):
+            self.stockvalue_cache = {}
+        atexit.register(lambda: json.dump(self.stockvalue_cache, open(self.cache_filename, 'w')))
 
     def _query_alphavantage(self, symbol: str, params: dict) -> dict:
         params["symbol"] = symbol
@@ -37,6 +45,14 @@ class Ticker:
             if current_time - timestamp <= self.caching_time:
                 return price, currency
         price_data = self._query_alphavantage(symbol, self.stockquery_params)
+        if 'Global Quote' not in price_data:
+            print(f"Error fetching ticker: ${price_data}")
+            if symbol in self.stockvalue_cache:
+                print("Using stale ticker cache")
+                price, currency, _ = self.stockvalue_cache[symbol]
+                return price, currency
+            else:
+                return float('nan'), "NOTICK"
         price = round(float(price_data['Global Quote']['05. price']), 2)
         if self.query_stock_currency:
             currency_data = self._query_alphavantage(symbol, self.stockoverview_params)
