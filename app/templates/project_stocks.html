@@ -279,6 +279,7 @@
         <table class="table">
           <thead>
             <tr>
+              <th></th>
               <th>Date</th>
               <th>Qty</th>
               <th>FMV</th>
@@ -342,8 +343,9 @@ $(document).ready(function() {
     for (var i = 0; i < sellData.length; i++) {
 
         var rowData = sellData[i]
-        var row = `
-            <tr>
+
+        var row = `<tr>
+              <td data-toggle="collapse" data-target=".details${i}" class="clickable"><i class="fa fa-info-circle"></i></td>
               <td>${rowData["sell_date"]}</td>
               <td>${rowData["quantity"]}</td>
               <td>${rowData["sell_price"]} USD</td>
@@ -355,9 +357,24 @@ $(document).ready(function() {
                   <i class="fas fa-trash"></i>
                 </a>
               </td>
-            </tr>
-        `;
+            </tr>`;
         modalContent.append(row);
+        for (j = 0; j < rowData["fragments"].length; j++) {
+            console.log(`Fragments for ${i}`);
+            sale_fragment = rowData["fragments"][j];
+            var rowDetail = `<tr class="collapse details${i}">
+              <td></td>
+              <td>${sale_fragment["acq_date"]}</td>
+              <td>${sale_fragment["nb_stocks_sold"]}</td>
+              <td>${sale_fragment["unit_acquisition_price"]} EUR</td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td></td>
+            </tr>`;
+            console.log(rowDetail);
+            modalContent.append(rowDetail);
+        };
     }
   });
 });
