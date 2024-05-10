@@ -76,7 +76,9 @@ class RSUPortfolio:
                     currently_available=v.count,
                     acquisition_price_eur=cc.convert(v.acquisition_price, p.stock_currency, "EUR")
                 ) for v in vestings]))
-        raw_sales = SaleEvent.query.filter_by(project_id=project_id, type=StockType.RSU).all()
+        raw_sales = SaleEvent.query.filter_by(project_id=project_id, type=StockType.RSU)\
+            .order_by(SaleEvent.sell_date)\
+            .all()
         self.sales = defaultdict(list)
         for s in raw_sales:
             portfolio_sale = self.process_sale(s)
@@ -202,7 +204,9 @@ class StockOptionsPortfolio:
                     initial_amount=v.count,
                     currently_available=v.count,
                 ) for v in vestings]))
-        raw_sales = SaleEvent.query.filter_by(project_id=project_id, type=StockType.STOCKOPTIONS).all()
+        raw_sales = SaleEvent.query.filter_by(project_id=project_id, type=StockType.STOCKOPTIONS)\
+            .order_by(SaleEvent.sell_date)\
+            .all()
         self.sales = defaultdict(list)
         for s in raw_sales:
             portfolio_sale = self.process_sale(s)
@@ -311,7 +315,9 @@ class StockPortfolio:
                     initial_amount=s.quantity,
                     currently_available=s.quantity
                 ) for s in stocks]))
-        raw_sales = SaleEvent.query.filter_by(project_id=project_id, type=StockType.ESPP).all()
+        raw_sales = SaleEvent.query.filter_by(project_id=project_id, type=StockType.ESPP)\
+            .order_by(SaleEvent.sell_date)\
+            .all()
         self.sales = defaultdict(list)
         for s in raw_sales:
             portfolio_sale = self.process_sale(s)
