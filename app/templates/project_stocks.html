@@ -367,10 +367,7 @@ $(document).ready(function() {
               <td>${sale_fragment["acq_date"]}</td>
               <td>${sale_fragment["nb_stocks_sold"]}</td>
               <td>${sale_fragment["unit_acquisition_price"]} EUR</td>
-              <td></td>
-              <td></td>
-              <td></td>
-              <td></td>
+              <td colspan=4>${sale_fragment["plan_name"]}</td>
             </tr>`;
             console.log(rowDetail);
             modalContent.append(rowDetail);

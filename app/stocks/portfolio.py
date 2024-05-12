@@ -38,6 +38,7 @@ class PortfolioSale:
 @dataclass
 class PortfolioRsuVesting:
     vesting_date: date
+    release_date: date
     initial_amount: int
     currently_available: int
     acquisition_price_eur: float
@@ -72,9 +73,10 @@ class RSUPortfolio:
                 tax_scheme=StockHelper._determine_rsu_plans_type(p.approval_date),
                 vestings=[PortfolioRsuVesting(
                     vesting_date=v.vesting_date,
+                    release_date=v.release_date,
                     initial_amount=v.count,
                     currently_available=v.count,
-                    acquisition_price_eur=cc.convert(v.acquisition_price, p.stock_currency, "EUR")
+                    acquisition_price_eur=cc.convert(v.acquisition_price, p.stock_currency, "EUR", date=v.vesting_date)
                 ) for v in vestings]))
         raw_sales = SaleEvent.query.filter_by(project_id=project_id, type=StockType.RSU)\
             .order_by(SaleEvent.sell_date)\
@@ -92,13 +94,15 @@ class RSUPortfolio:
         sell_price_eur = round(
             cc.convert(sale_event.sell_price, sale_event.sell_currency.upper(), "EUR", date=sell_date), 2)
         to_sell = sale_event.quantity
+        print(
+            f"For sale event happening on {sell_date} selling {to_sell} x {sale_event.sell_price} {sale_event.sell_currency}, using sell_price_eur={sell_price_eur}")
 
         # Acquisitions are sorted by date, this is the rule set by the tax office (FIFO, or PEPS="premier entré premier
         # sorti"); we only keep stocks acquired *before* the sell date, in case we input a sell event in the middle of
         # acquisitions.
         rsu_before_sell_date = sorted(
-            [(p, r) for p in self.plans[sale_event.symbol] for r in p.vestings if r.vesting_date < sell_date],
-            key=lambda pr: pr[1].vesting_date
+            [(p, r) for p in self.plans[sale_event.symbol] for r in p.vestings if max(r.vesting_date, r.release_date) < sell_date],
+            key=lambda pr: (pr[1].vesting_date, pr[0].name)
         )
 
         sales_fragment = []
@@ -119,7 +123,7 @@ class RSUPortfolio:
             if to_sell == 0:
                 break
         if to_sell > 0:
-            print(f"WARNING: You are trying to sell more stocks than you have")
+            print(f"WARNING: You are trying to sell more RSU than you have: {sale_event}")
         rsu_portfolio_sale = PortfolioSale(
             sale_id=sale_event.id,
             symbol=sale_event.symbol,
@@ -247,7 +251,7 @@ class StockOptionsPortfolio:
                 break
 
         if to_sell > 0:
-            print(f"WARNING: You are trying to sell more stocks than you have")
+            print(f"WARNING: You are trying to sell more StockOptions than you have: {sale_event}")
         so_portfolio_sale = PortfolioSale(
             sale_id=sale_event.id,
             symbol=sale_event.symbol,
@@ -353,7 +357,7 @@ class StockPortfolio:
             if to_sell == 0:
                 break
         if to_sell > 0:
-            print(f"WARNING: You are trying to sell more stocks than you have")
+            print(f"WARNING: You are trying to sell more stocks than you have: {sale_event}")
         ds_portfolio_sale = PortfolioSale(
             sale_id=sale_event.id,
             symbol=sale_event.symbol,

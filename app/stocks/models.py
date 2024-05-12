@@ -37,6 +37,7 @@ class RSUVesting(db.Model):
     rsu_plan_id = db.Column(db.Integer, db.ForeignKey('rsu_plans.id'))
     count = db.Column(db.Integer)
     vesting_date = db.Column(db.Date)
+    release_date = db.Column(db.Date)
     acquisition_price = db.Column(db.Float)  # expressed in rsu_plans.stock_currency
 
 

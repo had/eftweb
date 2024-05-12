@@ -6,12 +6,15 @@ from typing import Tuple
 import requests
 import locale
 
+def custom_json_serialization(obj):
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError ("Type %s not serializable" % type(obj))
 
 class Ticker:
     url = "https://www.alphavantage.co/query"
     stockquery_params = {"function": "GLOBAL_QUOTE", "apikey": "EO7TR7UYV9S82B0F"}
     stockoverview_params = {"function": "OVERVIEW", "apikey": "EO7TR7UYV9S82B0F"}
-    stockvalue_cache = {}
     history_params = {"function": "TIME_SERIES_DAILY", "outputsize": "full", "apikey": "EO7TR7UYV9S82B0F"}
     history_cache = {}
     cache_filename = '_eftweb_ticker_cache.json'
@@ -20,14 +23,20 @@ class Ticker:
     # this is usually set to False otherwise we quickly hit the limits of the "free" plan (10 calls per minute)
     query_stock_currency = False
 
-    def __init__(self, caching_time=timedelta(minutes=1), history_caching_time=timedelta(days=1)):
+    def __init__(self, caching_time=timedelta(minutes=60), history_caching_time=timedelta(days=10)):
         self.caching_time = caching_time
         self.history_caching_time = history_caching_time
+        self.stockvalue_cache = {}
         try:
-            self.stockvalue_cache = json.load(open(self.cache_filename, 'r'))
-        except (IOError, ValueError):
-            self.stockvalue_cache = {}
-        atexit.register(lambda: json.dump(self.stockvalue_cache, open(self.cache_filename, 'w')))
+            print(f"Ticker: loading {self.cache_filename}")
+            persisted_cache = json.load(open(self.cache_filename, 'r'))
+            self.stockvalue_cache = {symbol: (price, currency, datetime.fromisoformat(ts))
+                                     for symbol, (price, currency, ts) in persisted_cache.items()}
+            print(f"Ticker: successfully loaded {len(persisted_cache)} entries from cache")
+            print(self.stockvalue_cache)
+        except (IOError, ValueError) as e:
+            print(f"Ticker: could not load ticker cache: {e}")
+        atexit.register(lambda: json.dump(self.stockvalue_cache, open(self.cache_filename, 'w'), default=custom_json_serialization))
 
     def _query_alphavantage(self, symbol: str, params: dict) -> dict:
         params["symbol"] = symbol

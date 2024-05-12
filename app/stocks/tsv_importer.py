@@ -42,6 +42,7 @@ def import_rsu_tsv(tsv_filename: FileStorage, project_id: int):
                 return
 
         vesting_date = datetime.strptime(row["Acquisition date"], "%Y-%m-%d").date()
+        release_date = datetime.strptime(row["Unblocking date"], "%Y-%m-%d").date()
         acquisition_price = float(row["Acquisition price"])
         if vesting_date < today and acquisition_price == 0:
             acquisition_price = ticker.get_stock_closing_history(symbol)[vesting_date]
@@ -49,6 +50,7 @@ def import_rsu_tsv(tsv_filename: FileStorage, project_id: int):
             rsu_plan_id=plan_id,
             count=int(row["Count"]),
             vesting_date=vesting_date,
+            release_date=release_date,
             acquisition_price=acquisition_price
         )
         db.session.add(vesting)
@@ -77,12 +79,15 @@ def import_dstocks_tsv(tsv_filename: FileStorage, project_id: int):
             except IntegrityError:
                 db.session.rollback()
                 return
-
+        acquisition_date = datetime.strptime(row["Acquisition date"], "%Y-%m-%d").date()
+        acquisition_price = float(row["Acquisition price"])
+        if acquisition_price == 0:
+            acquisition_price = ticker.get_stock_closing_history(symbol)[acquisition_date]
         new_dstock = DirectStocks(
             direct_stocks_plan_id=plan_id,
             quantity=int(row["Count"]),
-            acquisition_date=datetime.strptime(row["Acquisition date"], "%Y-%m-%d").date(),
-            acquisition_price=float(row["Acquisition price"])
+            acquisition_date=acquisition_date,
+            acquisition_price=acquisition_price
         )
         db.session.add(new_dstock)
     db.session.commit()
