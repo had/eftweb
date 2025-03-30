@@ -350,7 +350,7 @@ class StockPortfolio:
                 plan_name=plan.name,
                 nb_stocks_sold=sell_from_acq,
                 acq_date=ds.acquisition_date,
-                unit_acquisition_price=ds.acquisition_price,
+                unit_acquisition_price=round(cc.convert(ds.acquisition_price, sale_event.sell_currency.upper(), "EUR", date=ds.acquisition_date), 2)
             ))
             ds.currently_available = ds.currently_available - sell_from_acq
             to_sell -= sell_from_acq
