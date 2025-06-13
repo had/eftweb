@@ -97,6 +97,14 @@ class Ticker:
             print("Error:", response.status_code)
             return {}
 
+    def get_historical_price_with_fallback(self, symbol: str, day: date, max_fallback_days: int = 5) -> float:
+        history = self.get_stock_closing_history(symbol)
+        for _ in range(max_fallback_days):
+            if day in history:
+                return history[day]
+            day = day - timedelta(days=1)
+        return float('inf')
+
 
 ticker = Ticker()
 

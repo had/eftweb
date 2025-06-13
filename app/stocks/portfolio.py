@@ -54,7 +54,7 @@ class PortfolioRsuPlan:
 
 
 cc = CurrencyConverter(fallback_on_wrong_date=True, fallback_on_missing_rate=True)
-
+print(f"Currency converter valid until {cc.bounds['USD'].last_date}")
 
 class RSUPortfolio:
     plans: DefaultDict[str, list[PortfolioRsuPlan]]
@@ -357,7 +357,7 @@ class StockPortfolio:
             if to_sell == 0:
                 break
         if to_sell > 0:
-            print(f"WARNING: You are trying to sell more stocks than you have: {sale_event}")
+            print(f"WARNING: You are trying to sell {to_sell} more stocks than you have: {sale_event}")
         ds_portfolio_sale = PortfolioSale(
             sale_id=sale_event.id,
             symbol=sale_event.symbol,

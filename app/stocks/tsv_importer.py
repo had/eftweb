@@ -45,7 +45,7 @@ def import_rsu_tsv(tsv_filename: FileStorage, project_id: int):
         release_date = datetime.strptime(row["Unblocking date"], "%Y-%m-%d").date()
         acquisition_price = float(row["Acquisition price"])
         if vesting_date < today and acquisition_price == 0:
-            acquisition_price = ticker.get_stock_closing_history(symbol)[vesting_date]
+            acquisition_price = ticker.get_historical_price_with_fallback(symbol,vesting_date)
         vesting = RSUVesting(
             rsu_plan_id=plan_id,
             count=int(row["Count"]),
