@@ -1,10 +1,8 @@
 from flask import render_template, redirect, url_for
-import taxhelpers
-from collections import namedtuple
+from taxhelpers import StatementElement, statement_elements, prepare_tax_input, simulate_tax
 from easyfrenchtax import TaxField
 
 from . import tax
-from .forms import IncomeForm, CharityForm, RetirementInvestmentForm, ServicesChargesForm, FixedIncomeInvestmentForm, OtherInvestmentsForm, ShareholdingForm
 from .models import *
 from ..main.models import Project
 from .. import db
@@ -17,75 +15,17 @@ def taxstatement_delete(project_id, taxstatement_id):
     db.session.commit()
     return redirect(url_for("main.project_tax", project_id=project_id))
 
-StatementElement = namedtuple("StatementElement", ["name", "model", "form", "fields"])
-statement_elements = [
-   StatementElement("Income", IncomeSegment, IncomeForm, [
-       ("Salary 1 (1AJ)", "salary_1_1AJ"),
-       ("Salary 2 (1BJ)", "salary_2_1BJ")
-   ]),
-   StatementElement("Charity", CharitySegment, CharityForm, [
-       ("Charity donation for people in distress (7UD)", "charity_donation_7UD"),
-       ("Other charity donations (7UF)", "charity_donation_7UF")
-   ]),
-    StatementElement("Retirement investment", RetirementInvestmentSegment, RetirementInvestmentForm, [
-        ("Investment on PER 1 (6NS)", "per_transfers_1_6NS"),
-        ("Investment on PER 2 (6NT)", "per_transfers_2_6NT")
-    ]),
-    StatementElement("Service charges", ServicesChargesSegment, ServicesChargesForm, [
-        ("Children care - 1st child (7GA)", "children_daycare_fees_7GA"),
-        ("Home services (7DB)", "home_services_7DB")
-    ]),
-    StatementElement("Fixed income investment", FixedIncomeInvestmentSegment, FixedIncomeInvestmentForm, [
-        ("Fixed income investments (2TR)", "fixed_income_interests_2TR"),
-        ("Fixed income already taxed (2BH)", "fixed_income_interests_already_taxed_2BH"),
-        ("Tax already paid on fixed income (2CK)", "interest_tax_already_paid_2CK")
-    ]),
-    StatementElement("Other investments", OtherInvestmentsSegment, OtherInvestmentsForm, [
-        ("PME investment 1st period (7CF)", "pme_capital_subscription_7CF"),
-        ("PME investment 2nd period (7CH)", "pme_capital_subscription_7CH"),
-    ]),
-    StatementElement("Shareholding", ShareholdingSegment, ShareholdingForm, [
-        ("Taxable acquisition gain (1TZ)", "taxable_acquisition_gain_1TZ"),
-        ("Acquisition gain rebates (1UZ)", "acquisition_gain_rebates_1UZ"),
-        ("Acquisition gain 50% rebates (1WZ)", "acquisition_gain_50p_rebates_1WZ"),
-        ("Other taxable gain 1 (1TT)", "exercise_gain_1_1TT"),
-        ("Other taxable gain 2 (1UT)", "exercise_gain_2_1UT"),
-        ("Capital gain (3VG)", "capital_gain_3VG"),
-        ("Capital loss (3VH) *NOT IMPLEMENTED*", "capital_loss_3VH"),
-    ]),
-]
+
 
 @tax.route("/project/<int:project_id>/taxstatement/<int:taxstatement_id>", methods=["GET"])
 def taxstatement(project_id, taxstatement_id):
     project = Project.query.get(project_id)
     taxstatement = TaxStatement.query.get(taxstatement_id)
 
-    rendering_elements = []
-    tax_input = {}
-    for elt in statement_elements:
-        elt_form = elt.form()
-        elt_id = getattr(taxstatement, elt.name.lower().replace(' ','')+"_id")
-        if elt_id:
-            elt_object = elt.model.query.get(elt_id)
-            for _, field in elt.fields:
-                value = getattr(elt_object, field)
-                getattr(elt_form, field).data = value
-                field_names_fixups = {
-                    'pme_capital_subscription_7CF': 'sme_capital_subscription_7CF',
-                    'pme_capital_subscription_7CH': 'sme_capital_subscription_7CH'
-                }
-                tax_input[TaxField(field_names_fixups.get(field, field))] = value
-        else:
-            elt_object = None
-        rendering_elements.append((elt.name, elt_object, elt_form, elt.fields, "upsert_"+elt.name.lower().replace(' ','')))
-    tax_input[TaxField.MARRIED] = project.married
-    tax_input[TaxField.NB_CHILDREN] = project.nb_children
-    # TODO: set the proper birth years of children
-    tax_input[TaxField.NB_CHILDREN_LT_6YO] = project.nb_children
-    print(tax_input)
-    tax_result, tax_flags = taxhelpers.simulate_tax(taxstatement.year, tax_input)
+    tax_input, rendering_elements = prepare_tax_input(project, taxstatement)
+    tax_result, tax_flags = simulate_tax(taxstatement.year, tax_input)
     total_taxes = tax_result[TaxField.NET_TAXES] + tax_result[TaxField.NET_SOCIAL_TAXES]
-    print(total_taxes)
+
     return render_template("taxstatement.html",
                            project=project,
                            taxstatement=taxstatement,
@@ -94,7 +34,7 @@ def taxstatement(project_id, taxstatement_id):
                            tax_result=tax_result,
                            tax_flags=tax_flags)
 
-def upsert_factory(element:StatementElement):
+def upsert_factory(element: StatementElement):
     elt_name = element.name.lower().replace(' ','')
 
     @tax.route("/project/<int:project_id>/taxstatement/<int:taxstatement_id>/add_"+elt_name, endpoint="upsert_"+elt_name, methods=["POST"])

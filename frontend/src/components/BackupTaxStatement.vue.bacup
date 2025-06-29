@@ -1,0 +1,57 @@
+<script setup>
+import { defineProps } from 'vue'
+
+defineProps({
+  taxStatement: Object,
+})
+</script>
+
+<template>
+  <section class="flex flex-col">
+    <div class="flex">
+      <div class="flex p-2 items-center">
+        <img src="" alt="" class="pi pi-briefcase mr-2" />
+        <h3>Income</h3>
+      </div>
+      <table class="table-auto">
+        <tbody>
+          <tr>
+            <th>Income 1</th>
+            <td>1AJ</td>
+            <td>{{ taxStatement.income_segment.salary_1_1AJ }}</td>
+          </tr>
+          <tr>
+            <th>Income 2</th>
+            <td>1BJ</td>
+            <td>{{ taxStatement.income_segment.salary_2_1BJ }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="flex p-2 items-center">
+      <img src="" alt="" class="pi pi-gift mr-2" />
+      <h3>Charity</h3>
+    </div>
+    <div class="flex p-2 items-center">
+      <img src="" alt="" class="pi pi-car mr-2" />
+      <h3>Retirement investment</h3>
+    </div>
+    <div class="flex p-2 items-center">
+      <img src="" alt="" class="pi pi-bolt mr-2" />
+      <h3>Service charges</h3>
+    </div>
+    <div class="flex p-2 items-center">
+      <img src="" alt="" class="pi pi-euro mr-2" />
+      <h3>Fixed income investment</h3>
+    </div>
+    <div class="flex p-2 items-center">
+      <img src="" alt="" class="pi pi-wallet mr-2" />
+      <h3>Other investments</h3>
+    </div>
+    <div class="flex p-2 items-center">
+      <img src="" alt="" class="pi pi-chart-line mr-2" />
+      <h3>Shareholding</h3>
+    </div>
+    {{ taxStatement }}
+  </section>
+</template>

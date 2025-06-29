@@ -6,3 +6,11 @@ class Project(db.Model):
     name = db.Column(db.String(256), unique=True)
     married = db.Column(db.Boolean)
     nb_children = db.Column(db.Integer)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'married': self.married,
+            'nb_children': self.nb_children
+        }
