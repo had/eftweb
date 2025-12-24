@@ -1,13 +1,10 @@
 from easyfrenchtax import TaxField
 from flask import jsonify, request, abort
-from flask_cors import CORS
 
 from taxhelpers import prepare_tax_input, simulate_tax
 from . import api
 from ..main.models import Project
 from ..tax.models import *
-
-CORS(api, origins=["http://localhost:5173"])
 
 
 @api.after_request
