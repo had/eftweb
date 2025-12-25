@@ -12,7 +12,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import ProjectFormModal from '@/components/ProjectFormModal.vue'
-import { Pencil, Plus } from 'lucide-vue-next'
+import DeleteConfirmModal from '@/components/DeleteConfirmModal.vue'
+import { Pencil, Plus, Trash2 } from 'lucide-vue-next'
 
 const router = useRouter()
 const projectStore = useProjectStore()
@@ -21,6 +22,8 @@ const loading = ref(true)
 const error = ref(null)
 const showModal = ref(false)
 const editingProject = ref(null)
+const showDeleteConfirm = ref(false)
+const deletingProject = ref(null)
 
 onMounted(async () => {
   try {
@@ -37,7 +40,7 @@ onMounted(async () => {
 
 const selectProject = (project) => {
   projectStore.setCurrentProject(project)
-  router.push('/taxes')
+  router.push('/project')
 }
 
 const openCreateModal = () => {
@@ -53,6 +56,30 @@ const openEditModal = (project) => {
 const handleProjectSaved = async () => {
   const response = await axios.get('/api/projects')
   projects.value = response.data
+}
+
+const openDeleteConfirm = (project) => {
+  deletingProject.value = project
+  showDeleteConfirm.value = true
+}
+
+const handleDelete = async () => {
+  if (!deletingProject.value) return
+
+  try {
+    await axios.delete(`/api/projects/${deletingProject.value.id}`)
+    showDeleteConfirm.value = false
+    deletingProject.value = null
+    const response = await axios.get('/api/projects')
+    projects.value = response.data
+  } catch (error) {
+    console.error('Failed to delete project:', error)
+  }
+}
+
+const cancelDelete = () => {
+  showDeleteConfirm.value = false
+  deletingProject.value = null
 }
 </script>
 
@@ -118,14 +145,23 @@ const handleProjectSaved = async () => {
             class="cursor-pointer hover:shadow-lg transition-shadow relative group p-6"
             @click="selectProject(project)"
           >
-            <Button
-              variant="ghost"
-              size="icon"
-              class="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"
-              @click.stop="openEditModal(project)"
-            >
-              <Pencil class="h-4 w-4" />
-            </Button>
+            <div class="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                variant="ghost"
+                size="icon"
+                @click.stop="openEditModal(project)"
+              >
+                <Pencil class="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="text-destructive hover:text-destructive"
+                @click.stop="openDeleteConfirm(project)"
+              >
+                <Trash2 class="h-4 w-4" />
+              </Button>
+            </div>
 
             <div class="flex flex-col gap-4 h-48">
               <!-- Title with tooltip -->
@@ -168,6 +204,14 @@ const handleProjectSaved = async () => {
       v-model:open="showModal"
       :project="editingProject"
       @saved="handleProjectSaved"
+    />
+
+    <!-- Delete Confirmation Modal -->
+    <DeleteConfirmModal
+      v-model:open="showDeleteConfirm"
+      :project-name="deletingProject?.name || ''"
+      @confirm="handleDelete"
+      @cancel="cancelDelete"
     />
   </div>
 </template>

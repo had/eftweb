@@ -62,9 +62,14 @@ watch(
         >
           Select a project →
         </RouterLink>
-        <div v-else class="text-sm font-medium truncate" :title="projectStore.projectName">
+        <RouterLink
+          v-else
+          to="/project"
+          class="text-sm font-medium truncate hover:text-primary transition-colors cursor-pointer"
+          :title="projectStore.projectName"
+        >
           {{ projectStore.projectName }}
-        </div>
+        </RouterLink>
       </div>
 
       <!-- Separator -->

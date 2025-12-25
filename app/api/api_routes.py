@@ -23,7 +23,7 @@ def log_request():
 
 @api.route("/api/projects")
 def get_projects():
-    projects = Project.query.all()
+    projects = Project.query.filter_by(is_deleted=False).all()
     return jsonify([p.to_dict() for p in projects])
 
 @api.route("/api/projects/<int:project_id>")
@@ -78,6 +78,23 @@ def update_project(project_id):
     except IntegrityError:
         db.session.rollback()
         return jsonify({'error': 'Project name already exists'}), 409
+
+@api.route("/api/projects/<int:project_id>", methods=["DELETE"])
+def delete_project(project_id):
+    project = Project.query.get(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    if project.is_deleted:
+        return jsonify({'error': 'Project already deleted'}), 410
+
+    project.is_deleted = True
+    try:
+        db.session.commit()
+        return jsonify({'message': 'Project deleted successfully'}), 200
+    except Exception:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete project'}), 500
 
 
 @api.route("/api/taxes/<int:taxstatement_id>")
