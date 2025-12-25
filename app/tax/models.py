@@ -1,5 +1,6 @@
 from app import db
 
+
 class TaxStatement(db.Model):
     __tablename__ = "tax_statements"
     id = db.Column(db.Integer, primary_key=True)

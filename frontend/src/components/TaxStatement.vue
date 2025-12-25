@@ -1,4 +1,15 @@
 <script setup>
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table'
+import {
+  Briefcase,
+  Gift,
+  PiggyBank,
+  Zap,
+  Euro,
+  Wallet,
+  TrendingUp,
+} from 'lucide-vue-next'
+
 defineProps({
   taxStatement: Object,
 })
@@ -8,7 +19,7 @@ const segments = [
   {
     key: 'income_segment',
     label: 'Income',
-    icon: 'pi-briefcase',
+    icon: Briefcase,
     items: {
       salary_1_1AJ: { label: 'Salary 1st contributor', box_id: '1AJ' },
       salary_2_1BJ: { label: 'Salary 2nd contributor', box_id: '1BJ' },
@@ -17,7 +28,7 @@ const segments = [
   {
     key: 'charity_segment',
     label: 'Charity',
-    icon: 'pi-gift',
+    icon: Gift,
     items: {
       charity_donation_7UD: { label: 'Charity (people in difficulty)', box_id: '7UD' },
       charity_donation_7UF: { label: 'Charity (general)', box_id: '7UF' },
@@ -26,7 +37,7 @@ const segments = [
   {
     key: 'retirement_segment',
     label: 'Retirement Investment',
-    icon: 'pi-car',
+    icon: PiggyBank,
     items: {
       fixed_income_interests_2TR: {
         label: 'Interests received from fixed income investment',
@@ -45,7 +56,7 @@ const segments = [
   {
     key: 'service_segment',
     label: 'Service Charges',
-    icon: 'pi-bolt',
+    icon: Zap,
     items: {
       children_daycare_fees_7GA: { label: 'Children daycare fees', box_id: '7GA' },
     },
@@ -53,7 +64,7 @@ const segments = [
   {
     key: 'fixed_income_segment',
     label: 'Fixed Income Investment',
-    icon: 'pi-euro',
+    icon: Euro,
     items: {
       fixed_income_interests_2TR: {
         label: 'Interests received from fixed income investment',
@@ -69,11 +80,11 @@ const segments = [
       },
     },
   },
-  { key: 'other_investment_segment', label: 'Other Investments', icon: 'pi-wallet', items: {} },
+  { key: 'other_investment_segment', label: 'Other Investments', icon: Wallet, items: {} },
   {
     key: 'shareholding_segment',
     label: 'Shareholding',
-    icon: 'pi-chart-line',
+    icon: TrendingUp,
     items: {
       acquisition_gain_50p_rebates_1WZ: {
         label: 'Acquisition gain 50% rebates',
@@ -93,34 +104,34 @@ const segments = [
 <template>
   <div class="mr-5">
     <div class="text-2xl text-center mb-2">Statement</div>
-    <table class="table-fixed rounded-lg shadow bg-white">
-      <tbody>
+    <Table class="rounded-lg shadow bg-white">
+      <TableBody>
         <template v-for="segment in segments" :key="segment.key">
           <template v-if="taxStatement[segment.key]">
-            <tr v-for="(val, field, idx) in taxStatement[segment.key]" :key="idx">
-              <td
+            <TableRow v-for="(val, field, idx) in taxStatement[segment.key]" :key="idx">
+              <TableCell
                 v-if="idx === 0"
                 :rowspan="Object.keys(taxStatement[segment.key]).length"
                 class="bg-gray-100 py-2 px-4 border-y border-gray-400"
               >
                 <div class="font-semibold text-lg flex items-center align-center">
-                  <i :class="`pi ${segment.icon} mr-2 text-xl`"></i>
+                  <component :is="segment.icon" class="mr-2 h-5 w-5" />
                   {{ segment.label }}
                 </div>
-              </td>
-              <td class="bg-gray-50 px-4 py-2 border-y border-gray-300">
+              </TableCell>
+              <TableCell class="bg-gray-50 px-4 py-2 border-y border-gray-300">
                 {{ segment.items[field].label }}
-              </td>
-              <td class="bg-gray-50 px-4 py-2 border-y border-gray-300 border-l">
+              </TableCell>
+              <TableCell class="bg-gray-50 px-4 py-2 border-y border-gray-300 border-l">
                 <span class="font-light text-gray-500">{{ segment.items[field].box_id }}</span>
-              </td>
-              <td class="px-4 py-2 border-y border-gray-200 text-right">
+              </TableCell>
+              <TableCell class="px-4 py-2 border-y border-gray-200 text-right">
                 {{ val.toLocaleString() }} €
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           </template>
         </template>
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   </div>
 </template>

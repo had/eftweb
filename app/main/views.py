@@ -1,12 +1,12 @@
 import datetime
 
-from flask import render_template, redirect, url_for, flash
+from flask import flash, redirect, render_template, url_for
 from sqlalchemy.exc import IntegrityError
 
-from . import main
-from .forms import ProjectForm, TaxStatementForm
 from .. import db
 from ..tax import models
+from . import main
+from .forms import ProjectForm, TaxStatementForm
 from .models import Project
 
 
@@ -47,7 +47,7 @@ def project_tax(project_id):
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
-        flash(f"Tax statement added")
+        flash("Tax statement added")
         return redirect(url_for('.project_tax', project_id=project.id))
     else:
         # prefill with current year

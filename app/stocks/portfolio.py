@@ -1,15 +1,19 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
-from typing import DefaultDict, Optional
 
 from currency_converter import CurrencyConverter
+from easyfrenchtax import RsuTaxScheme, StockHelper, StockType
 
-from easyfrenchtax import StockHelper, RsuTaxScheme, StockType
-
-from app.stocks.models import RSUPlan, RSUVesting, StockOptionPlan, StockOptionVesting, DirectStocks, SaleEvent, \
-    DirectStocksPlan
-from app.stocks.ticker import ticker
+from app.stocks.models import (
+    DirectStocks,
+    DirectStocksPlan,
+    RSUPlan,
+    RSUVesting,
+    SaleEvent,
+    StockOptionPlan,
+    StockOptionVesting,
+)
 
 
 @dataclass
@@ -18,7 +22,7 @@ class PortfolioSalesFragment:
     nb_stocks_sold: int
     acq_date: date
     unit_acquisition_price: float
-    tax_scheme: Optional[RsuTaxScheme] = None
+    tax_scheme: RsuTaxScheme | None = None
 
 
 @dataclass
@@ -31,8 +35,8 @@ class PortfolioSale:
     sell_currency: str
     fragments: list[PortfolioSalesFragment]
     sell_price_eur: float
-    taxes: Optional[int] = None
-    owner: Optional[int] = None
+    taxes: int | None = None
+    owner: int | None = None
 
 
 @dataclass
@@ -57,8 +61,8 @@ cc = CurrencyConverter(fallback_on_wrong_date=True, fallback_on_missing_rate=Tru
 print(f"Currency converter valid until {cc.bounds['USD'].last_date}")
 
 class RSUPortfolio:
-    plans: DefaultDict[str, list[PortfolioRsuPlan]]
-    sales: DefaultDict[str, list[PortfolioSale]]
+    plans: defaultdict[str, list[PortfolioRsuPlan]]
+    sales: defaultdict[str, list[PortfolioSale]]
 
     def __init__(self, project_id: int):
         # currency converter (USD/EUR in particular)
@@ -188,8 +192,8 @@ class PortfolioStockOptionPlan:
 
 
 class StockOptionsPortfolio:
-    plans: DefaultDict[str, list[PortfolioStockOptionPlan]]
-    sales: DefaultDict[str, list[PortfolioSale]]
+    plans: defaultdict[str, list[PortfolioStockOptionPlan]]
+    sales: defaultdict[str, list[PortfolioSale]]
 
     def __init__(self, project_id: int):
         raw_plans = StockOptionPlan.query.filter_by(project_id=project_id).all()
@@ -300,8 +304,8 @@ class PortfolioDirectStockPlan:
 
 
 class StockPortfolio:
-    plans: DefaultDict[str, list[PortfolioDirectStockPlan]]
-    sales: DefaultDict[str, list[PortfolioSale]]
+    plans: defaultdict[str, list[PortfolioDirectStockPlan]]
+    sales: defaultdict[str, list[PortfolioSale]]
 
     def __init__(self, project_id: int):
         raw_plans = DirectStocksPlan.query.filter_by(project_id=project_id).all()

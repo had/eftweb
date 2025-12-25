@@ -1,13 +1,21 @@
 from easyfrenchtax import TaxField
-from flask import jsonify, request, abort
-from flask_cors import CORS
+from flask import abort, jsonify, request
+from sqlalchemy.exc import IntegrityError
 
 from taxhelpers import prepare_tax_input, simulate_tax
-from . import api
-from ..main.models import Project
-from ..tax.models import *
 
-CORS(api, origins=["http://localhost:5173"])
+from ..main.models import Project, db
+from ..tax.models import (
+    CharitySegment,
+    FixedIncomeInvestmentSegment,
+    IncomeSegment,
+    OtherInvestmentsSegment,
+    RetirementInvestmentSegment,
+    ServicesChargesSegment,
+    ShareholdingSegment,
+    TaxStatement,
+)
+from . import api
 
 
 @api.after_request
@@ -25,7 +33,7 @@ def log_request():
 
 @api.route("/api/projects")
 def get_projects():
-    projects = Project.query.all()
+    projects = Project.query.filter_by(is_deleted=False).all()
     return jsonify([p.to_dict() for p in projects])
 
 @api.route("/api/projects/<int:project_id>")
@@ -35,6 +43,68 @@ def get_project(project_id):
         return jsonify([s.to_dict() for s in statements])
     else:
         abort(404)
+
+@api.route("/api/projects", methods=["POST"])
+def create_project():
+    data = request.get_json()
+
+    if not data or not data.get('name'):
+        return jsonify({'error': 'Project name is required'}), 400
+
+    project = Project(
+        name=data['name'],
+        married=data.get('married', False),
+        nb_children=data.get('nb_children', 0)
+    )
+
+    db.session.add(project)
+    try:
+        db.session.commit()
+        return jsonify(project.to_dict()), 201
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'Project name already exists'}), 409
+
+@api.route("/api/projects/<int:project_id>", methods=["PUT"])
+def update_project(project_id):
+    project = Project.query.get(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    if 'name' in data:
+        project.name = data['name']
+    if 'married' in data:
+        project.married = data['married']
+    if 'nb_children' in data:
+        project.nb_children = data['nb_children']
+
+    try:
+        db.session.commit()
+        return jsonify(project.to_dict()), 200
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'Project name already exists'}), 409
+
+@api.route("/api/projects/<int:project_id>", methods=["DELETE"])
+def delete_project(project_id):
+    project = Project.query.get(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    if project.is_deleted:
+        return jsonify({'error': 'Project already deleted'}), 410
+
+    project.is_deleted = True
+    try:
+        db.session.commit()
+        return jsonify({'message': 'Project deleted successfully'}), 200
+    except Exception:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete project'}), 500
 
 
 @api.route("/api/taxes/<int:taxstatement_id>")

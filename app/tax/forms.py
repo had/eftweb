@@ -1,6 +1,7 @@
 from flask_wtf import FlaskForm
 from wtforms import IntegerField, SubmitField
 
+
 class IncomeForm(FlaskForm):
     salary_1_1AJ = IntegerField("Income 1 (1AJ)", default=0)
     salary_2_1BJ = IntegerField("Income 2 (1BJ)", default=0)

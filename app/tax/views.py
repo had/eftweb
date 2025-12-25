@@ -1,11 +1,12 @@
-from flask import render_template, redirect, url_for
-from taxhelpers import StatementElement, statement_elements, prepare_tax_input, simulate_tax
 from easyfrenchtax import TaxField
+from flask import redirect, render_template, url_for
 
-from . import tax
-from .models import *
-from ..main.models import Project
+from taxhelpers import StatementElement, prepare_tax_input, simulate_tax, statement_elements
+
 from .. import db
+from ..main.models import Project
+from . import tax
+from .models import TaxStatement
 
 
 @tax.route("/project/<int:project_id>/taxstatement/<int:taxstatement_id>/delete", methods=["GET", "POST"])
