@@ -1,8 +1,16 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField
-from wtforms import StringField, IntegerField, SelectField, SubmitField, DateField, DecimalField, HiddenField, \
-    IntegerRangeField
+from wtforms import (
+    DateField,
+    DecimalField,
+    IntegerField,
+    IntegerRangeField,
+    SelectField,
+    StringField,
+    SubmitField,
+)
 from wtforms.validators import NumberRange
+
 
 class DirectStocksForm(FlaskForm):
     tp_owner = IntegerField("Taxpayer owner (1 or 2)", validators=[NumberRange(min=1, max=2)])

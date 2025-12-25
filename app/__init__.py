@@ -1,11 +1,13 @@
 import datetime
+
 from flask import Flask
+from flask.json import JSONEncoder
 from flask_bootstrap import Bootstrap4
 from flask_fontawesome import FontAwesome
-from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from flask_sqlalchemy import SQLAlchemy
+
 from config import config
-from flask.json import JSONEncoder
 
 db = SQLAlchemy()
 bootstrap = Bootstrap4()

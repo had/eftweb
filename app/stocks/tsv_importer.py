@@ -1,16 +1,25 @@
 import csv
 import json
+from datetime import date, datetime
 from io import TextIOWrapper
-from datetime import datetime, date
 
 from easyfrenchtax import StockType
 from sqlalchemy.exc import IntegrityError
 from werkzeug.datastructures import FileStorage
 
-from app.stocks.models import RSUPlan, RSUVesting, DirectStocks, DirectStocksPlan, StockOptionPlan, StockOptionVesting, \
-    SaleEvent
+from app.stocks.models import (
+    DirectStocks,
+    DirectStocksPlan,
+    RSUPlan,
+    RSUVesting,
+    SaleEvent,
+    StockOptionPlan,
+    StockOptionVesting,
+)
 from app.stocks.ticker import ticker
+
 from .. import db
+
 
 def import_rsu_tsv(tsv_filename: FileStorage, project_id: int):
     today = date.today()

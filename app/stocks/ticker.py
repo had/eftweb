@@ -1,15 +1,15 @@
 import atexit
 import json
-from datetime import datetime, timedelta, date
-from typing import Tuple
+import locale
+from datetime import date, datetime, timedelta
 
 import requests
-import locale
+
 
 def custom_json_serialization(obj):
     if isinstance(obj, datetime):
         return obj.isoformat()
-    raise TypeError ("Type %s not serializable" % type(obj))
+    raise TypeError(f"Type {type(obj)} not serializable")
 
 class Ticker:
     url = "https://www.alphavantage.co/query"
@@ -29,12 +29,12 @@ class Ticker:
         self.stockvalue_cache = {}
         try:
             print(f"Ticker: loading {self.cache_filename}")
-            persisted_cache = json.load(open(self.cache_filename, 'r'))
+            persisted_cache = json.load(open(self.cache_filename))
             self.stockvalue_cache = {symbol: (price, currency, datetime.fromisoformat(ts))
                                      for symbol, (price, currency, ts) in persisted_cache.items()}
             print(f"Ticker: successfully loaded {len(persisted_cache)} entries from cache")
             print(self.stockvalue_cache)
-        except (IOError, ValueError) as e:
+        except (OSError, ValueError) as e:
             print(f"Ticker: could not load ticker cache: {e}")
         atexit.register(lambda: json.dump(self.stockvalue_cache, open(self.cache_filename, 'w'), default=custom_json_serialization))
 
@@ -47,7 +47,7 @@ class Ticker:
             print("Error:", response.status_code)
             return {}
 
-    def get_stock_value(self, symbol: str) -> Tuple[float, str]:
+    def get_stock_value(self, symbol: str) -> tuple[float, str]:
         if symbol in self.stockvalue_cache:
             price, currency, timestamp = self.stockvalue_cache[symbol]
             current_time = datetime.now()
@@ -91,8 +91,8 @@ class Ticker:
                 timestamp = datetime.now()
                 self.history_cache[symbol] = (history, timestamp)
                 return history
-            except:
-                print("Error :", data)
+            except Exception as e:
+                print("Error :", data, e)
         else:
             print("Error:", response.status_code)
             return {}
@@ -115,8 +115,8 @@ class CurrencySymbols:
 
     def __init__(self):
         self.currency_symbols = {}
-        for l in self.locales:
-            locale.setlocale(locale.LC_ALL, l)
+        for loc in self.locales:
+            locale.setlocale(locale.LC_ALL, loc)
             conv = locale.localeconv()
             self.currency_symbols[conv['int_curr_symbol']] = conv['currency_symbol']
         locale.setlocale(locale.LC_ALL, "")

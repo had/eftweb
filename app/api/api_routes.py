@@ -1,11 +1,21 @@
 from easyfrenchtax import TaxField
-from flask import jsonify, request, abort
+from flask import abort, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from taxhelpers import prepare_tax_input, simulate_tax
-from . import api
+
 from ..main.models import Project, db
-from ..tax.models import *
+from ..tax.models import (
+    CharitySegment,
+    FixedIncomeInvestmentSegment,
+    IncomeSegment,
+    OtherInvestmentsSegment,
+    RetirementInvestmentSegment,
+    ServicesChargesSegment,
+    ShareholdingSegment,
+    TaxStatement,
+)
+from . import api
 
 
 @api.after_request

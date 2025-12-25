@@ -47,13 +47,10 @@ watch(
 <template>
   <nav class="navbar">
     <div class="navsection">
-      <!-- Title -->
       <RouterLink to="/" class="logo py-4 self-center">Easy French Tax</RouterLink>
 
-      <!-- Separator -->
-      <Separator class="my-2 mx-2" />
-
       <!-- Project Section -->
+      <Separator class="my-2 mx-2" />
       <div class="px-3 py-2">
         <RouterLink
           v-if="!isProjectSelected"
@@ -71,13 +68,10 @@ watch(
           {{ projectStore.projectName }}
         </RouterLink>
       </div>
-
-      <!-- Separator -->
       <Separator class="my-2 mx-2" />
 
       <!-- Navigation Links -->
       <div class="flex flex-col mt-2">
-        <!-- Tax Link (Collapsible) -->
         <Collapsible v-model:open="isTaxExpanded">
           <CollapsibleTrigger
             :class="[

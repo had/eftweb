@@ -1,7 +1,8 @@
+import pytest
 from flask import url_for
 
-import pytest
 from app import create_app, db
+
 
 @pytest.fixture()
 def app():
@@ -38,19 +39,19 @@ def test_project(app):
     response_project = client.get(url_for('main.project_tax', project_id=1))
     response_project_data = response_project.get_data(as_text=True)
     assert f"Project Unit-test project {now}" in response_project_data
-    assert f"Married = Yes ; Children = 3" in response_project_data
+    assert "Married = Yes ; Children = 3" in response_project_data
 
     #update
     response_update = client.post(url_for('main.project_update', project_id=1), data={
-        'name': f"Unit-test project update",
+        'name': "Unit-test project update",
         'situation': "Single",
         "nb_children": "2"
     })
     assert response_update.status_code == 302
     response_project_2 = client.get(url_for('main.project_tax', project_id=1))
     response_project_2_data = response_project_2.get_data(as_text=True)
-    assert f"Project Unit-test project update" in response_project_2_data
-    assert f"Married = No ; Children = 2" in response_project_2_data
+    assert "Project Unit-test project update" in response_project_2_data
+    assert "Married = No ; Children = 2" in response_project_2_data
 
     # delete (+ redirect to /)
     response_delete = client.get(url_for('main.project_delete', project_id=1))

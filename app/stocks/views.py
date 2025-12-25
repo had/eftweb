@@ -1,24 +1,45 @@
 import pprint
 from datetime import date
 
-import dateutil.relativedelta
-from flask import render_template, redirect, url_for, request
+from flask import redirect, render_template, request, url_for
+from sqlalchemy.exc import IntegrityError
 from werkzeug.datastructures import FileStorage
 
 import taxhelpers
-from sqlalchemy.exc import IntegrityError
 
-from . import stocks
-from .forms import DirectStocksForm, RsuImportForm, DirectStocksImportForm, StockOptionsImportForm, SaleForm, \
-    SellEventsImportForm
-from .portfolio import RSUPortfolio, StockOptionsPortfolio, StockPortfolio, PortfolioRsuPlan, PortfolioDirectStockPlan
-from .ticker import ticker
-from .tsv_importer import import_rsu_tsv, import_dstocks_tsv, import_stockoptions_tsv, \
-    import_etrade_sell_events_tsv
 from .. import db
 from ..main import models as main_models
-from .models import DirectStocks, RSUPlan, RSUVesting, DirectStocksSale, RSUSale, StockOptionVesting, StockOptionPlan, \
-    SaleEvent, DirectStocksPlan
+from . import stocks
+from .forms import (
+    DirectStocksForm,
+    DirectStocksImportForm,
+    RsuImportForm,
+    SaleForm,
+    SellEventsImportForm,
+    StockOptionsImportForm,
+)
+from .models import (
+    DirectStocks,
+    DirectStocksPlan,
+    RSUPlan,
+    RSUVesting,
+    SaleEvent,
+    StockOptionPlan,
+    StockOptionVesting,
+)
+from .portfolio import (
+    PortfolioDirectStockPlan,
+    RSUPortfolio,
+    StockOptionsPortfolio,
+    StockPortfolio,
+)
+from .ticker import ticker
+from .tsv_importer import (
+    import_dstocks_tsv,
+    import_etrade_sell_events_tsv,
+    import_rsu_tsv,
+    import_stockoptions_tsv,
+)
 
 
 @stocks.app_template_filter()

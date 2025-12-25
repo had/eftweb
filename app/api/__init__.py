@@ -2,4 +2,4 @@ from flask import Blueprint
 
 api = Blueprint("api", __name__)
 
-from . import api_routes
+from . import api_routes  # noqa: E402
