@@ -53,7 +53,7 @@ const validateForm = () => {
   errors.value = {}
 
   if (!formData.value.name || formData.value.name.trim() === '') {
-    errors.value.name = 'Project name is required'
+    errors.value.name = 'Family name is required'
     return false
   }
 
@@ -82,11 +82,11 @@ const handleSubmit = async () => {
     emit('update:open', false)
   } catch (error) {
     if (error.response?.status === 409) {
-      errors.value.name = 'Project name already exists'
+      errors.value.name = 'Family name already exists'
     } else if (error.response?.data?.error) {
       errors.value.general = error.response.data.error
     } else {
-      errors.value.general = 'Failed to save project. Please try again.'
+      errors.value.general = 'Failed to save family. Please try again.'
     }
   } finally {
     loading.value = false
@@ -103,16 +103,16 @@ const handleClose = () => {
   <Dialog :open="open" @update:open="handleClose">
     <DialogContent class="sm:max-w-[425px]">
       <DialogHeader>
-        <DialogTitle>{{ project ? 'Edit Project' : 'Create New Project' }}</DialogTitle>
+        <DialogTitle>{{ project ? 'Edit Family' : 'Add a New Family' }}</DialogTitle>
       </DialogHeader>
 
       <form @submit.prevent="handleSubmit" class="space-y-4 py-4">
         <div class="space-y-2">
-          <Label for="name">Project Name *</Label>
+          <Label for="name">Family Name *</Label>
           <Input
             id="name"
             v-model="formData.name"
-            placeholder="My Tax Project"
+            placeholder="My Family"
             :class="{ 'border-destructive': errors.name }"
           />
           <p v-if="errors.name" class="text-sm text-destructive">{{ errors.name }}</p>
@@ -154,7 +154,7 @@ const handleClose = () => {
           Cancel
         </Button>
         <Button @click="handleSubmit" :disabled="loading">
-          {{ loading ? 'Saving...' : project ? 'Update' : 'Create' }}
+          {{ loading ? 'Saving...' : project ? 'Update Family' : 'Add Family' }}
         </Button>
       </DialogFooter>
     </DialogContent>

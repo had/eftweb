@@ -29,7 +29,7 @@ const handleCancel = () => {
   <Dialog :open="open" @update:open="(val) => emit('update:open', val)">
     <DialogContent class="sm:max-w-[425px]">
       <DialogHeader>
-        <DialogTitle>Delete Project</DialogTitle>
+        <DialogTitle>Delete Family</DialogTitle>
         <DialogDescription>
           Are you sure you want to delete "{{ projectName }}"? This action cannot be undone.
         </DialogDescription>

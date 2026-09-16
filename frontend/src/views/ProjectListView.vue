@@ -32,7 +32,7 @@ onMounted(async () => {
     console.log(`Result of querying /api/projects: ${projects.value}`)
   } catch (err) {
     console.error('Failed to fetch projects:', err)
-    error.value = 'Failed to load projects. Please try again.'
+    error.value = 'Failed to load families. Please try again.'
   } finally {
     loading.value = false
   }
@@ -86,9 +86,9 @@ const cancelDelete = () => {
 <template>
   <div class="p-8">
     <div class="mb-8">
-      <h1 class="text-3xl font-bold mb-2">Select a Project</h1>
+      <h1 class="text-3xl font-bold mb-2">Select a Family</h1>
       <p class="text-muted-foreground">
-        Choose a project to view its tax statements and stock portfolio
+        Choose a family to view its tax statements and stock portfolio
       </p>
     </div>
 
@@ -96,8 +96,8 @@ const cancelDelete = () => {
       <Card class="cursor-pointer hover:shadow-lg transition-shadow border-2 border-dashed p-6" @click="openCreateModal">
         <div class="flex flex-col items-center justify-center gap-3 h-48">
           <Plus class="h-8 w-8 text-muted-foreground" />
-          <div class="text-lg font-semibold">Create New Project</div>
-          <div class="text-sm text-muted-foreground text-center">Add a new tax project</div>
+          <div class="text-lg font-semibold">Add a New Family</div>
+          <div class="text-sm text-muted-foreground text-center">Create a family tax profile</div>
         </div>
       </Card>
       <Card v-for="i in 2" :key="i" class="animate-pulse p-6">
@@ -116,11 +116,18 @@ const cancelDelete = () => {
       <Button class="mt-4" @click="() => window.location.reload()">Retry</Button>
     </div>
 
-    <div
-      v-else-if="projects.length === 0"
-      class="text-center py-12 text-muted-foreground"
-    >
-      <p class="text-lg">No projects found</p>
+    <div v-else-if="projects.length === 0" class="text-center py-12">
+      <p class="text-lg text-muted-foreground mb-6">No families found</p>
+      <Card
+        class="cursor-pointer hover:shadow-lg transition-shadow border-2 border-dashed p-6 max-w-sm mx-auto"
+        @click="openCreateModal"
+      >
+        <div class="flex flex-col items-center justify-center gap-3 h-48">
+          <Plus class="h-8 w-8 text-muted-foreground" />
+          <div class="text-lg font-semibold">Add a New Family</div>
+          <div class="text-sm text-muted-foreground text-center">Create a family tax profile</div>
+        </div>
+      </Card>
     </div>
 
     <div v-else>
@@ -133,8 +140,8 @@ const cancelDelete = () => {
           >
             <div class="flex flex-col items-center justify-center gap-3 h-48">
               <Plus class="h-8 w-8 text-muted-foreground" />
-              <div class="text-lg font-semibold">Create New Project</div>
-              <div class="text-sm text-muted-foreground text-center">Add a new tax project</div>
+              <div class="text-lg font-semibold">Add a New Family</div>
+              <div class="text-sm text-muted-foreground text-center">Create a family tax profile</div>
             </div>
           </Card>
 

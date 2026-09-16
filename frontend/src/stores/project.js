@@ -25,5 +25,12 @@ export const useProjectStore = defineStore('project', () => {
       }),
     )
   }
-  return { projectName, projectId, setCurrentProject }
+
+  function clearCurrentProject() {
+    projectName.value = ''
+    projectId.value = 0
+    localStorage.removeItem(projectLocalStorageKey)
+  }
+
+  return { projectName, projectId, setCurrentProject, clearCurrentProject }
 })

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import { Separator } from '@/components/ui/separator'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -8,6 +8,7 @@ import { ChevronDown, ChevronRight } from 'lucide-vue-next'
 import axios from 'axios'
 
 const route = useRoute()
+const router = useRouter()
 const projectStore = useProjectStore()
 const taxYears = ref([])
 const isTaxExpanded = ref(false)
@@ -16,6 +17,11 @@ const isProjectSelected = computed(() => !!projectStore.projectId)
 
 const isCurrentPath = (viewPath) => {
   return route.path === viewPath
+}
+
+const exitFamily = () => {
+  projectStore.clearCurrentProject()
+  router.push('/projects')
 }
 
 // Watch for project changes and fetch tax years
@@ -57,16 +63,24 @@ watch(
           to="/projects"
           class="text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
-          Select a project →
+          Select a family →
         </RouterLink>
-        <RouterLink
-          v-else
-          to="/project"
-          class="text-sm font-medium truncate hover:text-primary transition-colors cursor-pointer"
-          :title="projectStore.projectName"
-        >
-          {{ projectStore.projectName }}
-        </RouterLink>
+        <div v-else class="flex items-center justify-between gap-2">
+          <RouterLink
+            to="/project"
+            class="min-w-0 flex-1 text-sm font-medium truncate hover:text-primary transition-colors cursor-pointer"
+            :title="projectStore.projectName"
+          >
+            {{ projectStore.projectName }}
+          </RouterLink>
+          <button
+            type="button"
+            class="text-xs text-blue-600 hover:text-blue-800 cursor-pointer"
+            @click="exitFamily"
+          >
+            exit
+          </button>
+        </div>
       </div>
       <Separator class="my-2 mx-2" />
 

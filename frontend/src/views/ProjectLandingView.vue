@@ -25,7 +25,7 @@ const stockEvents = ref([
 </script>
 
 <template>
-  <EftLayout :title="projectStore.projectName || 'Project'">
+  <EftLayout :title="projectStore.projectName || 'Family'">
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <!-- Tax Returns List -->
       <Card>
