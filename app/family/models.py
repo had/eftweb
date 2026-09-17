@@ -84,8 +84,20 @@ class TaxReturn(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     family_id = db.Column(db.Integer, db.ForeignKey("families.id", ondelete="CASCADE"), nullable=False)
     year = db.Column(db.Integer, nullable=False)
+    has_income_statements = db.Column(db.Boolean, nullable=False, default=False)
+    has_donation_statements = db.Column(db.Boolean, nullable=False, default=False)
+    has_investment_statements = db.Column(db.Boolean, nullable=False, default=False)
+    is_archived = db.Column(db.Boolean, nullable=False, default=False)
 
     family = db.relationship("Family", back_populates="tax_returns")
 
     def to_dict(self):
-        return {"id": self.id, "family_id": self.family_id, "year": self.year}
+        return {
+            "id": self.id,
+            "family_id": self.family_id,
+            "year": self.year,
+            "has_income_statements": self.has_income_statements,
+            "has_donation_statements": self.has_donation_statements,
+            "has_investment_statements": self.has_investment_statements,
+            "is_archived": self.is_archived,
+        }

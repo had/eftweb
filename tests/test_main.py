@@ -212,11 +212,37 @@ def test_family_tax_returns_are_unique_and_unavailable_when_archived(app):
     assert client.get(endpoint).get_json() == []
     assert client.post(endpoint, json={}).status_code == 400
 
-    created = client.post(endpoint, json={"year": 2026})
+    created = client.post(
+        endpoint,
+        json={
+            "year": 2026,
+            "has_income_statements": True,
+            "has_investment_statements": True,
+        },
+    )
     assert created.status_code == 201
     assert created.get_json()["year"] == 2026
+    assert created.get_json()["has_income_statements"] is True
+    assert created.get_json()["has_donation_statements"] is False
+    assert created.get_json()["has_investment_statements"] is True
     assert client.post(endpoint, json={"year": 2026}).status_code == 409
     assert client.get(endpoint).get_json() == [created.get_json()]
+
+    updated = client.put(
+        f"/api/tax-returns/{created.get_json()['id']}",
+        json={"year": 2027, "has_income_statements": False, "has_donation_statements": True},
+    )
+    assert updated.status_code == 200
+    assert updated.get_json()["year"] == 2026
+    assert updated.get_json()["has_income_statements"] is False
+    assert updated.get_json()["has_donation_statements"] is True
+
+    archived = client.delete(f"/api/tax-returns/{created.get_json()['id']}")
+    assert archived.status_code == 200
+    assert client.get(endpoint).get_json() == []
+    assert client.get(f"{endpoint}?archived=true").get_json()[0]["id"] == created.get_json()["id"]
+    assert client.put(f"/api/tax-returns/{created.get_json()['id']}", json={}).status_code == 410
+    assert client.delete(f"/api/tax-returns/{created.get_json()['id']}").status_code == 410
 
     client.delete(f"/api/families/{family['id']}")
     assert client.get(endpoint).status_code == 410

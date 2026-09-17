@@ -43,6 +43,26 @@ def family_or_404(family_id):
     return family
 
 
+TAX_RETURN_CONFIGURATION_FIELDS = (
+    "has_income_statements",
+    "has_donation_statements",
+    "has_investment_statements",
+)
+
+
+def tax_return_configuration(data, existing=None):
+    if not isinstance(data, dict):
+        raise ValueError("Tax return data must be an object")
+
+    configuration = {}
+    for field in TAX_RETURN_CONFIGURATION_FIELDS:
+        value = data.get(field, getattr(existing, field) if existing else False)
+        if not isinstance(value, bool):
+            raise ValueError(f"{field} must be a boolean")
+        configuration[field] = value
+    return configuration
+
+
 def member_from_payload(payload, role, position):
     if not isinstance(payload, dict):
         raise ValueError("Each family member must be an object")
@@ -153,7 +173,13 @@ def get_tax_returns(family_id):
     family = family_or_404(family_id)
     if family is None:
         return jsonify({"error": "Family is archived"}), 410
-    return jsonify([tax_return.to_dict() for tax_return in family.tax_returns])
+    archived = request.args.get("archived", "false").lower() == "true"
+    tax_returns = (
+        TaxReturn.query.filter_by(family_id=family.id, is_archived=archived)
+        .order_by(TaxReturn.year.desc())
+        .all()
+    )
+    return jsonify([tax_return.to_dict() for tax_return in tax_returns])
 
 
 @api.route("/api/families/<int:family_id>/tax-returns", methods=["POST"])
@@ -169,10 +195,49 @@ def create_tax_return(family_id):
     if TaxReturn.query.filter_by(family_id=family.id, year=year).first():
         return jsonify({"error": "A tax return already exists for this year"}), 409
 
-    tax_return = TaxReturn(family_id=family.id, year=year)
+    try:
+        configuration = tax_return_configuration(data)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    tax_return = TaxReturn(family_id=family.id, year=year, **configuration)
     db.session.add(tax_return)
     db.session.commit()
     return jsonify(tax_return.to_dict()), 201
+
+
+@api.route("/api/tax-returns/<int:tax_return_id>", methods=["PUT"])
+def update_tax_return(tax_return_id):
+    tax_return = TaxReturn.query.get(tax_return_id)
+    if not tax_return:
+        abort(404)
+    if tax_return.is_archived or tax_return.family.is_archived:
+        return jsonify({"error": "Tax return is archived"}), 410
+
+    try:
+        configuration = tax_return_configuration(request.get_json(silent=True), existing=tax_return)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    for field, value in configuration.items():
+        setattr(tax_return, field, value)
+    db.session.commit()
+    return jsonify(tax_return.to_dict())
+
+
+@api.route("/api/tax-returns/<int:tax_return_id>", methods=["DELETE"])
+def archive_tax_return(tax_return_id):
+    tax_return = TaxReturn.query.get(tax_return_id)
+    if not tax_return:
+        abort(404)
+    if tax_return.is_archived:
+        return jsonify({"error": "Tax return is already archived"}), 410
+    if tax_return.family.is_archived:
+        return jsonify({"error": "Family is archived"}), 410
+
+    tax_return.is_archived = True
+    db.session.commit()
+    return jsonify({"message": "Tax return archived successfully"})
 
 
 @api.route("/api/projects")

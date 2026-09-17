@@ -12,6 +12,9 @@ import { Button } from '@/components/ui/button'
 const props = defineProps({
   open: Boolean,
   familyName: String,
+  title: { type: String, default: 'Archive Family' },
+  description: String,
+  confirmLabel: { type: String, default: 'Archive' },
 })
 
 const emit = defineEmits(['update:open', 'confirm', 'cancel'])
@@ -29,9 +32,9 @@ const handleCancel = () => {
   <Dialog :open="open" @update:open="(val) => emit('update:open', val)">
     <DialogContent class="sm:max-w-[425px]">
       <DialogHeader>
-        <DialogTitle>Archive Family</DialogTitle>
+        <DialogTitle>{{ title }}</DialogTitle>
         <DialogDescription>
-          Are you sure you want to archive "{{ familyName }}"? It will be hidden from the active-family list.
+          {{ description || `Are you sure you want to archive "${familyName}"? It will be hidden from the active-family list.` }}
         </DialogDescription>
       </DialogHeader>
 
@@ -40,7 +43,7 @@ const handleCancel = () => {
           Cancel
         </Button>
         <Button variant="destructive" @click="handleConfirm">
-          Archive
+          {{ confirmLabel }}
         </Button>
       </DialogFooter>
     </DialogContent>

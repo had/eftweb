@@ -97,10 +97,9 @@ watch(
             @click.prevent="
               () => {
                 if (!isFamilySelected) return
+                router.push('/tax-returns')
                 if (taxYears.length > 0) {
                   isTaxExpanded = !isTaxExpanded
-                } else {
-                  $router.push('/tax-returns')
                 }
               }
             "

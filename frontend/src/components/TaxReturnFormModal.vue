@@ -15,11 +15,17 @@ import { Label } from '@/components/ui/label'
 const props = defineProps({
   open: Boolean,
   familyId: Number,
+  taxReturn: Object,
 })
 
 const emit = defineEmits(['update:open', 'saved'])
 
 const year = ref(new Date().getFullYear())
+const configuration = ref({
+  has_income_statements: false,
+  has_donation_statements: false,
+  has_investment_statements: false,
+})
 const error = ref('')
 const loading = ref(false)
 
@@ -27,7 +33,12 @@ watch(
   () => props.open,
   (isOpen) => {
     if (isOpen) {
-      year.value = new Date().getFullYear()
+      year.value = props.taxReturn?.year ?? new Date().getFullYear()
+      configuration.value = {
+        has_income_statements: props.taxReturn?.has_income_statements ?? false,
+        has_donation_statements: props.taxReturn?.has_donation_statements ?? false,
+        has_investment_statements: props.taxReturn?.has_investment_statements ?? false,
+      }
       error.value = ''
     }
   },
@@ -49,7 +60,11 @@ const submit = async () => {
 
   loading.value = true
   try {
-    await axios.post(`/api/families/${props.familyId}/tax-returns`, { year: year.value })
+    if (props.taxReturn) {
+      await axios.put(`/api/tax-returns/${props.taxReturn.id}`, configuration.value)
+    } else {
+      await axios.post(`/api/families/${props.familyId}/tax-returns`, { year: year.value, ...configuration.value })
+    }
     emit('saved')
     emit('update:open', false)
   } catch (requestError) {
@@ -64,13 +79,19 @@ const submit = async () => {
   <Dialog :open="open" @update:open="close">
     <DialogContent class="sm:max-w-[425px]">
       <DialogHeader>
-        <DialogTitle>Add a New Tax Return</DialogTitle>
+        <DialogTitle>{{ taxReturn ? 'Edit Tax Return' : 'Add a New Tax Return' }}</DialogTitle>
       </DialogHeader>
 
       <form class="space-y-4 py-4" @submit.prevent="submit">
         <div class="space-y-2">
           <Label for="tax-return-year">Tax-return year *</Label>
-          <Input id="tax-return-year" v-model.number="year" type="number" required />
+          <Input id="tax-return-year" v-model.number="year" type="number" :disabled="Boolean(taxReturn)" required />
+        </div>
+        <div class="space-y-3">
+          <p class="font-medium">Information groups</p>
+          <label class="flex items-center gap-2"><input v-model="configuration.has_income_statements" type="checkbox" /> Income statements</label>
+          <label class="flex items-center gap-2"><input v-model="configuration.has_donation_statements" type="checkbox" /> Donation statements</label>
+          <label class="flex items-center gap-2"><input v-model="configuration.has_investment_statements" type="checkbox" /> Investment statements (GFI forests and life insurance)</label>
         </div>
         <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
       </form>
@@ -78,7 +99,7 @@ const submit = async () => {
       <DialogFooter>
         <Button type="button" variant="outline" :disabled="loading" @click="close">Cancel</Button>
         <Button :disabled="loading" @click="submit">
-          {{ loading ? 'Adding...' : 'Add Tax Return' }}
+          {{ loading ? 'Saving...' : taxReturn ? 'Save Changes' : 'Add Tax Return' }}
         </Button>
       </DialogFooter>
     </DialogContent>
