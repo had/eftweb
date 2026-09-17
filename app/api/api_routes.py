@@ -1,9 +1,12 @@
+from datetime import date
+
 from easyfrenchtax import TaxField
 from flask import abort, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from taxhelpers import prepare_tax_input, simulate_tax
 
+from ..family.models import Family, FamilyMember, TaxReturn
 from ..main.models import Project, db
 from ..tax.models import (
     CharitySegment,
@@ -29,6 +32,147 @@ def after_request(response):
 @api.before_request
 def log_request():
     print(f">>> Flask sees request to: {request.path} from {request.origin}")
+
+
+def family_or_404(family_id):
+    family = Family.query.get(family_id)
+    if not family:
+        abort(404)
+    if family.is_archived:
+        return None
+    return family
+
+
+def member_from_payload(payload, role, position):
+    if not isinstance(payload, dict):
+        raise ValueError("Each family member must be an object")
+
+    first_name = payload.get("first_name")
+    last_name = payload.get("last_name")
+    date_of_birth = payload.get("date_of_birth")
+    if not all(isinstance(value, str) and value.strip() for value in (first_name, last_name, date_of_birth)):
+        raise ValueError("Each family member needs a first name, last name, and date of birth")
+
+    try:
+        birth_date = date.fromisoformat(date_of_birth)
+    except ValueError as error:
+        raise ValueError("Dates of birth must use the YYYY-MM-DD format") from error
+
+    return FamilyMember(
+        first_name=first_name.strip(),
+        last_name=last_name.strip(),
+        date_of_birth=birth_date,
+        role=role,
+        position=position,
+    )
+
+
+def members_from_payload(data):
+    if not isinstance(data, dict):
+        raise ValueError("Family data must be an object")
+
+    taxpayer1 = data.get("taxpayer1")
+    if not taxpayer1:
+        raise ValueError("Taxpayer 1 is required")
+
+    members = [member_from_payload(taxpayer1, "taxpayer1", 1)]
+    taxpayer2 = data.get("taxpayer2")
+    if taxpayer2 is not None:
+        members.append(member_from_payload(taxpayer2, "taxpayer2", 1))
+
+    children = data.get("children", [])
+    if not isinstance(children, list):
+        raise ValueError("Children must be a list")
+    if len(children) > 6:
+        raise ValueError("A family can have at most six children")
+    members.extend(member_from_payload(child, "child", index) for index, child in enumerate(children, start=1))
+    return members
+
+
+@api.route("/api/families")
+def get_families():
+    archived = request.args.get("archived", "false").lower() == "true"
+    families = Family.query.filter_by(is_archived=archived).order_by(Family.id.desc()).all()
+    return jsonify([family.to_dict() for family in families])
+
+
+@api.route("/api/families", methods=["POST"])
+def create_family():
+    try:
+        members = members_from_payload(request.get_json(silent=True))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    family = Family(members=members)
+    db.session.add(family)
+    db.session.commit()
+    return jsonify(family.to_dict()), 201
+
+
+@api.route("/api/families/<int:family_id>")
+def get_family(family_id):
+    family = family_or_404(family_id)
+    if family is None:
+        return jsonify({"error": "Family is archived"}), 410
+    return jsonify(family.to_dict())
+
+
+@api.route("/api/families/<int:family_id>", methods=["PUT"])
+def update_family(family_id):
+    family = family_or_404(family_id)
+    if family is None:
+        return jsonify({"error": "Family is archived"}), 410
+
+    try:
+        members = members_from_payload(request.get_json(silent=True))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    family.members.clear()
+    db.session.flush()
+    family.members = members
+    db.session.commit()
+    return jsonify(family.to_dict())
+
+
+@api.route("/api/families/<int:family_id>", methods=["DELETE"])
+def archive_family(family_id):
+    family = Family.query.get(family_id)
+    if not family:
+        abort(404)
+    if family.is_archived:
+        return jsonify({"error": "Family is already archived"}), 410
+
+    family.is_archived = True
+    db.session.commit()
+    return jsonify({"message": "Family archived successfully"})
+
+
+@api.route("/api/families/<int:family_id>/tax-returns")
+def get_tax_returns(family_id):
+    family = family_or_404(family_id)
+    if family is None:
+        return jsonify({"error": "Family is archived"}), 410
+    return jsonify([tax_return.to_dict() for tax_return in family.tax_returns])
+
+
+@api.route("/api/families/<int:family_id>/tax-returns", methods=["POST"])
+def create_tax_return(family_id):
+    family = family_or_404(family_id)
+    if family is None:
+        return jsonify({"error": "Family is archived"}), 410
+
+    data = request.get_json(silent=True)
+    year = data.get("year") if isinstance(data, dict) else None
+    if isinstance(year, bool) or not isinstance(year, int):
+        return jsonify({"error": "Tax return year must be an integer"}), 400
+    if TaxReturn.query.filter_by(family_id=family.id, year=year).first():
+        return jsonify({"error": "A tax return already exists for this year"}), 409
+
+    tax_return = TaxReturn(family_id=family.id, year=year)
+    db.session.add(tax_return)
+    db.session.commit()
+    return jsonify(tax_return.to_dict()), 201
 
 
 @api.route("/api/projects")

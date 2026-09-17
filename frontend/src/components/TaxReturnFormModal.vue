@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label'
 
 const props = defineProps({
   open: Boolean,
-  projectId: Number,
+  familyId: Number,
 })
 
 const emit = defineEmits(['update:open', 'saved'])
@@ -49,7 +49,7 @@ const submit = async () => {
 
   loading.value = true
   try {
-    await axios.post(`/api/projects/${props.projectId}/tax-statements`, { year: year.value })
+    await axios.post(`/api/families/${props.familyId}/tax-returns`, { year: year.value })
     emit('saved')
     emit('update:open', false)
   } catch (requestError) {

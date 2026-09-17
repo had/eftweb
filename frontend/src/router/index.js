@@ -1,10 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '@/views/HomeView.vue'
-import ProjectListView from '@/views/ProjectListView.vue'
-import ProjectLandingView from '@/views/ProjectLandingView.vue'
+import FamilyListView from '@/views/FamilyListView.vue'
+import FamilyLandingView from '@/views/FamilyLandingView.vue'
 import StocksView from '@/views/StocksView.vue'
-import TaxesView from '@/views/TaxesView.vue'
-import TaxView from '@/views/TaxView.vue'
+import TaxReturnsView from '@/views/TaxReturnsView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -15,14 +14,14 @@ const router = createRouter({
       component: HomeView,
     },
     {
-      path: '/projects',
-      name: 'projects',
-      component: ProjectListView,
+      path: '/families',
+      name: 'families',
+      component: FamilyListView,
     },
     {
-      path: '/project',
-      name: 'project',
-      component: ProjectLandingView,
+      path: '/family',
+      name: 'family',
+      component: FamilyLandingView,
     },
     {
       path: '/stocks',
@@ -30,14 +29,9 @@ const router = createRouter({
       component: StocksView,
     },
     {
-      path: '/taxes',
-      name: 'taxes',
-      component: TaxesView,
-    },
-    {
-      path: '/taxes/:taxId',
-      name: 'tax',
-      component: TaxView,
+      path: '/tax-returns',
+      name: 'tax-returns',
+      component: TaxReturnsView,
     },
   ],
 })

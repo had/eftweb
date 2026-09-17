@@ -40,6 +40,7 @@ def create_app(config_name):
     db.init_app(app)
     migrate.init_app(app, db, render_as_batch=True)
 
+    from .family import models as family_models  # noqa: F401
     from .main import main as main_bp
     app.register_blueprint(main_bp)
     from .stocks import stocks as stocks_bp

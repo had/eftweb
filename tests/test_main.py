@@ -1,7 +1,11 @@
+from datetime import date
+
 import pytest
 from flask import url_for
+from sqlalchemy.exc import IntegrityError
 
 from app import create_app, db
+from app.family.models import Family, FamilyMember
 from app.main.models import Project
 
 
@@ -87,3 +91,133 @@ def test_tax_statement_api(app):
 
     duplicate = client.post(endpoint, json={"year": 2026})
     assert duplicate.status_code == 409
+
+
+def test_family_members_use_unique_taxpayer_and_child_slots(app):
+    family = Family()
+    db.session.add(family)
+    db.session.commit()
+
+    member = FamilyMember(
+        family_id=family.id,
+        first_name="Ada",
+        last_name="Lovelace",
+        date_of_birth=date(1815, 12, 10),
+        role="taxpayer1",
+        position=1,
+    )
+    db.session.add(member)
+    db.session.commit()
+
+    assert family.taxpayer1 == member
+    assert family.taxpayer2 is None
+    assert family.children == []
+
+    duplicate_taxpayer = FamilyMember(
+        family_id=family.id,
+        first_name="Grace",
+        last_name="Hopper",
+        date_of_birth=date(1906, 12, 9),
+        role="taxpayer1",
+        position=1,
+    )
+    db.session.add(duplicate_taxpayer)
+    with pytest.raises(IntegrityError):
+        db.session.commit()
+    db.session.rollback()
+
+    seventh_child = FamilyMember(
+        family_id=family.id,
+        first_name="Katherine",
+        last_name="Johnson",
+        date_of_birth=date(1918, 8, 26),
+        role="child",
+        position=7,
+    )
+    db.session.add(seventh_child)
+    with pytest.raises(IntegrityError):
+        db.session.commit()
+    db.session.rollback()
+
+
+def family_payload(**overrides):
+    payload = {
+        "taxpayer1": {
+            "first_name": "Ada",
+            "last_name": "Lovelace",
+            "date_of_birth": "1815-12-10",
+        },
+        "taxpayer2": None,
+        "children": [],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_family_api_creates_updates_lists_and_archives_families(app):
+    client = app.test_client()
+
+    missing_taxpayer = client.post("/api/families", json={})
+    assert missing_taxpayer.status_code == 400
+
+    incomplete_taxpayer2 = client.post(
+        "/api/families", json=family_payload(taxpayer2={"first_name": "William"})
+    )
+    assert incomplete_taxpayer2.status_code == 400
+
+    too_many_children = client.post(
+        "/api/families",
+        json=family_payload(children=[family_payload()["taxpayer1"] for _ in range(7)]),
+    )
+    assert too_many_children.status_code == 400
+
+    created = client.post("/api/families", json=family_payload())
+    assert created.status_code == 201
+    family = created.get_json()
+    assert family["taxpayer1"]["first_name"] == "Ada"
+
+    updated = client.put(
+        f"/api/families/{family['id']}",
+        json=family_payload(
+            taxpayer2={
+                "first_name": "William",
+                "last_name": "King-Noel",
+                "date_of_birth": "1794-02-26",
+            },
+            children=[
+                {
+                    "first_name": "Byron",
+                    "last_name": "Lovelace",
+                    "date_of_birth": "1836-05-12",
+                }
+            ],
+        ),
+    )
+    assert updated.status_code == 200
+    assert len(updated.get_json()["children"]) == 1
+
+    assert client.get("/api/families").get_json()[0]["id"] == family["id"]
+    archived = client.delete(f"/api/families/{family['id']}")
+    assert archived.status_code == 200
+    assert client.get("/api/families").get_json() == []
+    assert client.get("/api/families?archived=true").get_json()[0]["id"] == family["id"]
+    assert client.put(f"/api/families/{family['id']}", json=family_payload()).status_code == 410
+
+
+def test_family_tax_returns_are_unique_and_unavailable_when_archived(app):
+    client = app.test_client()
+    family = client.post("/api/families", json=family_payload()).get_json()
+    endpoint = f"/api/families/{family['id']}/tax-returns"
+
+    assert client.get(endpoint).get_json() == []
+    assert client.post(endpoint, json={}).status_code == 400
+
+    created = client.post(endpoint, json={"year": 2026})
+    assert created.status_code == 201
+    assert created.get_json()["year"] == 2026
+    assert client.post(endpoint, json={"year": 2026}).status_code == 409
+    assert client.get(endpoint).get_json() == [created.get_json()]
+
+    client.delete(f"/api/families/{family['id']}")
+    assert client.get(endpoint).status_code == 410
+    assert client.post(endpoint, json={"year": 2027}).status_code == 410

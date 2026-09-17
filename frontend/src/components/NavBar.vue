@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { useProjectStore } from '@/stores/project'
+import { useFamilyStore } from '@/stores/family'
 import { Separator } from '@/components/ui/separator'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronDown, ChevronRight } from 'lucide-vue-next'
@@ -9,28 +9,28 @@ import axios from 'axios'
 
 const route = useRoute()
 const router = useRouter()
-const projectStore = useProjectStore()
+const familyStore = useFamilyStore()
 const taxYears = ref([])
 const isTaxExpanded = ref(false)
 
-const isProjectSelected = computed(() => !!projectStore.projectId)
+const isFamilySelected = computed(() => !!familyStore.familyId)
 
 const isCurrentPath = (viewPath) => {
   return route.path === viewPath
 }
 
 const exitFamily = () => {
-  projectStore.clearCurrentProject()
-  router.push('/projects')
+  familyStore.clearCurrentFamily()
+  router.push('/families')
 }
 
-// Watch for project changes and fetch tax years
+// Watch for family changes and fetch tax years
 watch(
-  [() => projectStore.projectId, () => projectStore.taxStatementsVersion],
+  [() => familyStore.familyId, () => familyStore.taxReturnsVersion],
   async ([newId]) => {
     if (newId) {
       try {
-        const response = await axios.get(`/api/projects/${newId}/tax-statements`)
+        const response = await axios.get(`/api/families/${newId}/tax-returns`)
         taxYears.value = response.data
           .map((ts) => ({
             year: ts.year,
@@ -55,23 +55,23 @@ watch(
     <div class="navsection">
       <RouterLink to="/" class="logo py-4 self-center">Easy French Tax</RouterLink>
 
-      <!-- Project Section -->
+      <!-- Family Section -->
       <Separator class="my-2 mx-2" />
       <div class="px-3 py-2">
         <RouterLink
-          v-if="!isProjectSelected"
-          to="/projects"
+          v-if="!isFamilySelected"
+          to="/families"
           class="text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           Select a family →
         </RouterLink>
         <div v-else class="flex items-center justify-between gap-2">
           <RouterLink
-            to="/project"
+            to="/family"
             class="min-w-0 flex-1 text-sm font-medium truncate hover:text-primary transition-colors cursor-pointer"
-            :title="projectStore.projectName"
+            :title="familyStore.familyName"
           >
-            {{ projectStore.projectName }}
+            {{ familyStore.familyName }}
           </RouterLink>
           <button
             type="button"
@@ -90,43 +90,37 @@ watch(
           <CollapsibleTrigger
             :class="[
               'item flex items-center justify-between w-full',
-              isCurrentPath('/taxes') ? 'background-color:#000 border-l-2 border-l-gray-500' : '',
-              !isProjectSelected ? 'opacity-50 cursor-not-allowed' : '',
+              isCurrentPath('/tax-returns') ? 'background-color:#000 border-l-2 border-l-gray-500' : '',
+              !isFamilySelected ? 'opacity-50 cursor-not-allowed' : '',
             ]"
-            :disabled="!isProjectSelected"
+            :disabled="!isFamilySelected"
             @click.prevent="
               () => {
-                if (!isProjectSelected) return
+                if (!isFamilySelected) return
                 if (taxYears.length > 0) {
                   isTaxExpanded = !isTaxExpanded
                 } else {
-                  $router.push('/taxes')
+                  $router.push('/tax-returns')
                 }
               }
             "
           >
-            <span>Taxes</span>
+            <span>Tax Returns</span>
             <component
               :is="isTaxExpanded ? ChevronDown : ChevronRight"
-              v-if="isProjectSelected && taxYears.length > 0"
+              v-if="isFamilySelected && taxYears.length > 0"
               class="h-4 w-4"
             />
           </CollapsibleTrigger>
 
-          <CollapsibleContent v-if="isProjectSelected">
-            <RouterLink
+          <CollapsibleContent v-if="isFamilySelected">
+            <span
               v-for="taxYear in taxYears"
               :key="taxYear.id"
-              :to="`/taxes/${taxYear.id}`"
-              :class="[
-                'item pl-8 text-sm',
-                isCurrentPath(`/taxes/${taxYear.id}`)
-                  ? 'background-color:#000 border-l-2 border-l-gray-500'
-                  : '',
-              ]"
+              class="item pl-8 text-sm"
             >
               {{ taxYear.year }}
-            </RouterLink>
+            </span>
           </CollapsibleContent>
         </Collapsible>
 
@@ -136,11 +130,11 @@ watch(
           :class="[
             'item',
             isCurrentPath('/stocks') ? 'background-color:#000 border-l-2 border-l-gray-500' : '',
-            !isProjectSelected ? 'opacity-50 cursor-not-allowed pointer-events-none' : '',
+            !isFamilySelected ? 'opacity-50 cursor-not-allowed pointer-events-none' : '',
           ]"
           @click.prevent="
             () => {
-              if (isProjectSelected) {
+              if (isFamilySelected) {
                 $router.push('/stocks')
               }
             }
