@@ -44,6 +44,41 @@ def get_project(project_id):
     else:
         abort(404)
 
+
+@api.route("/api/projects/<int:project_id>/tax-statements")
+def get_tax_statements(project_id):
+    project = Project.query.get(project_id)
+    if not project or project.is_deleted:
+        abort(404)
+
+    statements = (
+        TaxStatement.query.filter_by(project_id=project_id)
+        .order_by(TaxStatement.year.desc())
+        .all()
+    )
+    return jsonify([statement.to_dict() for statement in statements])
+
+
+@api.route("/api/projects/<int:project_id>/tax-statements", methods=["POST"])
+def create_tax_statement(project_id):
+    project = Project.query.get(project_id)
+    if not project or project.is_deleted:
+        abort(404)
+
+    data = request.get_json(silent=True)
+    year = data.get("year") if isinstance(data, dict) else None
+    if isinstance(year, bool) or not isinstance(year, int):
+        return jsonify({"error": "Tax return year must be an integer"}), 400
+
+    existing_statement = TaxStatement.query.filter_by(project_id=project_id, year=year).first()
+    if existing_statement:
+        return jsonify({"error": "A tax return already exists for this year"}), 409
+
+    statement = TaxStatement(project_id=project_id, year=year)
+    db.session.add(statement)
+    db.session.commit()
+    return jsonify(statement.to_dict()), 201
+
 @api.route("/api/projects", methods=["POST"])
 def create_project():
     data = request.get_json()
@@ -165,4 +200,3 @@ def get_taxestimation(taxstatement_id):
     tax_result, tax_flags = simulate_tax(taxstatement.year, tax_input)
     total_taxes = tax_result[TaxField.NET_TAXES] + tax_result[TaxField.NET_SOCIAL_TAXES]
     return jsonify({'total_taxes': total_taxes, 'details': tax_result, 'flags': tax_flags})
-

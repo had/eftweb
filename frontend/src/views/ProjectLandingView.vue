@@ -1,18 +1,49 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
+import axios from 'axios'
+import { Plus } from 'lucide-vue-next'
 import { useProjectStore } from '@/stores/project'
 import EftLayout from '@/components/EftLayout.vue'
+import TaxReturnFormModal from '@/components/TaxReturnFormModal.vue'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 const projectStore = useProjectStore()
 
-// Mock data for tax returns
-const taxReturns = ref([
-  { id: 1, year: 2024, status: 'In Progress', amount: '€45,230' },
-  { id: 2, year: 2023, status: 'Completed', amount: '€42,150' },
-  { id: 3, year: 2022, status: 'Completed', amount: '€38,900' },
-  { id: 4, year: 2021, status: 'Completed', amount: '€35,420' },
-])
+const taxReturns = ref([])
+const loadingTaxReturns = ref(true)
+const taxReturnsError = ref('')
+const showTaxReturnModal = ref(false)
+
+const loadTaxReturns = async () => {
+  if (!projectStore.projectId) {
+    taxReturns.value = []
+    loadingTaxReturns.value = false
+    return
+  }
+
+  loadingTaxReturns.value = true
+  taxReturnsError.value = ''
+  try {
+    const response = await axios.get(`/api/projects/${projectStore.projectId}/tax-statements`)
+    taxReturns.value = response.data
+  } catch (error) {
+    console.error('Failed to fetch tax returns:', error)
+    taxReturnsError.value = 'Failed to load tax returns. Please try again.'
+  } finally {
+    loadingTaxReturns.value = false
+  }
+}
+
+watch(
+  [() => projectStore.projectId, () => projectStore.taxStatementsVersion],
+  loadTaxReturns,
+  { immediate: true },
+)
+
+const taxReturnSaved = () => {
+  projectStore.refreshTaxStatements()
+}
 
 // Mock data for stock events
 const stockEvents = ref([
@@ -27,26 +58,36 @@ const stockEvents = ref([
 <template>
   <EftLayout :title="projectStore.projectName || 'Family'">
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <!-- Tax Returns List -->
       <Card>
         <CardHeader>
           <CardTitle>Tax Returns</CardTitle>
         </CardHeader>
         <CardContent>
-          <div class="space-y-3">
-            <div
-              v-for="taxReturn in taxReturns"
-              :key="taxReturn.id"
-              class="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer"
+          <div v-if="loadingTaxReturns" class="space-y-3">
+            <div v-for="index in 2" :key="index" class="h-16 animate-pulse rounded-lg bg-muted" />
+          </div>
+          <div v-else-if="taxReturnsError" class="text-center py-4">
+            <p class="text-destructive">{{ taxReturnsError }}</p>
+            <Button class="mt-4" variant="outline" @click="loadTaxReturns">Retry</Button>
+          </div>
+          <div v-else class="grid gap-3 sm:grid-cols-2">
+            <Card
+              class="cursor-pointer border-2 border-dashed transition-shadow hover:shadow-lg"
+              @click="showTaxReturnModal = true"
             >
-              <div class="flex flex-col">
-                <span class="font-medium">{{ taxReturn.year }}</span>
-                <span class="text-sm text-muted-foreground">{{ taxReturn.status }}</span>
-              </div>
-              <div class="text-right">
-                <span class="font-semibold">{{ taxReturn.amount }}</span>
-              </div>
-            </div>
+              <CardContent class="flex min-h-24 flex-col items-center justify-center gap-2 p-4 text-center">
+                <Plus class="h-6 w-6 text-muted-foreground" />
+                <span class="font-medium">Add a New Tax Return</span>
+              </CardContent>
+            </Card>
+            <Card v-for="taxReturn in taxReturns" :key="taxReturn.id">
+              <CardContent class="flex min-h-24 items-center p-4">
+                <span class="text-lg font-medium">{{ taxReturn.year }}</span>
+              </CardContent>
+            </Card>
+            <p v-if="taxReturns.length === 0" class="text-sm text-muted-foreground sm:col-span-2">
+              No tax returns found.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -91,5 +132,11 @@ const stockEvents = ref([
         </CardContent>
       </Card>
     </div>
+
+    <TaxReturnFormModal
+      v-model:open="showTaxReturnModal"
+      :project-id="projectStore.projectId"
+      @saved="taxReturnSaved"
+    />
   </EftLayout>
 </template>

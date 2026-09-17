@@ -2,24 +2,30 @@
 import { useProjectStore } from '@/stores/project'
 import { RouterLink } from 'vue-router'
 import axios from 'axios'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 const projectStore = useProjectStore()
 
 const taxStatements = ref([])
 
-projectStore.$subscribe(async (MutationObserver, state) => {
-  try {
-    const url = `http://localhost:5001/api/projects/${state.projectId}`
-    const response = await axios.get(url)
-    taxStatements.value = []
-    for (const t of response.data) {
-      taxStatements.value.push(t)
+watch(
+  [() => projectStore.projectId, () => projectStore.taxStatementsVersion],
+  async ([projectId]) => {
+    if (!projectId) {
+      taxStatements.value = []
+      return
     }
-  } catch (error) {
-    console.error('Error fetching tax statements:', error)
-  }
-})
+
+    try {
+      const response = await axios.get(`/api/projects/${projectId}/tax-statements`)
+      taxStatements.value = response.data
+    } catch (error) {
+      console.error('Error fetching tax statements:', error)
+      taxStatements.value = []
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

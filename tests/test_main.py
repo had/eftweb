@@ -2,6 +2,7 @@ import pytest
 from flask import url_for
 
 from app import create_app, db
+from app.main.models import Project
 
 
 @pytest.fixture()
@@ -59,3 +60,30 @@ def test_project(app):
     assert '<a href="/">/</a>' in response_delete.get_data(as_text=True)
     response_index = client.get(url_for('main.index'))
     assert "Unit-test" not in response_index.get_data(as_text=True)
+
+
+def test_tax_statement_api(app):
+    project = Project(name="Tax return API family", married=False, nb_children=0)
+    db.session.add(project)
+    db.session.commit()
+    client = app.test_client()
+    endpoint = f"/api/projects/{project.id}/tax-statements"
+
+    assert client.get(endpoint).get_json() == []
+
+    missing_year = client.post(endpoint, json={})
+    assert missing_year.status_code == 400
+
+    invalid_year = client.post(endpoint, json={"year": "2026"})
+    assert invalid_year.status_code == 400
+
+    created = client.post(endpoint, json={"year": 2026})
+    assert created.status_code == 201
+    assert created.get_json()["year"] == 2026
+
+    listed = client.get(endpoint)
+    assert listed.status_code == 200
+    assert listed.get_json() == [created.get_json()]
+
+    duplicate = client.post(endpoint, json={"year": 2026})
+    assert duplicate.status_code == 409

@@ -6,6 +6,7 @@ const projectLocalStorageKey = 'current_project'
 export const useProjectStore = defineStore('project', () => {
   const projectName = ref('')
   const projectId = ref(0)
+  const taxStatementsVersion = ref(0)
 
   const locProjectJSON = localStorage.getItem(projectLocalStorageKey)
   if (locProjectJSON) {
@@ -32,5 +33,16 @@ export const useProjectStore = defineStore('project', () => {
     localStorage.removeItem(projectLocalStorageKey)
   }
 
-  return { projectName, projectId, setCurrentProject, clearCurrentProject }
+  function refreshTaxStatements() {
+    taxStatementsVersion.value += 1
+  }
+
+  return {
+    projectName,
+    projectId,
+    taxStatementsVersion,
+    setCurrentProject,
+    clearCurrentProject,
+    refreshTaxStatements,
+  }
 })

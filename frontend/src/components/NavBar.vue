@@ -26,12 +26,12 @@ const exitFamily = () => {
 
 // Watch for project changes and fetch tax years
 watch(
-  () => projectStore.projectId,
-  async (newId) => {
+  [() => projectStore.projectId, () => projectStore.taxStatementsVersion],
+  async ([newId]) => {
     if (newId) {
       try {
-        const response = await axios.get(`/api/projects/${newId}`)
-        taxYears.value = response.data.taxstatements
+        const response = await axios.get(`/api/projects/${newId}/tax-statements`)
+        taxYears.value = response.data
           .map((ts) => ({
             year: ts.year,
             id: ts.id,
