@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal, InvalidOperation
 
 from easyfrenchtax import TaxField
 from flask import abort, jsonify, request
@@ -6,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from taxhelpers import prepare_tax_input, simulate_tax
 
-from ..family.models import Family, FamilyMember, TaxReturn
+from ..family.models import Family, FamilyMember, IncomeStatement, TaxReturn
 from ..main.models import Project, db
 from ..tax.models import (
     CharitySegment,
@@ -49,6 +50,12 @@ TAX_RETURN_CONFIGURATION_FIELDS = (
     "has_investment_statements",
 )
 
+INCOME_STATEMENT_AMOUNT_FIELDS = (
+    "known_employment_income",
+    "income_tax_withheld",
+    "supplementary_pension_contributions",
+)
+
 
 def tax_return_configuration(data, existing=None):
     if not isinstance(data, dict):
@@ -61,6 +68,56 @@ def tax_return_configuration(data, existing=None):
             raise ValueError(f"{field} must be a boolean")
         configuration[field] = value
     return configuration
+
+
+def active_tax_return_or_404(tax_return_id):
+    tax_return = TaxReturn.query.get(tax_return_id)
+    if not tax_return:
+        abort(404)
+    if tax_return.is_archived or tax_return.family.is_archived:
+        return None
+    return tax_return
+
+
+def income_statement_from_payload(data, tax_return):
+    if not isinstance(data, dict):
+        raise ValueError("Income statement data must be an object")
+
+    taxpayer_role = data.get("taxpayer_role")
+    allowed_roles = {"taxpayer1"}
+    if tax_return.family.taxpayer2:
+        allowed_roles.add("taxpayer2")
+    if taxpayer_role not in allowed_roles:
+        raise ValueError("Select a taxpayer in this family")
+
+    employer_name = data.get("employer_name")
+    if not isinstance(employer_name, str) or not employer_name.strip():
+        raise ValueError("Employer name is required")
+
+    amounts = {}
+    for field in INCOME_STATEMENT_AMOUNT_FIELDS:
+        value = data.get(field)
+        if value is None or value == "":
+            amounts[field] = None
+            continue
+        if isinstance(value, bool):
+            raise ValueError(f"{field} must be a non-negative monetary amount")
+        try:
+            amount = Decimal(str(value))
+        except (InvalidOperation, ValueError) as error:
+            raise ValueError(f"{field} must be a non-negative monetary amount") from error
+        if not amount.is_finite() or amount < 0 or amount.as_tuple().exponent < -2:
+            raise ValueError(f"{field} must be a non-negative monetary amount with at most two decimals")
+        amounts[field] = amount
+
+    if not any(amount is not None for amount in amounts.values()):
+        raise ValueError("Enter at least one monetary amount")
+
+    return IncomeStatement(
+        taxpayer_role=taxpayer_role,
+        employer_name=employer_name.strip(),
+        **amounts,
+    )
 
 
 def member_from_payload(payload, role, position):
@@ -238,6 +295,32 @@ def archive_tax_return(tax_return_id):
     tax_return.is_archived = True
     db.session.commit()
     return jsonify({"message": "Tax return archived successfully"})
+
+
+@api.route("/api/tax-returns/<int:tax_return_id>/income-statements")
+def get_income_statements(tax_return_id):
+    tax_return = active_tax_return_or_404(tax_return_id)
+    if tax_return is None:
+        return jsonify({"error": "Tax return is archived"}), 410
+    return jsonify([statement.to_dict() for statement in tax_return.income_statements])
+
+
+@api.route("/api/tax-returns/<int:tax_return_id>/income-statements", methods=["POST"])
+def create_income_statement(tax_return_id):
+    tax_return = active_tax_return_or_404(tax_return_id)
+    if tax_return is None:
+        return jsonify({"error": "Tax return is archived"}), 410
+    if not tax_return.has_income_statements:
+        return jsonify({"error": "Income statements are not enabled for this tax return"}), 409
+
+    try:
+        statement = income_statement_from_payload(request.get_json(silent=True), tax_return)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    tax_return.income_statements.append(statement)
+    db.session.commit()
+    return jsonify(statement.to_dict()), 201
 
 
 @api.route("/api/projects")

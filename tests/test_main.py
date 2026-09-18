@@ -5,7 +5,7 @@ from flask import url_for
 from sqlalchemy.exc import IntegrityError
 
 from app import create_app, db
-from app.family.models import Family, FamilyMember
+from app.family.models import Family, FamilyMember, IncomeStatement, TaxReturn
 from app.main.models import Project
 
 
@@ -247,3 +247,106 @@ def test_family_tax_returns_are_unique_and_unavailable_when_archived(app):
     client.delete(f"/api/families/{family['id']}")
     assert client.get(endpoint).status_code == 410
     assert client.post(endpoint, json={"year": 2027}).status_code == 410
+
+
+def test_income_statements_allow_multiple_statements_per_taxpayer(app):
+    client = app.test_client()
+    family = client.post(
+        "/api/families",
+        json=family_payload(
+            taxpayer2={
+                "first_name": "Grace",
+                "last_name": "Hopper",
+                "date_of_birth": "1906-12-09",
+            }
+        ),
+    ).get_json()
+    tax_return = client.post(
+        f"/api/families/{family['id']}/tax-returns",
+        json={"year": 2026, "has_income_statements": True},
+    ).get_json()
+    endpoint = f"/api/tax-returns/{tax_return['id']}/income-statements"
+
+    assert client.get(endpoint).get_json() == []
+    assert client.post(endpoint, json={}).status_code == 400
+    assert client.post(
+        endpoint,
+        json={"taxpayer_role": "taxpayer1", "employer_name": "Google"},
+    ).status_code == 400
+    assert client.post(
+        endpoint,
+        json={"taxpayer_role": "child", "employer_name": "Invalid", "known_employment_income": 1},
+    ).status_code == 400
+    assert client.post(
+        endpoint,
+        json={
+            "taxpayer_role": "taxpayer2",
+            "employer_name": "Anthropic",
+            "known_employment_income": 1000.25,
+        },
+    ).status_code == 201
+    assert client.post(
+        endpoint,
+        json={
+            "taxpayer_role": "taxpayer1",
+            "employer_name": "Google",
+            "known_employment_income": 2000,
+            "income_tax_withheld": 100,
+        },
+    ).status_code == 201
+    assert client.post(
+        endpoint,
+        json={
+            "taxpayer_role": "taxpayer1",
+            "employer_name": "Exxon",
+            "supplementary_pension_contributions": 25,
+        },
+    ).status_code == 201
+    statements = client.get(endpoint).get_json()
+    assert len(statements) == 3
+    assert statements[0]["known_employment_income"] == "1000.25"
+    assert statements[1]["income_tax_withheld"] == "100.00"
+
+    replacement = client.put(
+        f"/api/families/{family['id']}",
+        json=family_payload(
+            taxpayer2={
+                "first_name": "Katherine",
+                "last_name": "Johnson",
+                "date_of_birth": "1918-08-26",
+            }
+        ),
+    )
+    assert replacement.status_code == 200
+    assert [statement["taxpayer_role"] for statement in client.get(endpoint).get_json()] == [
+        "taxpayer2",
+        "taxpayer1",
+        "taxpayer1",
+    ]
+
+    client.put(f"/api/tax-returns/{tax_return['id']}", json={"has_income_statements": False})
+    assert client.get(endpoint).status_code == 200
+    assert client.post(
+        endpoint,
+        json={"taxpayer_role": "taxpayer1", "employer_name": "Later", "known_employment_income": 1},
+    ).status_code == 409
+
+    client.delete(f"/api/tax-returns/{tax_return['id']}")
+    assert client.get(endpoint).status_code == 410
+
+
+def test_income_statement_model_cascades_with_tax_return(app):
+    family = Family()
+    tax_return = TaxReturn(family=family, year=2026, has_income_statements=True)
+    statement = IncomeStatement(
+        taxpayer_role="taxpayer1",
+        employer_name="Google",
+        known_employment_income=100,
+    )
+    tax_return.income_statements.append(statement)
+    db.session.add(tax_return)
+    db.session.commit()
+
+    db.session.delete(tax_return)
+    db.session.commit()
+    assert IncomeStatement.query.count() == 0

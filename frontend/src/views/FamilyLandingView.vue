@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { Pencil, Plus, Trash2 } from 'lucide-vue-next'
 import { useFamilyStore } from '@/stores/family'
@@ -10,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 const familyStore = useFamilyStore()
+const router = useRouter()
 const taxReturns = ref([])
 const loading = ref(true)
 const error = ref('')
@@ -37,6 +39,7 @@ watch([() => familyStore.familyId, () => familyStore.taxReturnsVersion], loadTax
 const taxReturnSaved = () => familyStore.refreshTaxReturns()
 const openCreate = () => { editingTaxReturn.value = null; showTaxReturnModal.value = true }
 const openEdit = (taxReturn) => { editingTaxReturn.value = taxReturn; showTaxReturnModal.value = true }
+const selectTaxReturn = (taxReturn) => router.push(`/tax-returns/${taxReturn.id}`)
 const openArchive = (taxReturn) => { archivingTaxReturn.value = taxReturn; showArchiveConfirm.value = true }
 const archiveTaxReturn = async () => {
   if (!archivingTaxReturn.value) return
@@ -61,7 +64,7 @@ const configurationLabels = (taxReturn) => [
         <div v-else-if="error" class="text-center py-4"><p class="text-destructive">{{ error }}</p><Button class="mt-4" variant="outline" @click="loadTaxReturns">Retry</Button></div>
         <div v-else class="grid gap-3 sm:grid-cols-2">
           <Card v-if="!showArchived" class="cursor-pointer border-2 border-dashed transition-shadow hover:shadow-lg" @click="openCreate"><CardContent class="flex min-h-24 flex-col items-center justify-center gap-2 p-4 text-center"><Plus class="h-6 w-6 text-muted-foreground" /><span class="font-medium">Add a New Tax Return</span></CardContent></Card>
-          <Card v-for="taxReturn in taxReturns" :key="taxReturn.id" class="relative"><CardContent class="flex min-h-24 flex-col items-start justify-center gap-2 p-4"><div v-if="!showArchived" class="absolute right-2 top-2 flex gap-1"><Button variant="ghost" size="icon" @click="openEdit(taxReturn)"><Pencil class="h-4 w-4" /></Button><Button variant="ghost" size="icon" class="text-destructive" @click="openArchive(taxReturn)"><Trash2 class="h-4 w-4" /></Button></div><span class="text-lg font-medium">{{ taxReturn.year }}</span><div class="flex flex-wrap gap-1"><span v-for="label in configurationLabels(taxReturn)" :key="label" class="rounded bg-muted px-2 py-0.5 text-xs">{{ label }}</span><span v-if="configurationLabels(taxReturn).length === 0" class="text-xs text-muted-foreground">No groups selected</span></div></CardContent></Card>
+          <Card v-for="taxReturn in taxReturns" :key="taxReturn.id" :class="['relative', !showArchived && 'cursor-pointer transition-shadow hover:shadow-lg']" @click="!showArchived && selectTaxReturn(taxReturn)"><CardContent class="flex min-h-24 flex-col items-start justify-center gap-2 p-4"><div v-if="!showArchived" class="absolute right-2 top-2 flex gap-1"><Button variant="ghost" size="icon" @click.stop="openEdit(taxReturn)"><Pencil class="h-4 w-4" /></Button><Button variant="ghost" size="icon" class="text-destructive" @click.stop="openArchive(taxReturn)"><Trash2 class="h-4 w-4" /></Button></div><span class="text-lg font-medium">{{ taxReturn.year }}</span><div class="flex flex-wrap gap-1"><span v-for="label in configurationLabels(taxReturn)" :key="label" class="rounded bg-muted px-2 py-0.5 text-xs">{{ label }}</span><span v-if="configurationLabels(taxReturn).length === 0" class="text-xs text-muted-foreground">No groups selected</span></div></CardContent></Card>
           <p v-if="taxReturns.length === 0" class="text-sm text-muted-foreground sm:col-span-2">No {{ showArchived ? 'archived' : 'active' }} tax returns found.</p>
         </div>
       </CardContent>

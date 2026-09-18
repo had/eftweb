@@ -90,6 +90,12 @@ class TaxReturn(db.Model):
     is_archived = db.Column(db.Boolean, nullable=False, default=False)
 
     family = db.relationship("Family", back_populates="tax_returns")
+    income_statements = db.relationship(
+        "IncomeStatement",
+        back_populates="tax_return",
+        cascade="all, delete-orphan",
+        order_by="IncomeStatement.id",
+    )
 
     def to_dict(self):
         return {
@@ -100,4 +106,45 @@ class TaxReturn(db.Model):
             "has_donation_statements": self.has_donation_statements,
             "has_investment_statements": self.has_investment_statements,
             "is_archived": self.is_archived,
+        }
+
+
+class IncomeStatement(db.Model):
+    __tablename__ = "income_statements"
+    __table_args__ = (
+        db.CheckConstraint(
+            "taxpayer_role IN ('taxpayer1', 'taxpayer2')",
+            name="ck_income_statements_taxpayer_role",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    tax_return_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tax_returns.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    taxpayer_role = db.Column(db.String(16), nullable=False)
+    employer_name = db.Column(db.String(255), nullable=False)
+    known_employment_income = db.Column(db.Numeric(12, 2), nullable=True)
+    income_tax_withheld = db.Column(db.Numeric(12, 2), nullable=True)
+    supplementary_pension_contributions = db.Column(db.Numeric(12, 2), nullable=True)
+
+    tax_return = db.relationship("TaxReturn", back_populates="income_statements")
+
+    @staticmethod
+    def amount_to_dict(amount):
+        return format(amount, ".2f") if amount is not None else None
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "tax_return_id": self.tax_return_id,
+            "taxpayer_role": self.taxpayer_role,
+            "employer_name": self.employer_name,
+            "known_employment_income": self.amount_to_dict(self.known_employment_income),
+            "income_tax_withheld": self.amount_to_dict(self.income_tax_withheld),
+            "supplementary_pension_contributions": self.amount_to_dict(
+                self.supplementary_pension_contributions
+            ),
         }
