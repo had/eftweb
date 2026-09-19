@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
-import { Settings } from 'lucide-vue-next'
+import { Pencil, Settings, Trash2 } from 'lucide-vue-next'
 import { useFamilyStore } from '@/stores/family'
 import IncomeStatementFormModal from '@/components/IncomeStatementFormModal.vue'
 import TaxReturnFormModal from '@/components/TaxReturnFormModal.vue'
@@ -18,6 +18,7 @@ const loading = ref(true)
 const unavailable = ref(false)
 const showSettings = ref(false)
 const showIncomeStatementForm = ref(false)
+const editingIncomeStatement = ref(null)
 
 const loadTaxReturn = async () => {
   const taxReturnId = Number(route.params.taxReturnId)
@@ -91,6 +92,22 @@ const incomeRows = computed(() => {
 })
 
 const incomeStatementSaved = async () => {
+  editingIncomeStatement.value = null
+  await loadTaxReturn()
+}
+
+const openIncomeStatementForm = () => {
+  editingIncomeStatement.value = null
+  showIncomeStatementForm.value = true
+}
+
+const editIncomeStatement = (statement) => {
+  editingIncomeStatement.value = statement
+  showIncomeStatementForm.value = true
+}
+
+const deleteIncomeStatement = async (statement) => {
+  await axios.delete(`/api/income-statements/${statement.id}`)
   await loadTaxReturn()
 }
 </script>
@@ -129,14 +146,14 @@ const incomeStatementSaved = async () => {
         <Card v-if="taxReturn.has_income_statements" class="w-full">
           <CardHeader class="flex flex-row items-center justify-between gap-4">
             <CardTitle>Income statements</CardTitle>
-            <Button @click="showIncomeStatementForm = true">Add income statement</Button>
+            <Button @click="openIncomeStatementForm">Add income statement</Button>
           </CardHeader>
           <CardContent>
             <div v-if="incomeRows.length === 0" class="text-sm text-muted-foreground">No income statements added yet.</div>
             <div v-else class="overflow-x-auto">
               <table class="w-full border-collapse text-left text-sm">
                 <thead><tr class="border-b"><th class="p-3 font-medium">{{ family.taxpayer1.first_name }} {{ family.taxpayer1.last_name }} <span class="text-xs font-normal text-muted-foreground">taxpayer 1</span></th><th v-if="family.taxpayer2" class="p-3 font-medium">{{ family.taxpayer2.first_name }} {{ family.taxpayer2.last_name }} <span class="text-xs font-normal text-muted-foreground">taxpayer 2</span></th></tr></thead>
-                <tbody><tr v-for="(row, index) in incomeRows" :key="index" class="border-b last:border-0"><td class="p-3">{{ row.taxpayer1?.employer_name || '' }}</td><td v-if="family.taxpayer2" class="p-3">{{ row.taxpayer2?.employer_name || '' }}</td></tr></tbody>
+                <tbody><tr v-for="(row, index) in incomeRows" :key="index" class="border-b last:border-0"><td class="p-3"><div v-if="row.taxpayer1" class="flex items-center justify-between gap-2"><span>{{ row.taxpayer1.employer_name }}</span><span class="flex shrink-0 gap-1"><Button variant="ghost" size="icon" aria-label="Edit income statement" @click="editIncomeStatement(row.taxpayer1)"><Pencil class="h-4 w-4" /></Button><Button variant="ghost" size="icon" class="text-destructive" aria-label="Delete income statement" @click="deleteIncomeStatement(row.taxpayer1)"><Trash2 class="h-4 w-4" /></Button></span></div></td><td v-if="family.taxpayer2" class="p-3"><div v-if="row.taxpayer2" class="flex items-center justify-between gap-2"><span>{{ row.taxpayer2.employer_name }}</span><span class="flex shrink-0 gap-1"><Button variant="ghost" size="icon" aria-label="Edit income statement" @click="editIncomeStatement(row.taxpayer2)"><Pencil class="h-4 w-4" /></Button><Button variant="ghost" size="icon" class="text-destructive" aria-label="Delete income statement" @click="deleteIncomeStatement(row.taxpayer2)"><Trash2 class="h-4 w-4" /></Button></span></div></td></tr></tbody>
               </table>
             </div>
           </CardContent>
@@ -147,7 +164,7 @@ const incomeStatementSaved = async () => {
       </section>
 
       <TaxReturnFormModal v-model:open="showSettings" :family-id="familyStore.familyId" :tax-return="taxReturn" @saved="settingsSaved" />
-      <IncomeStatementFormModal v-model:open="showIncomeStatementForm" :tax-return-id="taxReturn.id" :taxpayers="taxpayers" @saved="incomeStatementSaved" />
+      <IncomeStatementFormModal v-model:open="showIncomeStatementForm" :tax-return-id="taxReturn.id" :income-statement="editingIncomeStatement" :taxpayers="taxpayers" @saved="incomeStatementSaved" />
     </template>
   </main>
 </template>

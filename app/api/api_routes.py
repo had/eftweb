@@ -323,6 +323,48 @@ def create_income_statement(tax_return_id):
     return jsonify(statement.to_dict()), 201
 
 
+def active_income_statement_or_404(income_statement_id):
+    statement = IncomeStatement.query.get(income_statement_id)
+    if not statement:
+        abort(404)
+    if statement.tax_return.is_archived or statement.tax_return.family.is_archived:
+        return None
+    return statement
+
+
+@api.route("/api/income-statements/<int:income_statement_id>", methods=["PUT"])
+def update_income_statement(income_statement_id):
+    statement = active_income_statement_or_404(income_statement_id)
+    if statement is None:
+        return jsonify({"error": "Tax return is archived"}), 410
+    if not statement.tax_return.has_income_statements:
+        return jsonify({"error": "Income statements are not enabled for this tax return"}), 409
+
+    try:
+        updated_statement = income_statement_from_payload(
+            request.get_json(silent=True), statement.tax_return
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    statement.taxpayer_role = updated_statement.taxpayer_role
+    statement.employer_name = updated_statement.employer_name
+    for field in INCOME_STATEMENT_AMOUNT_FIELDS:
+        setattr(statement, field, getattr(updated_statement, field))
+    db.session.commit()
+    return jsonify(statement.to_dict())
+
+
+@api.route("/api/income-statements/<int:income_statement_id>", methods=["DELETE"])
+def delete_income_statement(income_statement_id):
+    statement = active_income_statement_or_404(income_statement_id)
+    if statement is None:
+        return jsonify({"error": "Tax return is archived"}), 410
+    db.session.delete(statement)
+    db.session.commit()
+    return jsonify({"message": "Income statement deleted successfully"})
+
+
 @api.route("/api/projects")
 def get_projects():
     projects = Project.query.filter_by(is_deleted=False).all()

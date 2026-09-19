@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 const props = defineProps({
   open: Boolean,
   taxReturnId: Number,
+  incomeStatement: Object,
   taxpayers: {
     type: Array,
     default: () => [],
@@ -37,12 +38,12 @@ watch(
   () => props.open,
   (isOpen) => {
     if (!isOpen) return
-    taxpayerRole.value = props.taxpayers[0]?.role || 'taxpayer1'
-    employerName.value = ''
+    taxpayerRole.value = props.incomeStatement?.taxpayer_role || props.taxpayers[0]?.role || 'taxpayer1'
+    employerName.value = props.incomeStatement?.employer_name || ''
     amounts.value = {
-      known_employment_income: '',
-      income_tax_withheld: '',
-      supplementary_pension_contributions: '',
+      known_employment_income: props.incomeStatement?.known_employment_income ?? '',
+      income_tax_withheld: props.incomeStatement?.income_tax_withheld ?? '',
+      supplementary_pension_contributions: props.incomeStatement?.supplementary_pension_contributions ?? '',
     }
     error.value = ''
   },
@@ -78,15 +79,20 @@ const submit = async () => {
 
   loading.value = true
   try {
-    await axios.post(`/api/tax-returns/${props.taxReturnId}/income-statements`, {
+    const statementData = {
       taxpayer_role: taxpayerRole.value,
       employer_name: employerName.value.trim(),
       ...payload,
-    })
+    }
+    if (props.incomeStatement) {
+      await axios.put(`/api/income-statements/${props.incomeStatement.id}`, statementData)
+    } else {
+      await axios.post(`/api/tax-returns/${props.taxReturnId}/income-statements`, statementData)
+    }
     emit('saved')
     emit('update:open', false)
   } catch (requestError) {
-    error.value = requestError.response?.data?.error || 'Failed to add the income statement. Please try again.'
+    error.value = requestError.response?.data?.error || 'Failed to save the income statement. Please try again.'
   } finally {
     loading.value = false
   }
@@ -96,7 +102,7 @@ const submit = async () => {
 <template>
   <Dialog :open="open" @update:open="close">
     <DialogContent class="sm:max-w-[500px]">
-      <DialogHeader><DialogTitle>Add income statement</DialogTitle></DialogHeader>
+      <DialogHeader><DialogTitle>{{ incomeStatement ? 'Edit income statement' : 'Add income statement' }}</DialogTitle></DialogHeader>
       <form class="space-y-4 py-4" @submit.prevent="submit">
         <div class="space-y-2">
           <Label for="income-taxpayer">Taxpayer *</Label>
@@ -118,7 +124,7 @@ const submit = async () => {
       </form>
       <DialogFooter>
         <Button type="button" variant="outline" :disabled="loading" @click="close">Cancel</Button>
-        <Button :disabled="loading" @click="submit">{{ loading ? 'Saving...' : 'Add income statement' }}</Button>
+        <Button :disabled="loading" @click="submit">{{ loading ? 'Saving...' : incomeStatement ? 'Save changes' : 'Add income statement' }}</Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>

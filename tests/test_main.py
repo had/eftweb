@@ -307,6 +307,18 @@ def test_income_statements_allow_multiple_statements_per_taxpayer(app):
     assert statements[0]["known_employment_income"] == "1000.25"
     assert statements[1]["income_tax_withheld"] == "100.00"
 
+    updated = client.put(
+        f"/api/income-statements/{statements[1]['id']}",
+        json={
+            "taxpayer_role": "taxpayer1",
+            "employer_name": "Google France",
+            "income_tax_withheld": 125,
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.get_json()["employer_name"] == "Google France"
+    assert updated.get_json()["known_employment_income"] is None
+
     replacement = client.put(
         f"/api/families/{family['id']}",
         json=family_payload(
@@ -331,8 +343,12 @@ def test_income_statements_allow_multiple_statements_per_taxpayer(app):
         json={"taxpayer_role": "taxpayer1", "employer_name": "Later", "known_employment_income": 1},
     ).status_code == 409
 
+    assert client.delete(f"/api/income-statements/{statements[2]['id']}").status_code == 200
+    assert len(client.get(endpoint).get_json()) == 2
+
     client.delete(f"/api/tax-returns/{tax_return['id']}")
     assert client.get(endpoint).status_code == 410
+    assert client.put(f"/api/income-statements/{statements[0]['id']}", json={}).status_code == 410
 
 
 def test_income_statement_model_cascades_with_tax_return(app):
