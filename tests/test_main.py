@@ -5,7 +5,7 @@ from flask import url_for
 from sqlalchemy.exc import IntegrityError
 
 from app import create_app, db
-from app.family.models import Family, FamilyMember, IncomeStatement, TaxReturn
+from app.family.models import DonationStatement, Family, FamilyMember, IncomeStatement, TaxReturn
 from app.main.models import Project
 
 
@@ -366,3 +366,85 @@ def test_income_statement_model_cascades_with_tax_return(app):
     db.session.delete(tax_return)
     db.session.commit()
     assert IncomeStatement.query.count() == 0
+
+
+def test_donation_statements_are_validated_and_support_crud(app):
+    client = app.test_client()
+    donation_types = client.get("/api/donation-types")
+    assert donation_types.status_code == 200
+    assert len(donation_types.get_json()) == 7
+    assert next(donation_type for donation_type in donation_types.get_json() if donation_type["code"] == "people_in_need")["ceiling"] == 1000
+
+    family = client.post("/api/families", json=family_payload()).get_json()
+    tax_return = client.post(
+        f"/api/families/{family['id']}/tax-returns",
+        json={"year": 2026, "has_donation_statements": True},
+    ).get_json()
+    endpoint = f"/api/tax-returns/{tax_return['id']}/donation-statements"
+
+    assert client.get(endpoint).get_json() == []
+    assert client.post(endpoint, json={}).status_code == 400
+    assert client.post(
+        endpoint,
+        json={"name": "Invalid type", "amount": 1, "donation_type": "invalid"},
+    ).status_code == 400
+    assert client.post(
+        endpoint,
+        json={"name": "Invalid amount", "amount": -1, "donation_type": "public_interest"},
+    ).status_code == 400
+
+    created = client.post(
+        endpoint,
+        json={"name": "Red Cross", "amount": 100, "donation_type": "people_in_need"},
+    )
+    assert created.status_code == 201
+    assert created.get_json()["amount"] == "100.00"
+    second = client.post(
+        endpoint,
+        json={"name": "Museum", "amount": 25.50, "donation_type": "public_interest"},
+    )
+    assert second.status_code == 201
+    assert len(client.get(endpoint).get_json()) == 2
+
+    under_ceiling = client.post(
+        endpoint,
+        json={"name": "Food bank", "amount": 900, "donation_type": "people_in_need"},
+    )
+    assert under_ceiling.status_code == 201
+    assert client.post(
+        endpoint,
+        json={"name": "Shelter", "amount": 101, "donation_type": "people_in_need"},
+    ).status_code == 400
+
+    updated = client.put(
+        f"/api/donation-statements/{created.get_json()['id']}",
+        json={"name": "Red Cross France", "amount": 120, "donation_type": "european_people_in_need"},
+    )
+    assert updated.status_code == 200
+    assert updated.get_json()["name"] == "Red Cross France"
+
+    client.put(f"/api/tax-returns/{tax_return['id']}", json={"has_donation_statements": False})
+    assert client.get(endpoint).status_code == 200
+    assert client.post(
+        endpoint,
+        json={"name": "Later", "amount": 1, "donation_type": "public_interest"},
+    ).status_code == 409
+    assert client.delete(f"/api/donation-statements/{second.get_json()['id']}").status_code == 200
+
+    client.delete(f"/api/tax-returns/{tax_return['id']}")
+    assert client.get(endpoint).status_code == 410
+    assert client.put(f"/api/donation-statements/{created.get_json()['id']}", json={}).status_code == 410
+
+
+def test_donation_statement_model_cascades_with_tax_return(app):
+    family = Family()
+    tax_return = TaxReturn(family=family, year=2026, has_donation_statements=True)
+    tax_return.donation_statements.append(
+        DonationStatement(name="Red Cross", amount=100, donation_type="people_in_need")
+    )
+    db.session.add(tax_return)
+    db.session.commit()
+
+    db.session.delete(tax_return)
+    db.session.commit()
+    assert DonationStatement.query.count() == 0

@@ -7,7 +7,8 @@ from sqlalchemy.exc import IntegrityError
 
 from taxhelpers import prepare_tax_input, simulate_tax
 
-from ..family.models import Family, FamilyMember, IncomeStatement, TaxReturn
+from ..family.donation_types import DONATION_TYPE_CODES, DONATION_TYPES, DONATION_TYPES_BY_CODE
+from ..family.models import DonationStatement, Family, FamilyMember, IncomeStatement, TaxReturn
 from ..main.models import Project, db
 from ..tax.models import (
     CharitySegment,
@@ -117,6 +118,55 @@ def income_statement_from_payload(data, tax_return):
         taxpayer_role=taxpayer_role,
         employer_name=employer_name.strip(),
         **amounts,
+    )
+
+
+def required_monetary_amount(value, field):
+    if value is None or value == "" or isinstance(value, bool):
+        raise ValueError(f"{field} is required and must be a non-negative monetary amount")
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, ValueError) as error:
+        raise ValueError(f"{field} must be a non-negative monetary amount") from error
+    if not amount.is_finite() or amount < 0 or amount.as_tuple().exponent < -2:
+        raise ValueError(f"{field} must be a non-negative monetary amount with at most two decimals")
+    return amount
+
+
+def donation_statement_from_payload(data, tax_return, excluded_statement_id=None):
+    if not isinstance(data, dict):
+        raise ValueError("Donation statement data must be an object")
+
+    name = data.get("name")
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("Donation name is required")
+    donation_type = data.get("donation_type")
+    if donation_type not in DONATION_TYPE_CODES:
+        raise ValueError("Select a valid donation type")
+
+    amount = required_monetary_amount(data.get("amount"), "Donation amount")
+    donation_metadata = DONATION_TYPES_BY_CODE[donation_type]
+    ceiling = Decimal(str(donation_metadata["ceiling"]))
+    if ceiling:
+        declared_amount = sum(
+            (
+                statement.amount
+                for statement in tax_return.donation_statements
+                if statement.id != excluded_statement_id
+                and DONATION_TYPES_BY_CODE[statement.donation_type]["tax_return_box"]
+                == donation_metadata["tax_return_box"]
+            ),
+            Decimal("0"),
+        )
+        if declared_amount + amount > ceiling:
+            raise ValueError(
+                f"Donation amount exceeds the {donation_metadata['tax_return_box']} ceiling of {ceiling:.2f}"
+            )
+
+    return DonationStatement(
+        name=name.strip(),
+        amount=amount,
+        donation_type=donation_type,
     )
 
 
@@ -363,6 +413,80 @@ def delete_income_statement(income_statement_id):
     db.session.delete(statement)
     db.session.commit()
     return jsonify({"message": "Income statement deleted successfully"})
+
+
+@api.route("/api/donation-types")
+def get_donation_types():
+    return jsonify(DONATION_TYPES)
+
+
+@api.route("/api/tax-returns/<int:tax_return_id>/donation-statements")
+def get_donation_statements(tax_return_id):
+    tax_return = active_tax_return_or_404(tax_return_id)
+    if tax_return is None:
+        return jsonify({"error": "Tax return is archived"}), 410
+    return jsonify([statement.to_dict() for statement in tax_return.donation_statements])
+
+
+@api.route("/api/tax-returns/<int:tax_return_id>/donation-statements", methods=["POST"])
+def create_donation_statement(tax_return_id):
+    tax_return = active_tax_return_or_404(tax_return_id)
+    if tax_return is None:
+        return jsonify({"error": "Tax return is archived"}), 410
+    if not tax_return.has_donation_statements:
+        return jsonify({"error": "Donation statements are not enabled for this tax return"}), 409
+
+    try:
+        statement = donation_statement_from_payload(request.get_json(silent=True), tax_return)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    tax_return.donation_statements.append(statement)
+    db.session.commit()
+    return jsonify(statement.to_dict()), 201
+
+
+def active_donation_statement_or_404(donation_statement_id):
+    statement = DonationStatement.query.get(donation_statement_id)
+    if not statement:
+        abort(404)
+    if statement.tax_return.is_archived or statement.tax_return.family.is_archived:
+        return None
+    return statement
+
+
+@api.route("/api/donation-statements/<int:donation_statement_id>", methods=["PUT"])
+def update_donation_statement(donation_statement_id):
+    statement = active_donation_statement_or_404(donation_statement_id)
+    if statement is None:
+        return jsonify({"error": "Tax return is archived"}), 410
+    if not statement.tax_return.has_donation_statements:
+        return jsonify({"error": "Donation statements are not enabled for this tax return"}), 409
+
+    try:
+        updated_statement = donation_statement_from_payload(
+            request.get_json(silent=True),
+            statement.tax_return,
+            excluded_statement_id=statement.id,
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    statement.name = updated_statement.name
+    statement.amount = updated_statement.amount
+    statement.donation_type = updated_statement.donation_type
+    db.session.commit()
+    return jsonify(statement.to_dict())
+
+
+@api.route("/api/donation-statements/<int:donation_statement_id>", methods=["DELETE"])
+def delete_donation_statement(donation_statement_id):
+    statement = active_donation_statement_or_404(donation_statement_id)
+    if statement is None:
+        return jsonify({"error": "Tax return is archived"}), 410
+    db.session.delete(statement)
+    db.session.commit()
+    return jsonify({"message": "Donation statement deleted successfully"})
 
 
 @api.route("/api/projects")

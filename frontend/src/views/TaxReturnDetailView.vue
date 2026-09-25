@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import axios from 'axios'
 import { Pencil, Settings, Trash2 } from 'lucide-vue-next'
 import { useFamilyStore } from '@/stores/family'
+import DonationStatementFormModal from '@/components/DonationStatementFormModal.vue'
 import IncomeStatementFormModal from '@/components/IncomeStatementFormModal.vue'
 import TaxReturnFormModal from '@/components/TaxReturnFormModal.vue'
 import { Button } from '@/components/ui/button'
@@ -14,17 +15,23 @@ const familyStore = useFamilyStore()
 const taxReturn = ref(null)
 const family = ref(null)
 const incomeStatements = ref([])
+const donationStatements = ref([])
+const donationTypes = ref([])
 const loading = ref(true)
 const unavailable = ref(false)
 const showSettings = ref(false)
 const showIncomeStatementForm = ref(false)
 const editingIncomeStatement = ref(null)
+const showDonationStatementForm = ref(false)
+const editingDonationStatement = ref(null)
 
 const loadTaxReturn = async () => {
   const taxReturnId = Number(route.params.taxReturnId)
   taxReturn.value = null
   family.value = null
   incomeStatements.value = []
+  donationStatements.value = []
+  donationTypes.value = []
   unavailable.value = false
 
   if (!familyStore.familyId || !Number.isInteger(taxReturnId)) {
@@ -40,14 +47,22 @@ const loadTaxReturn = async () => {
     unavailable.value = !taxReturn.value
     if (!taxReturn.value) return
 
-    const [familyResponse, incomeStatementsResponse] = await Promise.all([
+    const [familyResponse, incomeStatementsResponse, donationStatementsResponse, donationTypesResponse] = await Promise.all([
       axios.get(`/api/families/${familyStore.familyId}`),
       taxReturn.value.has_income_statements
         ? axios.get(`/api/tax-returns/${taxReturnId}/income-statements`)
         : Promise.resolve({ data: [] }),
+      taxReturn.value.has_donation_statements
+        ? axios.get(`/api/tax-returns/${taxReturnId}/donation-statements`)
+        : Promise.resolve({ data: [] }),
+      taxReturn.value.has_donation_statements
+        ? axios.get('/api/donation-types')
+        : Promise.resolve({ data: [] }),
     ])
     family.value = familyResponse.data
     incomeStatements.value = incomeStatementsResponse.data
+    donationStatements.value = donationStatementsResponse.data
+    donationTypes.value = donationTypesResponse.data
   } catch {
     unavailable.value = true
   } finally {
@@ -67,7 +82,6 @@ const settingsSaved = () => {
 }
 
 const otherStatementGroups = (returnValue) => [
-  { enabled: returnValue.has_donation_statements, title: 'Donation statements' },
   { enabled: returnValue.has_investment_statements, title: 'Investment statements (GFI forests and life insurance)' },
 ].filter((group) => group.enabled)
 
@@ -108,6 +122,29 @@ const editIncomeStatement = (statement) => {
 
 const deleteIncomeStatement = async (statement) => {
   await axios.delete(`/api/income-statements/${statement.id}`)
+  await loadTaxReturn()
+}
+
+const donationTypeFor = (statement) => donationTypes.value.find((type) => type.code === statement.donation_type)
+const formatAmount = (amount) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' }).format(Number(amount))
+
+const donationStatementSaved = async () => {
+  editingDonationStatement.value = null
+  await loadTaxReturn()
+}
+
+const openDonationStatementForm = () => {
+  editingDonationStatement.value = null
+  showDonationStatementForm.value = true
+}
+
+const editDonationStatement = (statement) => {
+  editingDonationStatement.value = statement
+  showDonationStatementForm.value = true
+}
+
+const deleteDonationStatement = async (statement) => {
+  await axios.delete(`/api/donation-statements/${statement.id}`)
   await loadTaxReturn()
 }
 </script>
@@ -158,6 +195,13 @@ const deleteIncomeStatement = async (statement) => {
             </div>
           </CardContent>
         </Card>
+        <Card v-if="taxReturn.has_donation_statements" class="w-full">
+          <CardHeader class="flex flex-row items-center justify-between gap-4"><CardTitle>Donation statements</CardTitle><Button @click="openDonationStatementForm">Add donation statement</Button></CardHeader>
+          <CardContent>
+            <div v-if="donationStatements.length === 0" class="text-sm text-muted-foreground">No donation statements added yet.</div>
+            <div v-else class="overflow-x-auto"><table class="w-full border-collapse text-left text-sm"><thead><tr class="border-b"><th class="p-3 font-medium">Name</th><th class="p-3 font-medium">Type</th><th class="p-3 font-medium">Amount</th><th class="p-3 font-medium">Tax reduction / box</th><th class="p-3"><span class="sr-only">Actions</span></th></tr></thead><tbody><tr v-for="statement in donationStatements" :key="statement.id" class="border-b last:border-0"><td class="p-3">{{ statement.name }}</td><td class="p-3">{{ donationTypeFor(statement)?.label || statement.donation_type }}</td><td class="p-3 whitespace-nowrap">{{ formatAmount(statement.amount) }}</td><td class="p-3 text-muted-foreground">{{ donationTypeFor(statement)?.tax_reduction }} · {{ donationTypeFor(statement)?.tax_return_box }}</td><td class="p-3"><span class="flex justify-end gap-1"><Button variant="ghost" size="icon" aria-label="Edit donation statement" @click="editDonationStatement(statement)"><Pencil class="h-4 w-4" /></Button><Button variant="ghost" size="icon" class="text-destructive" aria-label="Delete donation statement" @click="deleteDonationStatement(statement)"><Trash2 class="h-4 w-4" /></Button></span></td></tr></tbody></table></div>
+          </CardContent>
+        </Card>
         <Card v-for="group in otherStatementGroups(taxReturn)" :key="group.title" class="w-full">
           <CardHeader><CardTitle>{{ group.title }}</CardTitle></CardHeader>
         </Card>
@@ -165,6 +209,7 @@ const deleteIncomeStatement = async (statement) => {
 
       <TaxReturnFormModal v-model:open="showSettings" :family-id="familyStore.familyId" :tax-return="taxReturn" @saved="settingsSaved" />
       <IncomeStatementFormModal v-model:open="showIncomeStatementForm" :tax-return-id="taxReturn.id" :income-statement="editingIncomeStatement" :taxpayers="taxpayers" @saved="incomeStatementSaved" />
+      <DonationStatementFormModal v-model:open="showDonationStatementForm" :tax-return-id="taxReturn.id" :donation-statement="editingDonationStatement" :donation-types="donationTypes" @saved="donationStatementSaved" />
     </template>
   </main>
 </template>

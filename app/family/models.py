@@ -1,5 +1,7 @@
 from app import db
 
+from .donation_types import DONATION_TYPE_CODES
+
 
 class Family(db.Model):
     __tablename__ = "families"
@@ -96,6 +98,12 @@ class TaxReturn(db.Model):
         cascade="all, delete-orphan",
         order_by="IncomeStatement.id",
     )
+    donation_statements = db.relationship(
+        "DonationStatement",
+        back_populates="tax_return",
+        cascade="all, delete-orphan",
+        order_by="DonationStatement.id",
+    )
 
     def to_dict(self):
         return {
@@ -147,4 +155,37 @@ class IncomeStatement(db.Model):
             "supplementary_pension_contributions": self.amount_to_dict(
                 self.supplementary_pension_contributions
             ),
+        }
+
+
+class DonationStatement(db.Model):
+    __tablename__ = "donation_statements"
+    __table_args__ = (
+        db.CheckConstraint(
+            "donation_type IN ({})".format(
+                ", ".join(f"'{donation_type}'" for donation_type in DONATION_TYPE_CODES)
+            ),
+            name="ck_donation_statements_type",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    tax_return_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tax_returns.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name = db.Column(db.String(255), nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    donation_type = db.Column(db.String(32), nullable=False)
+
+    tax_return = db.relationship("TaxReturn", back_populates="donation_statements")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "tax_return_id": self.tax_return_id,
+            "name": self.name,
+            "amount": IncomeStatement.amount_to_dict(self.amount),
+            "donation_type": self.donation_type,
         }
