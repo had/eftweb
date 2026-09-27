@@ -5,7 +5,14 @@ from flask import url_for
 from sqlalchemy.exc import IntegrityError
 
 from app import create_app, db
-from app.family.models import DonationStatement, Family, FamilyMember, IncomeStatement, TaxReturn
+from app.family.models import (
+    DonationStatement,
+    Family,
+    FamilyMember,
+    IfuStatement,
+    IncomeStatement,
+    TaxReturn,
+)
 from app.main.models import Project
 
 
@@ -448,3 +455,62 @@ def test_donation_statement_model_cascades_with_tax_return(app):
     db.session.delete(tax_return)
     db.session.commit()
     assert DonationStatement.query.count() == 0
+
+
+def test_ifu_statements_are_validated_and_support_crud(app):
+    client = app.test_client()
+    fields = client.get("/api/ifu-fields")
+    assert fields.status_code == 200
+    assert sum(len(group["fields"]) for group in fields.get_json()) == 10
+
+    family = client.post("/api/families", json=family_payload()).get_json()
+    tax_return = client.post(
+        f"/api/families/{family['id']}/tax-returns",
+        json={"year": 2026, "has_investment_statements": True},
+    ).get_json()
+    endpoint = f"/api/tax-returns/{tax_return['id']}/ifu-statements"
+
+    assert client.get(endpoint).get_json() == []
+    assert client.post(endpoint, json={}).status_code == 400
+    assert client.post(endpoint, json={"title": "Acme Inc."}).status_code == 400
+    assert client.post(endpoint, json={"title": "Acme Inc.", "box_2tr": -1}).status_code == 400
+
+    created = client.post(
+        endpoint,
+        json={"title": "Acme Inc.", "box_2tr": 100.50, "box_2dh": 25},
+    )
+    assert created.status_code == 201
+    assert created.get_json()["box_2tr"] == "100.50"
+    assert created.get_json()["box_2tt"] is None
+    second = client.post(endpoint, json={"title": "Boursorama", "box_2dc": 200})
+    assert second.status_code == 201
+    assert len(client.get(endpoint).get_json()) == 2
+
+    updated = client.put(
+        f"/api/ifu-statements/{created.get_json()['id']}",
+        json={"title": "Acme Inc. Life", "box_2yy": 30},
+    )
+    assert updated.status_code == 200
+    assert updated.get_json()["title"] == "Acme Inc. Life"
+    assert updated.get_json()["box_2tr"] is None
+
+    client.put(f"/api/tax-returns/{tax_return['id']}", json={"has_investment_statements": False})
+    assert client.get(endpoint).status_code == 200
+    assert client.post(endpoint, json={"title": "Later", "box_2tr": 1}).status_code == 409
+    assert client.delete(f"/api/ifu-statements/{second.get_json()['id']}").status_code == 200
+
+    client.delete(f"/api/tax-returns/{tax_return['id']}")
+    assert client.get(endpoint).status_code == 410
+    assert client.put(f"/api/ifu-statements/{created.get_json()['id']}", json={}).status_code == 410
+
+
+def test_ifu_statement_model_cascades_with_tax_return(app):
+    family = Family()
+    tax_return = TaxReturn(family=family, year=2026, has_investment_statements=True)
+    tax_return.ifu_statements.append(IfuStatement(title="Acme Inc.", box_2tr=100))
+    db.session.add(tax_return)
+    db.session.commit()
+
+    db.session.delete(tax_return)
+    db.session.commit()
+    assert IfuStatement.query.count() == 0

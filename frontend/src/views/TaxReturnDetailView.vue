@@ -5,6 +5,7 @@ import axios from 'axios'
 import { Pencil, Settings, Trash2 } from 'lucide-vue-next'
 import { useFamilyStore } from '@/stores/family'
 import DonationStatementFormModal from '@/components/DonationStatementFormModal.vue'
+import IfuStatementFormModal from '@/components/IfuStatementFormModal.vue'
 import IncomeStatementFormModal from '@/components/IncomeStatementFormModal.vue'
 import TaxReturnFormModal from '@/components/TaxReturnFormModal.vue'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,8 @@ const family = ref(null)
 const incomeStatements = ref([])
 const donationStatements = ref([])
 const donationTypes = ref([])
+const ifuStatements = ref([])
+const ifuFieldGroups = ref([])
 const loading = ref(true)
 const unavailable = ref(false)
 const showSettings = ref(false)
@@ -24,6 +27,8 @@ const showIncomeStatementForm = ref(false)
 const editingIncomeStatement = ref(null)
 const showDonationStatementForm = ref(false)
 const editingDonationStatement = ref(null)
+const showIfuStatementForm = ref(false)
+const editingIfuStatement = ref(null)
 
 const loadTaxReturn = async () => {
   const taxReturnId = Number(route.params.taxReturnId)
@@ -32,6 +37,8 @@ const loadTaxReturn = async () => {
   incomeStatements.value = []
   donationStatements.value = []
   donationTypes.value = []
+  ifuStatements.value = []
+  ifuFieldGroups.value = []
   unavailable.value = false
 
   if (!familyStore.familyId || !Number.isInteger(taxReturnId)) {
@@ -47,7 +54,7 @@ const loadTaxReturn = async () => {
     unavailable.value = !taxReturn.value
     if (!taxReturn.value) return
 
-    const [familyResponse, incomeStatementsResponse, donationStatementsResponse, donationTypesResponse] = await Promise.all([
+    const [familyResponse, incomeStatementsResponse, donationStatementsResponse, donationTypesResponse, ifuStatementsResponse, ifuFieldsResponse] = await Promise.all([
       axios.get(`/api/families/${familyStore.familyId}`),
       taxReturn.value.has_income_statements
         ? axios.get(`/api/tax-returns/${taxReturnId}/income-statements`)
@@ -58,11 +65,19 @@ const loadTaxReturn = async () => {
       taxReturn.value.has_donation_statements
         ? axios.get('/api/donation-types')
         : Promise.resolve({ data: [] }),
+      taxReturn.value.has_investment_statements
+        ? axios.get(`/api/tax-returns/${taxReturnId}/ifu-statements`)
+        : Promise.resolve({ data: [] }),
+      taxReturn.value.has_investment_statements
+        ? axios.get('/api/ifu-fields')
+        : Promise.resolve({ data: [] }),
     ])
     family.value = familyResponse.data
     incomeStatements.value = incomeStatementsResponse.data
     donationStatements.value = donationStatementsResponse.data
     donationTypes.value = donationTypesResponse.data
+    ifuStatements.value = ifuStatementsResponse.data
+    ifuFieldGroups.value = ifuFieldsResponse.data
   } catch {
     unavailable.value = true
   } finally {
@@ -80,10 +95,6 @@ const settingsSaved = () => {
   familyStore.refreshTaxReturns()
   loadTaxReturn()
 }
-
-const otherStatementGroups = (returnValue) => [
-  { enabled: returnValue.has_investment_statements, title: 'Investment statements (GFI forests and life insurance)' },
-].filter((group) => group.enabled)
 
 const taxpayers = computed(() => [
   family.value?.taxpayer1 && {
@@ -147,6 +158,26 @@ const deleteDonationStatement = async (statement) => {
   await axios.delete(`/api/donation-statements/${statement.id}`)
   await loadTaxReturn()
 }
+
+const ifuStatementSaved = async () => {
+  editingIfuStatement.value = null
+  await loadTaxReturn()
+}
+
+const openIfuStatementForm = () => {
+  editingIfuStatement.value = null
+  showIfuStatementForm.value = true
+}
+
+const editIfuStatement = (statement) => {
+  editingIfuStatement.value = statement
+  showIfuStatementForm.value = true
+}
+
+const deleteIfuStatement = async (statement) => {
+  await axios.delete(`/api/ifu-statements/${statement.id}`)
+  await loadTaxReturn()
+}
 </script>
 
 <template>
@@ -202,14 +233,19 @@ const deleteDonationStatement = async (statement) => {
             <div v-else class="overflow-x-auto"><table class="w-full border-collapse text-left text-sm"><thead><tr class="border-b"><th class="p-3 font-medium">Name</th><th class="p-3 font-medium">Type</th><th class="p-3 font-medium">Amount</th><th class="p-3 font-medium">Tax reduction / box</th><th class="p-3"><span class="sr-only">Actions</span></th></tr></thead><tbody><tr v-for="statement in donationStatements" :key="statement.id" class="border-b last:border-0"><td class="p-3">{{ statement.name }}</td><td class="p-3">{{ donationTypeFor(statement)?.label || statement.donation_type }}</td><td class="p-3 whitespace-nowrap">{{ formatAmount(statement.amount) }}</td><td class="p-3 text-muted-foreground">{{ donationTypeFor(statement)?.tax_reduction }} · {{ donationTypeFor(statement)?.tax_return_box }}</td><td class="p-3"><span class="flex justify-end gap-1"><Button variant="ghost" size="icon" aria-label="Edit donation statement" @click="editDonationStatement(statement)"><Pencil class="h-4 w-4" /></Button><Button variant="ghost" size="icon" class="text-destructive" aria-label="Delete donation statement" @click="deleteDonationStatement(statement)"><Trash2 class="h-4 w-4" /></Button></span></td></tr></tbody></table></div>
           </CardContent>
         </Card>
-        <Card v-for="group in otherStatementGroups(taxReturn)" :key="group.title" class="w-full">
-          <CardHeader><CardTitle>{{ group.title }}</CardTitle></CardHeader>
+        <Card v-if="taxReturn.has_investment_statements" class="w-full">
+          <CardHeader class="flex flex-row items-center justify-between gap-4"><CardTitle>Investment statements</CardTitle><Button @click="openIfuStatementForm">Add an investment tax statement (IFU)</Button></CardHeader>
+          <CardContent>
+            <div v-if="ifuStatements.length === 0" class="text-sm text-muted-foreground">No investment tax statements added yet.</div>
+            <table v-else class="w-full border-collapse text-left text-sm"><thead><tr class="border-b"><th class="p-3 font-medium">Title</th><th class="p-3"><span class="sr-only">Actions</span></th></tr></thead><tbody><tr v-for="statement in ifuStatements" :key="statement.id" class="border-b last:border-0"><td class="p-3">{{ statement.title }}</td><td class="p-3"><span class="flex justify-end gap-1"><Button variant="ghost" size="icon" aria-label="Edit IFU statement" @click="editIfuStatement(statement)"><Pencil class="h-4 w-4" /></Button><Button variant="ghost" size="icon" class="text-destructive" aria-label="Delete IFU statement" @click="deleteIfuStatement(statement)"><Trash2 class="h-4 w-4" /></Button></span></td></tr></tbody></table>
+          </CardContent>
         </Card>
       </section>
 
       <TaxReturnFormModal v-model:open="showSettings" :family-id="familyStore.familyId" :tax-return="taxReturn" @saved="settingsSaved" />
       <IncomeStatementFormModal v-model:open="showIncomeStatementForm" :tax-return-id="taxReturn.id" :income-statement="editingIncomeStatement" :taxpayers="taxpayers" @saved="incomeStatementSaved" />
       <DonationStatementFormModal v-model:open="showDonationStatementForm" :tax-return-id="taxReturn.id" :donation-statement="editingDonationStatement" :donation-types="donationTypes" @saved="donationStatementSaved" />
+      <IfuStatementFormModal v-model:open="showIfuStatementForm" :tax-return-id="taxReturn.id" :ifu-statement="editingIfuStatement" :field-groups="ifuFieldGroups" @saved="ifuStatementSaved" />
     </template>
   </main>
 </template>

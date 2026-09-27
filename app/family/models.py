@@ -1,6 +1,7 @@
 from app import db
 
 from .donation_types import DONATION_TYPE_CODES
+from .ifu_fields import IFU_FIELD_KEYS
 
 
 class Family(db.Model):
@@ -104,6 +105,12 @@ class TaxReturn(db.Model):
         cascade="all, delete-orphan",
         order_by="DonationStatement.id",
     )
+    ifu_statements = db.relationship(
+        "IfuStatement",
+        back_populates="tax_return",
+        cascade="all, delete-orphan",
+        order_by="IfuStatement.id",
+    )
 
     def to_dict(self):
         return {
@@ -188,4 +195,39 @@ class DonationStatement(db.Model):
             "name": self.name,
             "amount": IncomeStatement.amount_to_dict(self.amount),
             "donation_type": self.donation_type,
+        }
+
+
+class IfuStatement(db.Model):
+    __tablename__ = "ifu_statements"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tax_return_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tax_returns.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    title = db.Column(db.String(255), nullable=False)
+    box_2tr = db.Column(db.Numeric(12, 2), nullable=True)
+    box_2tt = db.Column(db.Numeric(12, 2), nullable=True)
+    box_2dc = db.Column(db.Numeric(12, 2), nullable=True)
+    box_2cg = db.Column(db.Numeric(12, 2), nullable=True)
+    box_2bh = db.Column(db.Numeric(12, 2), nullable=True)
+    box_2ck = db.Column(db.Numeric(12, 2), nullable=True)
+    box_2df = db.Column(db.Numeric(12, 2), nullable=True)
+    box_2dh = db.Column(db.Numeric(12, 2), nullable=True)
+    box_2yy = db.Column(db.Numeric(12, 2), nullable=True)
+    box_2zz = db.Column(db.Numeric(12, 2), nullable=True)
+
+    tax_return = db.relationship("TaxReturn", back_populates="ifu_statements")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "tax_return_id": self.tax_return_id,
+            "title": self.title,
+            **{
+                field: IncomeStatement.amount_to_dict(getattr(self, field))
+                for field in IFU_FIELD_KEYS
+            },
         }

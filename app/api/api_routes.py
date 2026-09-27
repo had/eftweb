@@ -8,7 +8,15 @@ from sqlalchemy.exc import IntegrityError
 from taxhelpers import prepare_tax_input, simulate_tax
 
 from ..family.donation_types import DONATION_TYPE_CODES, DONATION_TYPES, DONATION_TYPES_BY_CODE
-from ..family.models import DonationStatement, Family, FamilyMember, IncomeStatement, TaxReturn
+from ..family.ifu_fields import IFU_FIELD_GROUPS, IFU_FIELD_KEYS
+from ..family.models import (
+    DonationStatement,
+    Family,
+    FamilyMember,
+    IfuStatement,
+    IncomeStatement,
+    TaxReturn,
+)
 from ..main.models import Project, db
 from ..tax.models import (
     CharitySegment,
@@ -168,6 +176,35 @@ def donation_statement_from_payload(data, tax_return, excluded_statement_id=None
         amount=amount,
         donation_type=donation_type,
     )
+
+
+def ifu_statement_from_payload(data):
+    if not isinstance(data, dict):
+        raise ValueError("IFU statement data must be an object")
+
+    title = data.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError("IFU title is required")
+
+    amounts = {}
+    for field in IFU_FIELD_KEYS:
+        value = data.get(field)
+        if value is None or value == "":
+            amounts[field] = None
+            continue
+        if isinstance(value, bool):
+            raise ValueError(f"{field} must be a non-negative monetary amount")
+        try:
+            amount = Decimal(str(value))
+        except (InvalidOperation, ValueError) as error:
+            raise ValueError(f"{field} must be a non-negative monetary amount") from error
+        if not amount.is_finite() or amount < 0 or amount.as_tuple().exponent < -2:
+            raise ValueError(f"{field} must be a non-negative monetary amount with at most two decimals")
+        amounts[field] = amount
+
+    if not any(amount is not None for amount in amounts.values()):
+        raise ValueError("Enter at least one IFU amount")
+    return IfuStatement(title=title.strip(), **amounts)
 
 
 def member_from_payload(payload, role, position):
@@ -487,6 +524,76 @@ def delete_donation_statement(donation_statement_id):
     db.session.delete(statement)
     db.session.commit()
     return jsonify({"message": "Donation statement deleted successfully"})
+
+
+@api.route("/api/ifu-fields")
+def get_ifu_fields():
+    return jsonify(IFU_FIELD_GROUPS)
+
+
+@api.route("/api/tax-returns/<int:tax_return_id>/ifu-statements")
+def get_ifu_statements(tax_return_id):
+    tax_return = active_tax_return_or_404(tax_return_id)
+    if tax_return is None:
+        return jsonify({"error": "Tax return is archived"}), 410
+    return jsonify([statement.to_dict() for statement in tax_return.ifu_statements])
+
+
+@api.route("/api/tax-returns/<int:tax_return_id>/ifu-statements", methods=["POST"])
+def create_ifu_statement(tax_return_id):
+    tax_return = active_tax_return_or_404(tax_return_id)
+    if tax_return is None:
+        return jsonify({"error": "Tax return is archived"}), 410
+    if not tax_return.has_investment_statements:
+        return jsonify({"error": "Investment statements are not enabled for this tax return"}), 409
+
+    try:
+        statement = ifu_statement_from_payload(request.get_json(silent=True))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    tax_return.ifu_statements.append(statement)
+    db.session.commit()
+    return jsonify(statement.to_dict()), 201
+
+
+def active_ifu_statement_or_404(ifu_statement_id):
+    statement = IfuStatement.query.get(ifu_statement_id)
+    if not statement:
+        abort(404)
+    if statement.tax_return.is_archived or statement.tax_return.family.is_archived:
+        return None
+    return statement
+
+
+@api.route("/api/ifu-statements/<int:ifu_statement_id>", methods=["PUT"])
+def update_ifu_statement(ifu_statement_id):
+    statement = active_ifu_statement_or_404(ifu_statement_id)
+    if statement is None:
+        return jsonify({"error": "Tax return is archived"}), 410
+    if not statement.tax_return.has_investment_statements:
+        return jsonify({"error": "Investment statements are not enabled for this tax return"}), 409
+
+    try:
+        updated_statement = ifu_statement_from_payload(request.get_json(silent=True))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    statement.title = updated_statement.title
+    for field in IFU_FIELD_KEYS:
+        setattr(statement, field, getattr(updated_statement, field))
+    db.session.commit()
+    return jsonify(statement.to_dict())
+
+
+@api.route("/api/ifu-statements/<int:ifu_statement_id>", methods=["DELETE"])
+def delete_ifu_statement(ifu_statement_id):
+    statement = active_ifu_statement_or_404(ifu_statement_id)
+    if statement is None:
+        return jsonify({"error": "Tax return is archived"}), 410
+    db.session.delete(statement)
+    db.session.commit()
+    return jsonify({"message": "IFU statement deleted successfully"})
 
 
 @api.route("/api/projects")
