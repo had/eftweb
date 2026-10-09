@@ -4,7 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useFamilyStore } from '@/stores/family'
 import { Separator } from '@/components/ui/separator'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { ChevronDown, ChevronRight } from 'lucide-vue-next'
+import { ChevronDown, ChevronRight, Settings } from 'lucide-vue-next'
 import axios from 'axios'
 
 const route = useRoute()
@@ -75,7 +75,7 @@ watch(
           </RouterLink>
           <button
             type="button"
-            class="text-xs text-blue-600 hover:text-blue-800 cursor-pointer"
+            class="text-xs text-primary hover:underline cursor-pointer"
             @click="exitFamily"
           >
             exit
@@ -90,7 +90,7 @@ watch(
           <CollapsibleTrigger
             :class="[
               'item flex items-center justify-between w-full',
-              isCurrentPath('/tax-returns') ? 'background-color:#000 border-l-2 border-l-gray-500' : '',
+              isCurrentPath('/tax-returns') ? 'nav-item-active' : '',
               !isFamilySelected ? 'opacity-50 cursor-not-allowed' : '',
             ]"
             :disabled="!isFamilySelected"
@@ -128,7 +128,7 @@ watch(
           to="/stocks"
           :class="[
             'item',
-            isCurrentPath('/stocks') ? 'background-color:#000 border-l-2 border-l-gray-500' : '',
+            isCurrentPath('/stocks') ? 'nav-item-active' : '',
             !isFamilySelected ? 'opacity-50 cursor-not-allowed pointer-events-none' : '',
           ]"
           @click.prevent="
@@ -142,6 +142,17 @@ watch(
           Stocks
         </RouterLink>
       </div>
+    </div>
+    <div class="navsection pb-4">
+      <Separator class="my-2 mx-2" />
+      <RouterLink
+        to="/settings"
+        :class="['item flex items-center gap-2', isCurrentPath('/settings') ? 'nav-item-active' : '']"
+        :aria-current="isCurrentPath('/settings') ? 'page' : undefined"
+      >
+        <Settings class="h-4 w-4" />
+        Settings
+      </RouterLink>
     </div>
   </nav>
 </template>

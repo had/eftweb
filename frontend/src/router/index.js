@@ -5,6 +5,7 @@ import FamilyLandingView from '@/views/FamilyLandingView.vue'
 import StocksView from '@/views/StocksView.vue'
 import TaxReturnsView from '@/views/TaxReturnsView.vue'
 import TaxReturnDetailView from '@/views/TaxReturnDetailView.vue'
+import SettingsView from '@/views/SettingsView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -38,6 +39,11 @@ const router = createRouter({
       path: '/tax-returns/:taxReturnId',
       name: 'tax-return',
       component: TaxReturnDetailView,
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: SettingsView,
     },
   ],
 })

@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from easyfrenchtax import TaxField
-from flask import abort, jsonify, request
+from flask import abort, current_app, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from taxhelpers import prepare_tax_input, simulate_tax
@@ -18,6 +18,7 @@ from ..family.models import (
     TaxReturn,
 )
 from ..main.models import Project, db
+from ..settings import VALID_THEMES, read_settings, write_settings
 from ..tax.models import (
     CharitySegment,
     FixedIncomeInvestmentSegment,
@@ -29,6 +30,28 @@ from ..tax.models import (
     TaxStatement,
 )
 from . import api
+
+
+@api.route("/api/settings", methods=["GET", "PUT"])
+def settings():
+    if request.method == "GET":
+        return jsonify(read_settings())
+
+    data = request.get_json(silent=True)
+    if (
+        not isinstance(data, dict)
+        or set(data) != {"theme"}
+        or not isinstance(data["theme"], str)
+        or data["theme"] not in VALID_THEMES
+    ):
+        return jsonify({"error": "Invalid theme"}), 400
+
+    try:
+        write_settings(data["theme"])
+    except OSError:
+        current_app.logger.exception("Failed to save settings")
+        return jsonify({"error": "Failed to save settings"}), 500
+    return jsonify({"theme": data["theme"]})
 
 
 @api.after_request

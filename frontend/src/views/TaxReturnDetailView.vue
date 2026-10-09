@@ -243,7 +243,6 @@ const deleteIfuStatement = async (statement) => {
 
         <TabsContent value="income" class="mt-0 focus-visible:outline-none">
           <IncomeStatementsSection
-            v-if="taxReturn.has_income_statements"
             :family="family"
             :statements="incomeStatements"
             @add="openIncomeStatementForm"
@@ -253,7 +252,6 @@ const deleteIfuStatement = async (statement) => {
         </TabsContent>
         <TabsContent value="donations" class="mt-0 focus-visible:outline-none">
           <DonationStatementsSection
-            v-if="taxReturn.has_donation_statements"
             :statements="donationStatements"
             :donation-types="donationTypes"
             @add="openDonationStatementForm"
@@ -263,7 +261,6 @@ const deleteIfuStatement = async (statement) => {
         </TabsContent>
         <TabsContent value="investments" class="mt-0 focus-visible:outline-none">
           <InvestmentStatementsSection
-            v-if="taxReturn.has_investment_statements"
             :statements="ifuStatements"
             @add="openIfuStatementForm"
             @edit="editIfuStatement"

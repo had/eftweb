@@ -1,4 +1,5 @@
 import datetime
+from pathlib import Path
 
 from flask import Flask
 from flask.json.provider import DefaultJSONProvider
@@ -34,6 +35,7 @@ def create_app(config_name):
     app.json = app.json_provider_class(app)
 
     app.config.from_object(config[config_name])
+    app.config.setdefault("SETTINGS_FILE", str(Path(app.instance_path) / "settings.json"))
 
     bootstrap.init_app(app)
     app.jinja_env.globals["fontawesome_html"] = fontawesome_html

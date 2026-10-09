@@ -26,3 +26,5 @@ dmypy.json
 
 *cache.json
 
+# Local application settings
+/instance/
