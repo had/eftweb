@@ -1,11 +1,8 @@
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from easyfrenchtax import TaxField
 from flask import abort, current_app, jsonify, request
 from sqlalchemy.exc import IntegrityError
-
-from taxhelpers import prepare_tax_input, simulate_tax
 
 from ..family.donation_types import DONATION_TYPE_CODES, DONATION_TYPES, DONATION_TYPES_BY_CODE
 from ..family.ifu_fields import IFU_FIELD_GROUPS, IFU_FIELD_KEYS
@@ -18,6 +15,7 @@ from ..family.models import (
     TaxReturn,
 )
 from ..main.models import Project, db
+from ..service.tax_service import TaxEstimationError, estimate_tax
 from ..settings import VALID_THEMES, read_settings, write_settings
 from ..tax.models import (
     CharitySegment,
@@ -407,6 +405,14 @@ def archive_tax_return(tax_return_id):
     return jsonify({"message": "Tax return archived successfully"})
 
 
+@api.route("/api/tax-returns/<int:tax_return_id>/estimation")
+def get_tax_return_estimation(tax_return_id):
+    try:
+        return jsonify(estimate_tax(tax_return_id))
+    except TaxEstimationError as error:
+        return jsonify({"error": str(error)}), error.status_code
+
+
 @api.route("/api/tax-returns/<int:tax_return_id>/income-statements")
 def get_income_statements(tax_return_id):
     tax_return = active_tax_return_or_404(tax_return_id)
@@ -777,14 +783,3 @@ def get_taxstatement(taxstatement_id):
     except Exception as e:
         print(e)
         abort(404)
-
-
-@api.route("/api/taxes/<int:taxstatement_id>/estimation")
-def get_taxestimation(taxstatement_id):
-    taxstatement = TaxStatement.query.get(taxstatement_id)
-    project = Project.query.get(taxstatement.project_id)
-
-    tax_input, rendering_elements = prepare_tax_input(project, taxstatement)
-    tax_result, tax_flags = simulate_tax(taxstatement.year, tax_input)
-    total_taxes = tax_result[TaxField.NET_TAXES] + tax_result[TaxField.NET_SOCIAL_TAXES]
-    return jsonify({'total_taxes': total_taxes, 'details': tax_result, 'flags': tax_flags})

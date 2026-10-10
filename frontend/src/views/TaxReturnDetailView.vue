@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
@@ -33,8 +33,30 @@ const editingDonationStatement = ref(null)
 const showIfuStatementForm = ref(false)
 const editingIfuStatement = ref(null)
 const activeStatementTab = ref(null)
+const estimate = ref(null)
+const estimationLoading = ref(false)
+const estimationError = ref('')
+let loadGeneration = 0
+
+onBeforeUnmount(() => { loadGeneration += 1 })
+
+const loadTaxEstimation = async (taxReturnId, generation) => {
+  estimationLoading.value = true
+  try {
+    const response = await axios.get(`/api/tax-returns/${taxReturnId}/estimation`)
+    if (generation === loadGeneration) estimate.value = response.data
+  } catch (error) {
+    if (generation === loadGeneration) {
+      estimationError.value = error.response?.data?.error || 'Tax estimation is unavailable. Please try again.'
+    }
+  } finally {
+    if (generation === loadGeneration) estimationLoading.value = false
+  }
+}
 
 const loadTaxReturn = async () => {
+  const generation = ++loadGeneration
+  const familyId = familyStore.familyId
   const taxReturnId = Number(route.params.taxReturnId)
   taxReturn.value = null
   family.value = null
@@ -44,8 +66,11 @@ const loadTaxReturn = async () => {
   ifuStatements.value = []
   ifuFieldGroups.value = []
   unavailable.value = false
+  estimate.value = null
+  estimationLoading.value = false
+  estimationError.value = ''
 
-  if (!familyStore.familyId || !Number.isInteger(taxReturnId)) {
+  if (!familyId || !Number.isInteger(taxReturnId)) {
     loading.value = false
     unavailable.value = true
     return
@@ -53,10 +78,12 @@ const loadTaxReturn = async () => {
 
   loading.value = true
   try {
-    const response = await axios.get(`/api/families/${familyStore.familyId}/tax-returns`)
+    const response = await axios.get(`/api/families/${familyId}/tax-returns`)
+    if (generation !== loadGeneration) return
     taxReturn.value = response.data.find((item) => item.id === taxReturnId) || null
     unavailable.value = !taxReturn.value
     if (!taxReturn.value) return
+    void loadTaxEstimation(taxReturnId, generation)
 
     const [
       familyResponse,
@@ -66,7 +93,7 @@ const loadTaxReturn = async () => {
       ifuStatementsResponse,
       ifuFieldsResponse,
     ] = await Promise.all([
-      axios.get(`/api/families/${familyStore.familyId}`),
+      axios.get(`/api/families/${familyId}`),
       taxReturn.value.has_income_statements
         ? axios.get(`/api/tax-returns/${taxReturnId}/income-statements`)
         : Promise.resolve({ data: [] }),
@@ -83,6 +110,7 @@ const loadTaxReturn = async () => {
         ? axios.get('/api/ifu-fields')
         : Promise.resolve({ data: [] }),
     ])
+    if (generation !== loadGeneration) return
     family.value = familyResponse.data
     incomeStatements.value = incomeStatementsResponse.data
     donationStatements.value = donationStatementsResponse.data
@@ -90,9 +118,9 @@ const loadTaxReturn = async () => {
     ifuStatements.value = ifuStatementsResponse.data
     ifuFieldGroups.value = ifuFieldsResponse.data
   } catch {
-    unavailable.value = true
+    if (generation === loadGeneration) unavailable.value = true
   } finally {
-    loading.value = false
+    if (generation === loadGeneration) loading.value = false
   }
 }
 
@@ -104,7 +132,6 @@ watch(
 
 const settingsSaved = () => {
   familyStore.refreshTaxReturns()
-  loadTaxReturn()
 }
 
 const taxpayers = computed(() =>
@@ -225,7 +252,11 @@ const deleteIfuStatement = async (statement) => {
 
     <template v-else>
       <TaxReturnHeader :year="taxReturn.year" @edit-settings="showSettings = true" />
-      <TaxReturnSummary />
+      <TaxReturnSummary
+        :estimate="estimate"
+        :estimation-loading="estimationLoading"
+        :estimation-error="estimationError"
+      />
 
       <TabsRoot v-if="statementTabs.length" v-model="activeStatementTab" class="w-full">
         <TabsList
