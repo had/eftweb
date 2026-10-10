@@ -1,6 +1,5 @@
 import atexit
 import json
-import locale
 from datetime import date, datetime, timedelta
 
 import requests
@@ -107,22 +106,3 @@ class Ticker:
 
 
 ticker = Ticker()
-
-
-class CurrencySymbols:
-    locales = ('en_GB.UTF-8', 'zh_HK.UTF-8', 'en_IE.UTF-8', 'en_US.UTF-8', 'ja_JP.UTF-8')
-    currency_symbols: dict[str, str]
-
-    def __init__(self):
-        self.currency_symbols = {}
-        for loc in self.locales:
-            locale.setlocale(locale.LC_ALL, loc)
-            conv = locale.localeconv()
-            self.currency_symbols[conv['int_curr_symbol']] = conv['currency_symbol']
-        locale.setlocale(locale.LC_ALL, "")
-
-    def get(self, currency_code: str) -> str:
-        return self.currency_symbols[currency_code]
-
-
-currency_symbols = CurrencySymbols()
