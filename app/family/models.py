@@ -22,6 +22,12 @@ class Family(db.Model):
         cascade="all, delete-orphan",
         order_by="TaxReturn.year.desc()",
     )
+    stocks = db.relationship(
+        "Stock",
+        back_populates="family",
+        cascade="all, delete-orphan",
+        order_by="Stock.name, Stock.id",
+    )
 
     @property
     def taxpayer1(self):

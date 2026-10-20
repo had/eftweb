@@ -17,6 +17,7 @@ from ..family.models import (
 from ..main.models import Project, db
 from ..service.tax_service import TaxEstimationError, estimate_tax
 from ..settings import VALID_THEMES, read_settings, write_settings
+from ..stocks.models import Stock
 from ..tax.models import (
     CharitySegment,
     FixedIncomeInvestmentSegment,
@@ -331,6 +332,86 @@ def archive_family(family_id):
     family.is_archived = True
     db.session.commit()
     return jsonify({"message": "Family archived successfully"})
+
+
+def stock_fields_from_payload(data):
+    if not isinstance(data, dict):
+        raise ValueError("Stock data must be an object")
+
+    name = data.get("name")
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("Stock name is required")
+    name = name.strip()
+    if len(name) > 256:
+        raise ValueError("Stock name must be at most 256 characters")
+
+    symbol = data.get("symbol")
+    if not isinstance(symbol, str) or not symbol.strip():
+        raise ValueError("Ticker symbol is required")
+    symbol = symbol.strip().upper()
+    if len(symbol) > 16 or any(character.isspace() for character in symbol):
+        raise ValueError("Ticker symbol must be at most 16 characters without spaces")
+    return {"name": name, "symbol": symbol}
+
+
+@api.route("/api/families/<int:family_id>/stocks", methods=["GET", "POST"])
+def family_stocks(family_id):
+    family = family_or_404(family_id)
+    if family is None:
+        return jsonify({"error": "Family is archived"}), 410
+
+    if request.method == "GET":
+        archived = request.args.get("archived", "false").lower() == "true"
+        stocks = (
+            Stock.query.filter_by(family_id=family.id, is_archived=archived)
+            .order_by(Stock.name, Stock.id)
+            .all()
+        )
+        return jsonify([stock.to_dict() for stock in stocks])
+
+    try:
+        fields = stock_fields_from_payload(request.get_json(silent=True))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    stock = Stock(family_id=family.id, **fields)
+    db.session.add(stock)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"error": "A stock with this ticker symbol already exists in this family (including archived stocks)"}), 409
+    return jsonify(stock.to_dict()), 201
+
+
+@api.route("/api/stocks/<int:stock_id>", methods=["PUT", "DELETE"])
+def manage_stock(stock_id):
+    stock = db.session.get(Stock, stock_id)
+    if not stock:
+        abort(404)
+    if stock.family.is_archived:
+        return jsonify({"error": "Family is archived"}), 410
+    if stock.is_archived:
+        return jsonify({"error": "Stock is archived"}), 410
+
+    if request.method == "DELETE":
+        stock.is_archived = True
+        db.session.commit()
+        return jsonify({"message": "Stock archived successfully"})
+
+    try:
+        fields = stock_fields_from_payload(request.get_json(silent=True))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    stock.name = fields["name"]
+    stock.symbol = fields["symbol"]
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"error": "A stock with this ticker symbol already exists in this family (including archived stocks)"}), 409
+    return jsonify(stock.to_dict())
 
 
 @api.route("/api/families/<int:family_id>/tax-returns")

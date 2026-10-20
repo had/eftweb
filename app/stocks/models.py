@@ -3,6 +3,28 @@ from easyfrenchtax import StockType
 from .. import db
 
 
+class Stock(db.Model):
+    __tablename__ = "stocks"
+    __table_args__ = (db.UniqueConstraint("family_id", "symbol", name="uq_stock_family_symbol"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(db.Integer, db.ForeignKey("families.id", ondelete="CASCADE"), nullable=False)
+    name = db.Column(db.String(256), nullable=False)
+    symbol = db.Column(db.String(16), nullable=False)
+    is_archived = db.Column(db.Boolean, nullable=False, default=False)
+
+    family = db.relationship("Family", back_populates="stocks")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "family_id": self.family_id,
+            "name": self.name,
+            "symbol": self.symbol,
+            "is_archived": self.is_archived,
+        }
+
+
 class DirectStocksPlan(db.Model):
     __tablename__ = "direct_stocks_plan"
     id = db.Column(db.Integer, primary_key=True)
