@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import axios from 'axios'
 import { Pencil, Plus, Trash2 } from 'lucide-vue-next'
 import { useFamilyStore } from '@/stores/family'
@@ -144,12 +145,17 @@ const archiveStock = async () => {
           <span class="font-medium">Add a New Stock</span>
         </span>
       </button>
-      <Card v-for="stock in stocks" :key="stock.id" class="relative">
+      <Card
+        v-for="stock in stocks"
+        :key="stock.id"
+        class="relative"
+        :class="!showArchived && 'transition-shadow hover:shadow-lg'"
+      >
         <CardContent
           class="flex min-h-28 flex-col items-start justify-center gap-2 p-4"
           :class="!showArchived && 'pr-24'"
         >
-          <div v-if="!showArchived" class="absolute right-2 top-2 flex gap-1">
+          <div v-if="!showArchived" class="absolute right-2 top-2 z-10 flex gap-1">
             <Button
               variant="ghost"
               size="icon"
@@ -169,6 +175,17 @@ const archiveStock = async () => {
           <span class="max-w-full break-words text-lg font-medium">{{ stock.name }}</span>
           <span class="rounded bg-muted px-2 py-0.5 text-xs">{{ stock.symbol }}</span>
         </CardContent>
+        <RouterLink
+          v-if="!showArchived"
+          :to="{
+            name: 'stock',
+            params: { stockId: stock.id },
+            query: { name: stock.name, symbol: stock.symbol },
+          }"
+          class="absolute inset-0 rounded-xl focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          <span class="sr-only">View {{ stock.name }}</span>
+        </RouterLink>
       </Card>
       <p v-if="stocks.length === 0" class="text-sm text-muted-foreground sm:col-span-2">
         No {{ showArchived ? 'archived' : 'active' }} stocks found.

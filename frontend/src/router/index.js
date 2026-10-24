@@ -3,6 +3,7 @@ import HomeView from '@/views/HomeView.vue'
 import FamilyListView from '@/views/FamilyListView.vue'
 import FamilyLandingView from '@/views/FamilyLandingView.vue'
 import StocksView from '@/views/StocksView.vue'
+import StockDetailView from '@/views/StockDetailView.vue'
 import TaxReturnsView from '@/views/TaxReturnsView.vue'
 import TaxReturnDetailView from '@/views/TaxReturnDetailView.vue'
 import SettingsView from '@/views/SettingsView.vue'
@@ -29,6 +30,15 @@ const router = createRouter({
       path: '/stocks',
       name: 'stocks',
       component: StocksView,
+    },
+    {
+      path: '/stocks/:stockId',
+      name: 'stock',
+      component: StockDetailView,
+      props: (route) => ({
+        stockName: typeof route.query.name === 'string' ? route.query.name : undefined,
+        stockSymbol: typeof route.query.symbol === 'string' ? route.query.symbol : undefined,
+      }),
     },
     {
       path: '/tax-returns',
