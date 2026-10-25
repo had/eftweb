@@ -5,6 +5,8 @@ import { setImmediate } from 'node:timers/promises'
 import { createPinia } from 'pinia'
 import axios from 'axios'
 import { useStockGrantsStore } from '../src/stores/stockGrants.js'
+import { useStockQuotesStore } from '../src/stores/stockQuotes.js'
+import { formatStockValue } from '../src/lib/stockQuotes.js'
 import * as Vue from 'vue'
 import { parse } from 'vue/compiler-sfc'
 import * as vesting from '../src/components/stock-detail/vesting.js'
@@ -223,6 +225,8 @@ function mountDetail(t) {
     {
       useRoute: () => route,
       useStockGrantsStore: () => store,
+      useStockQuotesStore: () => useStockQuotesStore(createPinia()),
+      formatStockValue,
       onMounted: () => {},
       onBeforeUnmount: () => {},
     },

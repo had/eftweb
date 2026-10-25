@@ -38,11 +38,14 @@ const ledger = [...activity].reverse()
 
 <template>
   <div class="space-y-4">
-    <div>
-      <h2 class="text-xl font-semibold">What you held, and when</h2>
-      <p class="mt-1 text-sm text-muted-foreground">
-        Vesting adds shares. Sales reduce your available balance.
-      </p>
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h2 class="text-xl font-semibold">What you held, and when</h2>
+        <p class="mt-1 text-sm text-muted-foreground">
+          Vesting adds shares. Sales reduce your available balance.
+        </p>
+      </div>
+      <slot name="actions" />
     </div>
     <Card class="gap-0 py-0">
       <CardHeader class="flex flex-row flex-wrap items-center justify-between gap-3 p-5 pb-0">

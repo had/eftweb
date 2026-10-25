@@ -11,21 +11,21 @@ import GrantsOverview from '@/components/stock-detail/GrantsOverview.vue'
 import AddGrantWizardModal from '@/components/stock-detail/AddGrantWizardModal.vue'
 import DeleteConfirmModal from '@/components/DeleteConfirmModal.vue'
 import { useStockGrantsStore } from '@/stores/stockGrants'
-import {
-  formatDate,
-  formatShares,
-  localDate,
-  summarizeGrants,
-} from '@/components/stock-detail/vesting.js'
+import { useStockQuotesStore } from '@/stores/stockQuotes'
+import StockQuote from '@/components/StockQuote.vue'
+import { formatStockValue } from '@/lib/stockQuotes.js'
+import { formatShares, localDate, summarizeGrants } from '@/components/stock-detail/vesting.js'
 
 const activeTab = ref('vesting')
 const route = useRoute()
 const grantsStore = useStockGrantsStore()
+const quotesStore = useStockQuotesStore()
 const stockId = computed(() => Number(route.params.stockId))
 const entry = computed(() => grantsStore.forStock(stockId.value))
 const grants = computed(() => entry.value.grants)
 const stockName = computed(() => entry.value.stock?.name || 'Stock')
 const stockSymbol = computed(() => entry.value.stock?.symbol || '')
+const quoteEntry = computed(() => quotesStore.forSymbol(stockSymbol.value))
 const ready = computed(() => entry.value.loaded && !entry.value.loading && !entry.value.loadError)
 const showAddGrant = ref(false)
 const grantToDelete = ref(null)
@@ -108,27 +108,19 @@ const summaries = computed(() => [
         <ArrowLeft class="h-4 w-4" /> All stocks
       </RouterLink>
 
-      <header class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div class="mb-2 flex items-center gap-3">
-            <h1 class="text-3xl font-bold tracking-tight">{{ stockName }}</h1>
-            <span class="rounded-md border bg-card px-2 py-1 text-xs font-medium">{{
-              stockSymbol
-            }}</span>
-          </div>
-          <p class="text-sm text-muted-foreground">Employee equity · Grants, vesting and sales</p>
+      <header class="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <div class="flex min-w-0 flex-wrap items-center gap-3">
+          <h1 class="break-words text-3xl font-bold tracking-tight">{{ stockName }}</h1>
+          <span class="shrink-0 rounded-md border bg-card px-2 py-1 text-xs font-medium">{{
+            stockSymbol
+          }}</span>
         </div>
-        <div class="flex gap-2" aria-label="Portfolio actions">
-          <Button disabled title="Recording sales is coming soon"
-            ><ArrowUpRight class="h-4 w-4" /> Record sale</Button
-          >
-          <Button
-            variant="outline"
-            :disabled="!ready || entry.saving || entry.deletingId !== null"
-            @click="showAddGrant = true"
-            ><Plus class="h-4 w-4" /> Add grant</Button
-          >
-        </div>
+        <StockQuote
+          v-if="entry.stock"
+          :stock="entry.stock"
+          compact
+          class="ml-auto shrink-0 text-right"
+        />
       </header>
 
       <div
@@ -145,8 +137,6 @@ const summaries = computed(() => [
         <Button variant="outline" @click="grantsStore.load(stockId)">Retry</Button>
       </div>
       <template v-else-if="ready">
-        <p class="text-xs text-muted-foreground">As of {{ formatDate(today) }}</p>
-
         <section aria-label="Portfolio summary" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Card
             v-for="summary in summaries"
@@ -156,17 +146,33 @@ const summaries = computed(() => [
           >
             <CardContent class="p-5">
               <h2 class="text-sm text-muted-foreground">{{ summary.label }}</h2>
-              <p
-                class="my-2 text-3xl font-semibold tracking-tight tabular-nums"
-                :class="summary.emphasized && 'text-primary'"
-              >
-                {{ formatShares(summary.value)
-                }}<span class="ml-2 text-xs font-normal text-muted-foreground">shares</span>
-              </p>
+              <div class="my-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <p
+                  class="text-3xl font-semibold tracking-tight tabular-nums"
+                  :class="summary.emphasized && 'text-primary'"
+                >
+                  {{ formatShares(summary.value)
+                  }}<span class="ml-2 text-xs font-normal text-muted-foreground">shares</span>
+                </p>
+                <span
+                  class="break-all text-sm font-medium tabular-nums text-muted-foreground"
+                  :aria-label="`Estimated USD value of ${summary.label}`"
+                  >{{
+                    quoteEntry.loading && !quoteEntry.quote?.price
+                      ? 'Loading…'
+                      : formatStockValue(summary.value, quoteEntry.quote?.price)
+                  }}</span
+                >
+              </div>
               <p class="text-xs text-muted-foreground">{{ summary.detail }}</p>
             </CardContent>
           </Card>
         </section>
+        <p class="text-xs text-muted-foreground">
+          Estimated USD values use
+          {{ quoteEntry.quote?.stale ? 'the cached' : 'the latest available' }} stock price. Future
+          vesting values are estimates.
+        </p>
 
         <TabsRoot v-model="activeTab" class="w-full">
           <TabsList
@@ -185,8 +191,18 @@ const summaries = computed(() => [
           <TabsContent
             value="vesting"
             class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            ><VestingTimeline :grants="grants" :today="today"
-          /></TabsContent>
+          >
+            <VestingTimeline :grants="grants" :today="today">
+              <template #actions>
+                <Button
+                  variant="outline"
+                  :disabled="entry.saving || entry.deletingId !== null"
+                  @click="showAddGrant = true"
+                  ><Plus class="h-4 w-4" /> Add grant</Button
+                >
+              </template>
+            </VestingTimeline>
+          </TabsContent>
           <TabsContent
             value="holdings"
             class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -195,8 +211,14 @@ const summaries = computed(() => [
             >
               Sample preview · This tab does not reflect the grants entered above.
             </p>
-            <HoldingsAndSales
-          /></TabsContent>
+            <HoldingsAndSales>
+              <template #actions>
+                <Button disabled title="Recording sales is coming soon"
+                  ><ArrowUpRight class="h-4 w-4" /> Record sale</Button
+                >
+              </template>
+            </HoldingsAndSales>
+          </TabsContent>
           <TabsContent
             value="grants"
             class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

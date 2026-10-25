@@ -6,6 +6,7 @@ import { Pencil, Plus, Trash2 } from 'lucide-vue-next'
 import { useFamilyStore } from '@/stores/family'
 import EftLayout from '@/components/EftLayout.vue'
 import StockFormModal from '@/components/StockFormModal.vue'
+import StockQuote from '@/components/StockQuote.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -174,6 +175,7 @@ const archiveStock = async () => {
           </div>
           <span class="max-w-full break-words text-lg font-medium">{{ stock.name }}</span>
           <span class="rounded bg-muted px-2 py-0.5 text-xs">{{ stock.symbol }}</span>
+          <StockQuote :stock="stock" />
         </CardContent>
         <RouterLink
           v-if="!showArchived"

@@ -1,6 +1,7 @@
 import datetime
 from pathlib import Path
 
+from dotenv import load_dotenv
 from flask import Flask
 from flask.json.provider import DefaultJSONProvider
 from flask_bootstrap import Bootstrap4
@@ -29,7 +30,12 @@ class CustomJSONProvider(DefaultJSONProvider):
         return super().default(obj)
 
 
+def load_environment(dotenv_path=None):
+    load_dotenv(dotenv_path or Path(__file__).resolve().parent.parent / ".env", override=False)
+
+
 def create_app(config_name):
+    load_environment()
     app = Flask(__name__)
     app.json_provider_class = CustomJSONProvider
     app.json = app.json_provider_class(app)

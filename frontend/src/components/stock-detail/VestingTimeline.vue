@@ -88,16 +88,19 @@ const yearLabels = computed(() =>
           Quarterly releases across your grants, past and future.
         </p>
       </div>
-      <p v-if="summary.nextRelease" class="text-sm text-muted-foreground">
-        Next release
-        <span class="font-medium text-foreground"
-          >{{ formatShares(summary.nextRelease.quantity) }} shares</span
-        >
-        · {{ formatDate(summary.nextRelease.date) }}
-      </p>
-      <p v-else-if="grants.length" class="text-sm text-muted-foreground">
-        All entered shares have vested.
-      </p>
+      <div class="flex flex-wrap items-center gap-4">
+        <p v-if="summary.nextRelease" class="text-sm text-muted-foreground">
+          Next release
+          <span class="font-medium text-foreground"
+            >{{ formatShares(summary.nextRelease.quantity) }} shares</span
+          >
+          · {{ formatDate(summary.nextRelease.date) }}
+        </p>
+        <p v-else-if="grants.length" class="text-sm text-muted-foreground">
+          All entered shares have vested.
+        </p>
+        <slot name="actions" />
+      </div>
     </div>
 
     <GrantsEmptyState v-if="!grants.length" />

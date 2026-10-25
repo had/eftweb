@@ -28,3 +28,6 @@ dmypy.json
 
 # Local application settings
 /instance/
+
+# Local credentials
+/.env
