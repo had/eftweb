@@ -1,6 +1,6 @@
 <script setup>
-import { ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 import { ArrowLeft, ArrowUpRight, Plus } from 'lucide-vue-next'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,16 @@ import { Card, CardContent } from '@/components/ui/card'
 import VestingTimeline from '@/components/stock-detail/VestingTimeline.vue'
 import HoldingsAndSales from '@/components/stock-detail/HoldingsAndSales.vue'
 import GrantsOverview from '@/components/stock-detail/GrantsOverview.vue'
-import { formatDate, formatShares, portfolio } from '@/components/stock-detail/mockPortfolio'
+import AddGrantWizardModal from '@/components/stock-detail/AddGrantWizardModal.vue'
+import DeleteConfirmModal from '@/components/DeleteConfirmModal.vue'
+import {
+  createId,
+  formatDate,
+  formatShares,
+  grantColor,
+  localDate,
+  summarizeGrants,
+} from '@/components/stock-detail/vesting.js'
 
 defineProps({
   stockName: { type: String, default: 'Employee equity' },
@@ -16,22 +25,61 @@ defineProps({
 })
 
 const activeTab = ref('vesting')
+const route = useRoute()
+const grants = ref([])
+const showAddGrant = ref(false)
+const grantToDelete = ref(null)
+let nextGrantColor = 0
+const today = ref(localDate())
+let dateTimer
+onMounted(() => {
+  dateTimer = setInterval(() => {
+    today.value = localDate()
+  }, 60000)
+})
+onBeforeUnmount(() => clearInterval(dateTimer))
+watch(
+  () => route.params.stockId,
+  () => {
+    grants.value = []
+    showAddGrant.value = false
+    grantToDelete.value = null
+    nextGrantColor = 0
+    activeTab.value = 'vesting'
+  },
+  { flush: 'sync' },
+)
+const addGrant = (grant) => {
+  grants.value.push({ ...grant, id: createId(), color: grantColor(nextGrantColor++) })
+  showAddGrant.value = false
+  activeTab.value = 'vesting'
+}
+const deleteGrant = () => {
+  if (!grantToDelete.value) return
+  grants.value = grants.value.filter((grant) => grant.id !== grantToDelete.value.id)
+  grantToDelete.value = null
+}
 const tabs = [
   { value: 'vesting', label: 'Vesting timeline' },
   { value: 'holdings', label: 'Holdings & sales' },
   { value: 'grants', label: 'By grant' },
 ]
-const summaries = [
-  { label: 'Total awarded', value: portfolio.awarded, detail: 'Across 5 retention plans' },
+const portfolio = computed(() => summarizeGrants(grants.value, today.value))
+const summaries = computed(() => [
   {
-    label: 'Available to sell',
-    value: portfolio.held,
-    detail: 'Vested and still held',
+    label: 'Total awarded',
+    value: portfolio.value.awarded,
+    detail: `Across ${grants.value.length} ${grants.value.length === 1 ? 'grant' : 'grants'}`,
+  },
+  {
+    label: 'Vested so far',
+    value: portfolio.value.vested,
+    detail: 'Before any sales',
     emphasized: true,
   },
-  { label: 'Still to vest', value: portfolio.unvested, detail: 'From existing grants' },
-  { label: 'Next 12 months', value: portfolio.nextTwelveMonths, detail: 'Scheduled to vest' },
-]
+  { label: 'Still to vest', value: portfolio.value.unvested, detail: 'From entered grants' },
+  { label: 'Next 12 months', value: portfolio.value.nextTwelveMonths, detail: 'Scheduled to vest' },
+])
 </script>
 
 <template>
@@ -54,11 +102,11 @@ const summaries = [
           </div>
           <p class="text-sm text-muted-foreground">Employee equity · Grants, vesting and sales</p>
         </div>
-        <div class="flex gap-2" aria-label="Portfolio actions coming soon">
+        <div class="flex gap-2" aria-label="Portfolio actions">
           <Button disabled title="Recording sales is coming soon"
             ><ArrowUpRight class="h-4 w-4" /> Record sale</Button
           >
-          <Button variant="outline" disabled title="Adding grants is coming soon"
+          <Button variant="outline" @click="showAddGrant = true"
             ><Plus class="h-4 w-4" /> Add grant</Button
           >
         </div>
@@ -68,12 +116,13 @@ const summaries = [
         class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed bg-muted/50 px-4 py-3 text-sm"
       >
         <p>
-          <span class="font-medium">Design preview</span
+          <span class="font-medium">Temporary grants</span
           ><span class="text-muted-foreground">
-            · All portfolio figures are sample data. Grant and sale entry is coming soon.</span
+            · Grants are kept only while this stock view is open. Navigating away or reloading
+            discards them.</span
           >
         </p>
-        <span class="text-xs text-muted-foreground">As of {{ formatDate(portfolio.asOf) }}</span>
+        <span class="text-xs text-muted-foreground">As of {{ formatDate(today) }}</span>
       </div>
 
       <section aria-label="Portfolio summary" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -114,19 +163,48 @@ const summaries = [
         <TabsContent
           value="vesting"
           class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          ><VestingTimeline
+          ><VestingTimeline :grants="grants" :today="today"
         /></TabsContent>
         <TabsContent
           value="holdings"
           class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          ><HoldingsAndSales
+          ><p
+            class="mb-4 rounded-lg border border-dashed bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
+          >
+            Sample preview · This tab does not reflect the grants entered above.
+          </p>
+          <HoldingsAndSales
         /></TabsContent>
         <TabsContent
           value="grants"
           class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          ><GrantsOverview
-        /></TabsContent>
+        >
+          <GrantsOverview :grants="grants" :today="today" @delete="grantToDelete = $event" />
+        </TabsContent>
       </TabsRoot>
+      <AddGrantWizardModal
+        :key="route.params.stockId"
+        v-model:open="showAddGrant"
+        :ticker="stockSymbol"
+        @confirmed="addGrant"
+      />
+      <DeleteConfirmModal
+        :open="Boolean(grantToDelete)"
+        title="Delete grant"
+        :description="
+          grantToDelete
+            ? `Delete “${grantToDelete.title}” (${formatShares(grantToDelete.quantity)} shares)? The grant and all of its vesting releases will be removed from this view.`
+            : ''
+        "
+        confirm-label="Delete grant"
+        @update:open="
+          (open) => {
+            if (!open) grantToDelete = null
+          }
+        "
+        @cancel="grantToDelete = null"
+        @confirm="deleteGrant"
+      />
     </div>
   </main>
 </template>

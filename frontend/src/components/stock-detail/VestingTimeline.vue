@@ -1,43 +1,82 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatDate, formatShares, grants, portfolio, quarters } from './mockPortfolio'
+import GrantsEmptyState from './GrantsEmptyState.vue'
+import {
+  addMonths,
+  buildQuarters,
+  formatDate,
+  formatShares,
+  localDate,
+  summarizeGrants,
+} from './vesting.js'
 
-const selectedId = ref('2027-Q1')
-const selectedQuarter = computed(() => quarters.find((quarter) => quarter.id === selectedId.value))
-const contributions = computed(() =>
-  grants
-    .map((grant, index) => ({
-      ...grant,
-      shares: selectedQuarter.value.shares[index],
-    }))
-    .filter((grant) => grant.shares > 0),
+const props = defineProps({
+  grants: { type: Array, default: () => [] },
+  today: { type: String, default: () => localDate() },
+})
+const quarters = computed(() => buildQuarters(props.grants, props.today))
+const summary = computed(() => summarizeGrants(props.grants, props.today))
+const selectedId = ref('')
+watch(
+  quarters,
+  (items) => {
+    if (!items.some((quarter) => quarter.id === selectedId.value)) {
+      selectedId.value = (items.find((quarter) => quarter.scheduled > 0) || items.at(-1))?.id || ''
+    }
+  },
+  { immediate: true },
+)
+const selectedQuarter = computed(() =>
+  quarters.value.find((quarter) => quarter.id === selectedId.value),
 )
 
-const left = 52
+const left = 58
 const baseline = 254
-const step = 49
-const scale = 0.17
-const todayX = left + 8 * step
-const bars = quarters.map((quarter, index) => {
-  let stacked = 0
-  return {
-    ...quarter,
-    x: left + index * step,
-    segments: quarter.shares
-      .map((shares, grantIndex) => {
-        stacked += shares
-        return {
-          shares,
-          y: baseline - stacked * scale,
-          height: shares * scale,
-          color: grants[grantIndex].color,
-        }
-      })
-      .filter((segment) => segment.shares > 0),
-  }
+const step = computed(() => Math.max(49, 1030 / Math.max(quarters.value.length, 1)))
+const chartWidth = computed(() => left + step.value * quarters.value.length + 20)
+const tickStep = computed(() => {
+  const rough = Math.max(1, Math.max(0, ...quarters.value.map((quarter) => quarter.total)) / 4)
+  const magnitude = 10 ** Math.floor(Math.log10(rough))
+  return Math.ceil(rough / magnitude) * magnitude
 })
-const yearLabels = ['2025', '2026', '2027', '2028', '2029', '2030']
+const ticks = computed(() => Array.from({ length: 5 }, (_, index) => index * tickStep.value))
+const scale = computed(() => 204 / (tickStep.value * 4))
+const bars = computed(() =>
+  quarters.value.map((quarter, index) => {
+    let stacked = 0
+    return {
+      ...quarter,
+      x: left + index * step.value,
+      segments: quarter.segments.map((segment) => {
+        stacked += segment.quantity
+        return {
+          ...segment,
+          y: baseline - stacked * scale.value,
+          height: segment.quantity * scale.value,
+        }
+      }),
+    }
+  }),
+)
+const todayX = computed(() => {
+  const year = Number(props.today.slice(0, 4))
+  const quarter = Math.floor((Number(props.today.slice(5, 7)) - 1) / 3)
+  const index = quarters.value.findIndex(
+    (item) => item.year === year && item.quarter === `Q${quarter + 1}`,
+  )
+  const start = `${String(year).padStart(4, '0')}-${String(quarter * 3 + 1).padStart(2, '0')}-01`
+  const time = (date) => Date.parse(`${date}T00:00:00Z`)
+  const fraction = (time(props.today) - time(start)) / (time(addMonths(start, 3)) - time(start))
+  return left + (index + fraction) * step.value
+})
+const yearLabels = computed(() =>
+  [...new Set(quarters.value.map((quarter) => quarter.year))].map((year) => {
+    const index = quarters.value.findIndex((quarter) => quarter.year === year)
+    const count = quarters.value.filter((quarter) => quarter.year === year).length
+    return { year, x: left + (index + count / 2) * step.value }
+  }),
+)
 </script>
 
 <template>
@@ -46,27 +85,30 @@ const yearLabels = ['2025', '2026', '2027', '2028', '2029', '2030']
       <div>
         <h2 class="text-xl font-semibold">When shares become yours</h2>
         <p class="mt-1 text-sm text-muted-foreground">
-          Quarterly releases across all awarded plans, past and future.
+          Quarterly releases across your grants, past and future.
         </p>
       </div>
-      <p class="text-sm text-muted-foreground">
+      <p v-if="summary.nextRelease" class="text-sm text-muted-foreground">
         Next release
         <span class="font-medium text-foreground"
-          >{{ formatShares(portfolio.nextRelease.shares) }} shares</span
+          >{{ formatShares(summary.nextRelease.quantity) }} shares</span
         >
-        · {{ formatDate(portfolio.nextRelease.date) }}
+        · {{ formatDate(summary.nextRelease.date) }}
+      </p>
+      <p v-else-if="grants.length" class="text-sm text-muted-foreground">
+        All entered shares have vested.
       </p>
     </div>
 
-    <Card class="gap-0 py-0">
+    <GrantsEmptyState v-if="!grants.length" />
+    <Card v-else class="gap-0 py-0">
       <CardHeader class="gap-3 p-5 pb-0">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <CardTitle class="text-base">Vesting by quarter</CardTitle>
           <div class="flex gap-4 text-xs text-muted-foreground">
             <span class="inline-flex items-center gap-2"
               ><span class="h-3 w-3 rounded-sm bg-primary" /> Vested</span
-            >
-            <span class="inline-flex items-center gap-2"
+            ><span class="inline-flex items-center gap-2"
               ><span class="h-3 w-3 rounded-sm border-2 border-primary" /> Scheduled</span
             >
           </div>
@@ -75,40 +117,44 @@ const yearLabels = ['2025', '2026', '2027', '2028', '2029', '2030']
           class="flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground"
           aria-label="Grant legend"
         >
-          <span v-for="grant in grants" :key="grant.id" class="inline-flex items-center gap-2"
-            ><span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: grant.color }" />{{
-              grant.id
-            }}
-            plan</span
+          <span
+            v-for="grant in grants"
+            :key="grant.id"
+            class="inline-flex max-w-full items-center gap-2 break-words"
+            ><span
+              class="h-2.5 w-2.5 shrink-0 rounded-full"
+              :style="{ backgroundColor: grant.color }"
+            />{{ grant.title }}</span
           >
         </div>
       </CardHeader>
-      <CardContent class="p-5">
+      <CardContent class="min-w-0 p-5">
         <div class="overflow-x-auto pb-2">
           <svg
-            viewBox="0 0 1100 318"
-            class="min-w-[850px] w-full"
+            :viewBox="`0 0 ${chartWidth} 318`"
+            :style="{ minWidth: `${chartWidth}px` }"
+            class="w-full"
             role="group"
             aria-labelledby="vesting-chart-title vesting-chart-description"
           >
             <title id="vesting-chart-title">Quarterly vesting timeline</title>
             <desc id="vesting-chart-description">
-              Filled stacked bars show vested shares, outlined bars show scheduled releases. Select
-              a quarter for its grant breakdown. The quarter selector below provides the same
-              information.
+              Filled segments have vested; outlined segments are scheduled after today. A quarter
+              may contain both. Select a quarter for exact dates and grant contributions, or use the
+              quarter selector below.
             </desc>
             <rect
               :x="todayX"
               y="29"
-              :width="1088 - todayX"
+              :width="Math.max(0, chartWidth - 20 - todayX)"
               height="225"
               rx="4"
               class="fill-muted/40"
             />
-            <g v-for="tick in [0, 400, 800, 1200]" :key="tick">
+            <g v-for="tick in ticks" :key="tick">
               <line
                 :x1="left"
-                x2="1088"
+                :x2="chartWidth - 20"
                 :y1="baseline - tick * scale"
                 :y2="baseline - tick * scale"
                 class="stroke-border"
@@ -124,9 +170,6 @@ const yearLabels = ['2025', '2026', '2027', '2028', '2029', '2030']
               </text>
             </g>
             <text :x="left" y="18" class="fill-muted-foreground text-[11px]">Shares</text>
-            <text x="1088" y="18" text-anchor="end" class="fill-muted-foreground text-[11px]">
-              Awarded grants only
-            </text>
             <g
               v-for="bar in bars"
               :key="bar.id"
@@ -134,8 +177,8 @@ const yearLabels = ['2025', '2026', '2027', '2028', '2029', '2030']
               @click="selectedId = bar.id"
             >
               <title>
-                {{ bar.quarter }} {{ bar.year }}: {{ formatShares(bar.total) }}
-                {{ bar.scheduled ? 'scheduled' : 'vested' }} shares
+                {{ bar.quarter }} {{ bar.year }}: {{ formatShares(bar.vested) }} vested,
+                {{ formatShares(bar.scheduled) }} scheduled shares
               </title>
               <rect
                 :x="bar.x + 2"
@@ -148,17 +191,17 @@ const yearLabels = ['2025', '2026', '2027', '2028', '2029', '2030']
                 "
               />
               <rect
-                v-for="(segment, index) in bar.segments"
-                :key="index"
-                :x="bar.x + 10"
+                v-for="segment in bar.segments"
+                :key="segment.id"
+                :x="bar.x + step / 2 - 16"
                 :y="segment.y"
-                width="29"
-                :height="Math.max(segment.height - 2, 1)"
-                rx="2"
+                width="32"
+                :height="Math.max(segment.height - 1, 0.5)"
+                rx="1"
                 :fill="segment.color"
-                :fill-opacity="bar.scheduled ? 0.08 : 1"
+                :fill-opacity="segment.scheduled ? 0.08 : 1"
                 :stroke="segment.color"
-                :stroke-width="bar.scheduled ? 1.5 : 0"
+                :stroke-width="segment.scheduled ? 1.5 : 0"
               />
               <text
                 :x="bar.x + step / 2"
@@ -179,27 +222,26 @@ const yearLabels = ['2025', '2026', '2027', '2028', '2029', '2030']
               stroke-dasharray="4 4"
             />
             <text
-              :x="todayX - 8"
+              :x="todayX + (todayX < chartWidth - 85 ? 8 : -8)"
               y="41"
-              text-anchor="end"
+              :text-anchor="todayX < chartWidth - 85 ? 'start' : 'end'"
               class="fill-foreground text-[11px] font-semibold"
             >
               Today
             </text>
             <text
-              v-for="(year, index) in yearLabels"
-              :key="year"
-              :x="left + (index * 4 + (index === 5 ? 0.5 : 2)) * step"
+              v-for="label in yearLabels"
+              :key="label.year"
+              :x="label.x"
               y="306"
               text-anchor="middle"
               class="fill-foreground text-xs font-medium"
             >
-              {{ year }}
+              {{ label.year }}
             </text>
           </svg>
         </div>
-
-        <div class="mt-4 grid gap-5 border-t pt-5 md:grid-cols-[1fr_1.3fr]">
+        <div v-if="selectedQuarter" class="mt-4 grid gap-5 border-t pt-5 lg:grid-cols-[1fr_2fr]">
           <div>
             <label
               for="vesting-quarter"
@@ -218,36 +260,57 @@ const yearLabels = ['2025', '2026', '2027', '2028', '2029', '2030']
             <div aria-live="polite" class="mt-3">
               <p class="text-2xl font-semibold tabular-nums">
                 {{ formatShares(selectedQuarter.total) }}
-                <span class="text-sm font-normal text-muted-foreground"
-                  >shares {{ selectedQuarter.scheduled ? 'scheduled' : 'vested' }}</span
-                >
+                <span class="text-sm font-normal text-muted-foreground">shares</span>
               </p>
               <p class="mt-1 text-xs text-muted-foreground">
-                Release date: {{ formatDate(selectedQuarter.date) }}
+                {{ formatShares(selectedQuarter.vested) }} vested ·
+                {{ formatShares(selectedQuarter.scheduled) }} scheduled
               </p>
             </div>
           </div>
-          <ul class="space-y-2 text-sm" aria-label="Selected quarter grant breakdown">
-            <li
-              v-for="grant in contributions"
-              :key="grant.id"
-              class="flex items-center justify-between gap-3 rounded-md bg-muted/50 px-3 py-2"
-            >
-              <span class="inline-flex items-center gap-2"
-                ><span
-                  class="h-2.5 w-2.5 rounded-full"
-                  :style="{ backgroundColor: grant.color }"
-                />{{ grant.name }}</span
-              >
-              <span class="font-medium tabular-nums">{{ formatShares(grant.shares) }}</span>
-            </li>
-          </ul>
+          <div v-if="selectedQuarter.releases.length" class="overflow-x-auto">
+            <table class="w-full min-w-[400px] text-sm">
+              <caption class="sr-only">
+                Selected quarter releases by grant
+              </caption>
+              <thead>
+                <tr class="border-b text-xs text-muted-foreground">
+                  <th scope="col" class="py-2 pr-3 text-left font-medium">Date / grant</th>
+                  <th scope="col" class="py-2 pr-3 text-right font-medium">Shares</th>
+                  <th scope="col" class="py-2 text-right font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="release in selectedQuarter.releases"
+                  :key="release.id"
+                  class="border-b last:border-0"
+                >
+                  <td class="py-3 pr-3">
+                    <p class="text-xs text-muted-foreground">{{ formatDate(release.date) }}</p>
+                    <span class="mt-1 inline-flex items-center gap-2"
+                      ><span
+                        class="h-2.5 w-2.5 shrink-0 rounded-full"
+                        :style="{ backgroundColor: release.color }"
+                      />{{ release.title }}</span
+                    >
+                  </td>
+                  <td class="py-3 pr-3 text-right tabular-nums">
+                    {{ formatShares(release.quantity) }}
+                  </td>
+                  <td class="py-3 text-right text-xs text-muted-foreground">
+                    {{ release.scheduled ? 'Scheduled' : 'Vested' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-else class="text-sm text-muted-foreground">No vesting releases in this quarter.</p>
         </div>
       </CardContent>
     </Card>
-    <p class="text-xs text-muted-foreground">
-      Sales do not change this timeline. It shows when shares vest; the Holdings &amp; sales tab
-      shows what remains held.
+    <p v-if="grants.length" class="text-xs text-muted-foreground">
+      Vesting shows when shares become available. It does not subtract sales.
     </p>
   </div>
 </template>
