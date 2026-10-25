@@ -180,7 +180,6 @@ const archiveStock = async () => {
           :to="{
             name: 'stock',
             params: { stockId: stock.id },
-            query: { name: stock.name, symbol: stock.symbol },
           }"
           class="absolute inset-0 rounded-xl focus-visible:outline-2 focus-visible:outline-ring"
         >

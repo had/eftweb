@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { setImmediate } from 'node:timers/promises'
+import { createPinia } from 'pinia'
+import axios from 'axios'
+import { useStockGrantsStore } from '../src/stores/stockGrants.js'
 import * as Vue from 'vue'
 import { parse } from 'vue/compiler-sfc'
 import * as vesting from '../src/components/stock-detail/vesting.js'
@@ -176,47 +180,88 @@ test('cancel discards the draft and reopening starts with no quantity or release
   assert.equal(events.filter(([type]) => type === 'confirmed').length, 0)
 })
 
-test('view commits grants locally, updates summaries, and clears all state on stock changes', async (t) => {
+const flush = async () => {
+  await Vue.nextTick()
+  await setImmediate()
+}
+function mountDetail(t) {
+  const original = { get: axios.get, post: axios.post, delete: axios.delete }
+  t.after(() => Object.assign(axios, original))
+  const saved = new Map()
+  let id = 0
+  axios.get = async (url) => {
+    const stockId = Number(url.split('/')[3])
+    return {
+      data: url.endsWith('/grants')
+        ? saved.get(stockId) || []
+        : { id: stockId, name: `Canonical ${stockId}`, symbol: `REAL${stockId}` },
+    }
+  }
+  axios.post = async (url, data) => {
+    const stockId = Number(url.split('/')[3])
+    const grant = {
+      ...data,
+      id: ++id,
+      stock_id: stockId,
+      vestings: data.vestings.map((row, index) => ({ ...row, id: id * 100 + index })),
+    }
+    saved.set(stockId, [...(saved.get(stockId) || []), grant])
+    return { data: grant }
+  }
+  axios.delete = async (url) => {
+    const stockId = Number(url.split('/')[3])
+    saved.set(
+      stockId,
+      saved.get(stockId).filter((grant) => grant.id !== Number(url.split('/').at(-1))),
+    )
+  }
+  const store = useStockGrantsStore(createPinia())
   const route = Vue.reactive({ params: { stockId: '1' } })
   const view = setupComponent(
     t,
     '../src/views/StockDetailView.vue',
     {
-      defineProps: () => ({}),
       useRoute: () => route,
+      useStockGrantsStore: () => store,
       onMounted: () => {},
       onBeforeUnmount: () => {},
     },
-    'grants, showAddGrant, today, activeTab, portfolio, summaries, addGrant',
+    'grants, showAddGrant, today, activeTab, portfolio, summaries, addGrant, entry, stockName, stockSymbol, ready, grantToDelete, requestDeleteGrant, deleteGrant',
   )
-  assert.equal(view.portfolio.value.awarded, 0)
+  return { view, route, store }
+}
+const grantDraft = (quantity = 100) => ({
+  creationToken: vesting.createId(),
+  title: 'Draft grant',
+  grantDate: '2026-01-31',
+  startDate: '2025-01-31',
+  scheduleType: 'quarterly',
+  customized: true,
+  quantity,
+  vestings: [{ id: 'local', date: '2026-10-24', quantity }],
+})
+test('view loads canonical metadata and saved grants, and navigation reloads persisted data', async (t) => {
+  const { view, route } = mountDetail(t)
+  assert.equal(view.ready.value, false)
+  await flush()
+  assert.equal(view.stockName.value, 'Canonical 1')
+  assert.equal(view.stockSymbol.value, 'REAL1')
   view.today.value = '2026-10-24'
   view.activeTab.value = 'holdings'
   view.showAddGrant.value = true
-  view.addGrant({
-    title: 'First grant',
-    quantity: 100,
-    vestings: [{ id: 'release-1', date: '2026-10-24', quantity: 100 }],
-  })
+  await view.addGrant(grantDraft())
   assert.equal(view.grants.value.length, 1)
   assert.equal(view.portfolio.value.vested, 100)
   assert.equal(view.activeTab.value, 'vesting')
   assert.equal(view.showAddGrant.value, false)
-  const firstColor = view.grants.value[0].color
-  view.addGrant({
-    title: 'Second grant',
-    quantity: 200,
-    vestings: [{ id: 'release-2', date: '2027-01-01', quantity: 200 }],
-  })
-  assert.equal(view.portfolio.value.awarded, 300)
-  assert.equal(view.portfolio.value.nextTwelveMonths, 200)
-  assert.equal(view.grants.value[0].color, firstColor)
-  assert.notEqual(view.grants.value[0].id, view.grants.value[1].id)
   route.params.stockId = '2'
-  await Vue.nextTick()
+  await flush()
   assert.deepEqual(view.grants.value, [])
-  assert.equal(view.portfolio.value.awarded, 0)
-  assert.equal(view.showAddGrant.value, false)
+  assert.equal(view.stockName.value, 'Canonical 2')
+  route.params.stockId = '1'
+  await flush()
+  assert.equal(view.grants.value.length, 1)
+  assert.equal(view.portfolio.value.awarded, 100)
 })
 
 test('timeline handles empty grants and refreshes buckets, scale and selection after additions', async (t) => {
@@ -306,68 +351,96 @@ test('grant overview derives progress, release dates and totals entirely from en
   assert.equal(overview.rows.value[0].nextRelease, null)
 })
 
-test('deleting a confirmed target removes only that grant and updates totals without changing remaining colors', (t) => {
-  const route = Vue.reactive({ params: { stockId: '1' } })
-  const view = setupComponent(
-    t,
-    '../src/views/StockDetailView.vue',
-    {
-      defineProps: () => ({}),
-      useRoute: () => route,
-      onMounted: () => {},
-      onBeforeUnmount: () => {},
-    },
-    'grants, today, grantToDelete, portfolio, activeTab, addGrant, deleteGrant',
-  )
+test('view keeps save and delete dialogs open after failure and updates only after server success', async (t) => {
+  const { view } = mountDetail(t)
+  await flush()
   view.today.value = '2026-10-25'
-  view.addGrant({
-    title: 'Same title',
-    quantity: 100,
-    vestings: [{ id: 'a', date: '2026-10-25', quantity: 100 }],
-  })
-  view.addGrant({
-    title: 'Same title',
-    quantity: 200,
-    vestings: [{ id: 'b', date: '2027-01-01', quantity: 200 }],
-  })
-  const [first, second] = view.grants.value
+  const save = axios.post
+  axios.post = async () => {
+    throw new Error('Offline')
+  }
+  view.showAddGrant.value = true
+  await view.addGrant(grantDraft())
+  assert.equal(view.showAddGrant.value, true)
+  assert.equal(view.grants.value.length, 0)
+  assert.ok(view.entry.value.saveError)
+  axios.post = save
+  await view.addGrant(grantDraft())
+  assert.equal(view.showAddGrant.value, false)
+  const target = view.grants.value[0]
   view.activeTab.value = 'grants'
-  view.grantToDelete.value = first
-  // Dismissing confirmation changes no grants.
+  view.requestDeleteGrant(target)
   view.grantToDelete.value = null
-  view.deleteGrant()
-  assert.equal(view.grants.value.length, 2)
-  view.grantToDelete.value = first
-  view.deleteGrant()
+  await view.deleteGrant()
+  assert.equal(view.grants.value.length, 1)
+  view.requestDeleteGrant(target)
+  const remove = axios.delete
+  axios.delete = async () => {
+    throw new Error('Offline')
+  }
+  await view.deleteGrant()
+  assert.equal(view.grantToDelete.value.id, target.id)
+  assert.equal(view.grants.value.length, 1)
+  assert.ok(view.entry.value.deleteError)
+  axios.delete = remove
+  await view.deleteGrant()
   assert.equal(view.grantToDelete.value, null)
-  assert.equal(view.activeTab.value, 'grants')
-  assert.deepEqual(
-    view.grants.value.map((grant) => grant.id),
-    [second.id],
-  )
-  assert.equal(view.portfolio.value.awarded, 200)
-  assert.equal(view.portfolio.value.vested, 0)
-  assert.equal(view.portfolio.value.nextTwelveMonths, 200)
-  view.addGrant({
-    title: 'Replacement',
-    quantity: 50,
-    vestings: [{ id: 'c', date: '2027-01-01', quantity: 50 }],
-  })
-  assert.equal(view.grants.value[0].color, second.color)
-  assert.notEqual(view.grants.value[1].color, second.color)
-  view.grantToDelete.value = second
-  view.deleteGrant()
-  view.grantToDelete.value = view.grants.value[0]
-  view.deleteGrant()
-  assert.equal(view.grants.value.length, 0)
   assert.equal(view.portfolio.value.awarded, 0)
-  view.addGrant({
-    title: 'Another',
-    quantity: 10,
-    vestings: [{ id: 'd', date: '2027-01-01', quantity: 10 }],
-  })
-  view.grantToDelete.value = view.grants.value[0]
+  assert.equal(view.activeTab.value, 'grants')
+})
+test('wizard retains its draft and creation token after a failed save, and blocks pending dismissal', async (t) => {
+  const { wizard, props, events } = mountWizard(t)
+  fillDetails(wizard)
+  wizard.next()
+  wizard.next()
+  wizard.confirm()
+  const first = events.find(([type]) => type === 'confirmed')[1]
+  props.saving = true
+  await Vue.nextTick()
+  wizard.close()
+  wizard.confirm()
+  assert.equal(props.open, true)
+  assert.equal(events.length, 1)
+  props.saving = false
+  props.saveError = 'Network failed'
+  await Vue.nextTick()
+  assert.equal(wizard.step.value, 3)
+  assert.equal(wizard.details.value.quantity, 1000)
+  assert.equal(wizard.vestings.value.length, 13)
+  wizard.confirm()
+  const second = events.filter(([type]) => type === 'confirmed')[1][1]
+  assert.equal(second.creationToken, first.creationToken)
+  assert.deepEqual(second.vestings, first.vestings)
+  props.open = false
+  await Vue.nextTick()
+  assert.equal(wizard.step.value, 1)
+})
+test('late save completion cannot close a newly opened modal on another stock', async (t) => {
+  const { view, route } = mountDetail(t)
+  await flush()
+  let finish
+  axios.post = () =>
+    new Promise((resolve) => {
+      finish = resolve
+    })
+  const pending = view.addGrant(grantDraft())
   route.params.stockId = '2'
-  assert.equal(view.grantToDelete.value, null)
-  assert.equal(view.grants.value.length, 0)
+  await flush()
+  view.showAddGrant.value = true
+  finish({
+    data: {
+      id: 99,
+      stock_id: 1,
+      title: 'Old stock',
+      grant_date: '2026-10-25',
+      quantity: 100,
+      vesting_start_date: '2025-01-31',
+      schedule_type: 'quarterly',
+      customized: true,
+      vestings: [{ id: 1, date: '2027-01-01', quantity: 100 }],
+    },
+  })
+  await pending
+  assert.equal(view.showAddGrant.value, true)
+  assert.deepEqual(view.grants.value, [])
 })

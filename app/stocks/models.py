@@ -1,6 +1,7 @@
 from easyfrenchtax import StockType
 
 from .. import db
+from ..constants import JAVASCRIPT_MAX_SAFE_INTEGER
 
 
 class Stock(db.Model):
@@ -14,6 +15,10 @@ class Stock(db.Model):
     is_archived = db.Column(db.Boolean, nullable=False, default=False)
 
     family = db.relationship("Family", back_populates="stocks")
+    grants = db.relationship(
+        "StockGrant", back_populates="stock", cascade="all, delete-orphan",
+        order_by="StockGrant.grant_date, StockGrant.id",
+    )
 
     def to_dict(self):
         return {
@@ -23,6 +28,64 @@ class Stock(db.Model):
             "symbol": self.symbol,
             "is_archived": self.is_archived,
         }
+
+
+class StockGrant(db.Model):
+    __tablename__ = "stock_grants"
+    __table_args__ = (
+        db.UniqueConstraint("stock_id", "creation_token", name="uq_stock_grant_creation_token"),
+        db.CheckConstraint(
+            f"quantity > 0 AND quantity <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
+            name="ck_stock_grant_quantity",
+        ),
+        db.CheckConstraint("schedule_type IN ('quarterly', 'cliff-quarterly')", name="ck_stock_grant_schedule_type"),
+        {"sqlite_autoincrement": True},
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    stock_id = db.Column(db.Integer, db.ForeignKey("stocks.id", ondelete="CASCADE"), nullable=False)
+    title = db.Column(db.String(256), nullable=False)
+    grant_date = db.Column(db.Date, nullable=False)
+    quantity = db.Column(db.BigInteger, nullable=False)
+    vesting_start_date = db.Column(db.Date, nullable=False)
+    schedule_type = db.Column(db.String(32), nullable=False)
+    customized = db.Column(db.Boolean, nullable=False, default=False)
+    creation_token = db.Column(db.String(36), nullable=False)
+    request_hash = db.Column(db.String(64), nullable=False)
+
+    stock = db.relationship("Stock", back_populates="grants")
+    vestings = db.relationship(
+        "GrantVesting", back_populates="grant", cascade="all, delete-orphan",
+        order_by="GrantVesting.date, GrantVesting.id",
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id, "stock_id": self.stock_id, "title": self.title,
+            "grant_date": self.grant_date.isoformat(), "quantity": self.quantity,
+            "vesting_start_date": self.vesting_start_date.isoformat(),
+            "schedule_type": self.schedule_type, "customized": self.customized,
+            "vestings": [vesting.to_dict() for vesting in self.vestings],
+        }
+
+
+class GrantVesting(db.Model):
+    __tablename__ = "grant_vestings"
+    __table_args__ = (
+        db.CheckConstraint(
+            f"quantity > 0 AND quantity <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
+            name="ck_grant_vesting_quantity",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    grant_id = db.Column(db.Integer, db.ForeignKey("stock_grants.id", ondelete="CASCADE"), nullable=False, index=True)
+    date = db.Column(db.Date, nullable=False)
+    quantity = db.Column(db.BigInteger, nullable=False)
+    grant = db.relationship("StockGrant", back_populates="vestings")
+
+    def to_dict(self):
+        return {"id": self.id, "date": self.date.isoformat(), "quantity": self.quantity}
 
 
 class DirectStocksPlan(db.Model):

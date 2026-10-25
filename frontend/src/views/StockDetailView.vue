@@ -10,26 +10,26 @@ import HoldingsAndSales from '@/components/stock-detail/HoldingsAndSales.vue'
 import GrantsOverview from '@/components/stock-detail/GrantsOverview.vue'
 import AddGrantWizardModal from '@/components/stock-detail/AddGrantWizardModal.vue'
 import DeleteConfirmModal from '@/components/DeleteConfirmModal.vue'
+import { useStockGrantsStore } from '@/stores/stockGrants'
 import {
-  createId,
   formatDate,
   formatShares,
-  grantColor,
   localDate,
   summarizeGrants,
 } from '@/components/stock-detail/vesting.js'
 
-defineProps({
-  stockName: { type: String, default: 'Employee equity' },
-  stockSymbol: { type: String, default: 'STOCK' },
-})
-
 const activeTab = ref('vesting')
 const route = useRoute()
-const grants = ref([])
+const grantsStore = useStockGrantsStore()
+const stockId = computed(() => Number(route.params.stockId))
+const entry = computed(() => grantsStore.forStock(stockId.value))
+const grants = computed(() => entry.value.grants)
+const stockName = computed(() => entry.value.stock?.name || 'Stock')
+const stockSymbol = computed(() => entry.value.stock?.symbol || '')
+const ready = computed(() => entry.value.loaded && !entry.value.loading && !entry.value.loadError)
 const showAddGrant = ref(false)
 const grantToDelete = ref(null)
-let nextGrantColor = 0
+let viewGeneration = 0
 const today = ref(localDate())
 let dateTimer
 onMounted(() => {
@@ -37,27 +37,43 @@ onMounted(() => {
     today.value = localDate()
   }, 60000)
 })
-onBeforeUnmount(() => clearInterval(dateTimer))
+onBeforeUnmount(() => {
+  clearInterval(dateTimer)
+  viewGeneration += 1
+})
 watch(
   () => route.params.stockId,
   () => {
-    grants.value = []
+    viewGeneration += 1
     showAddGrant.value = false
     grantToDelete.value = null
-    nextGrantColor = 0
     activeTab.value = 'vesting'
+    void grantsStore.load(stockId.value)
   },
-  { flush: 'sync' },
+  { flush: 'sync', immediate: true },
 )
-const addGrant = (grant) => {
-  grants.value.push({ ...grant, id: createId(), color: grantColor(nextGrantColor++) })
-  showAddGrant.value = false
-  activeTab.value = 'vesting'
+watch(showAddGrant, (open) => {
+  if (open) entry.value.saveError = ''
+})
+const addGrant = async (grant) => {
+  const id = stockId.value
+  const generation = viewGeneration
+  const saved = await grantsStore.createGrant(id, grant)
+  if (saved && generation === viewGeneration) {
+    showAddGrant.value = false
+    activeTab.value = 'vesting'
+  }
 }
-const deleteGrant = () => {
+const requestDeleteGrant = (grant) => {
+  if (!ready.value || entry.value.saving || entry.value.deletingId !== null) return
+  entry.value.deleteError = ''
+  grantToDelete.value = grant
+}
+const deleteGrant = async () => {
   if (!grantToDelete.value) return
-  grants.value = grants.value.filter((grant) => grant.id !== grantToDelete.value.id)
-  grantToDelete.value = null
+  const generation = viewGeneration
+  const deleted = await grantsStore.deleteGrant(stockId.value, grantToDelete.value.id)
+  if (deleted && generation === viewGeneration) grantToDelete.value = null
 }
 const tabs = [
   { value: 'vesting', label: 'Vesting timeline' },
@@ -106,105 +122,116 @@ const summaries = computed(() => [
           <Button disabled title="Recording sales is coming soon"
             ><ArrowUpRight class="h-4 w-4" /> Record sale</Button
           >
-          <Button variant="outline" @click="showAddGrant = true"
+          <Button
+            variant="outline"
+            :disabled="!ready || entry.saving || entry.deletingId !== null"
+            @click="showAddGrant = true"
             ><Plus class="h-4 w-4" /> Add grant</Button
           >
         </div>
       </header>
 
       <div
-        class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed bg-muted/50 px-4 py-3 text-sm"
+        v-if="entry.loading"
+        role="status"
+        aria-label="Loading stock and grants"
+        class="space-y-4"
       >
-        <p>
-          <span class="font-medium">Temporary grants</span
-          ><span class="text-muted-foreground">
-            · Grants are kept only while this stock view is open. Navigating away or reloading
-            discards them.</span
-          >
-        </p>
-        <span class="text-xs text-muted-foreground">As of {{ formatDate(today) }}</span>
+        <div class="h-28 animate-pulse rounded-lg bg-muted" />
+        <div class="h-64 animate-pulse rounded-lg bg-muted" />
       </div>
+      <div v-else-if="entry.loadError" class="space-y-3 rounded-lg border p-5">
+        <p role="alert" class="text-destructive">{{ entry.loadError }}</p>
+        <Button variant="outline" @click="grantsStore.load(stockId)">Retry</Button>
+      </div>
+      <template v-else-if="ready">
+        <p class="text-xs text-muted-foreground">As of {{ formatDate(today) }}</p>
 
-      <section aria-label="Portfolio summary" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Card
-          v-for="summary in summaries"
-          :key="summary.label"
-          class="py-0"
-          :class="summary.emphasized && 'border-primary/40 bg-primary/5'"
-        >
-          <CardContent class="p-5">
-            <h2 class="text-sm text-muted-foreground">{{ summary.label }}</h2>
-            <p
-              class="my-2 text-3xl font-semibold tracking-tight tabular-nums"
-              :class="summary.emphasized && 'text-primary'"
+        <section aria-label="Portfolio summary" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Card
+            v-for="summary in summaries"
+            :key="summary.label"
+            class="py-0"
+            :class="summary.emphasized && 'border-primary/40 bg-primary/5'"
+          >
+            <CardContent class="p-5">
+              <h2 class="text-sm text-muted-foreground">{{ summary.label }}</h2>
+              <p
+                class="my-2 text-3xl font-semibold tracking-tight tabular-nums"
+                :class="summary.emphasized && 'text-primary'"
+              >
+                {{ formatShares(summary.value)
+                }}<span class="ml-2 text-xs font-normal text-muted-foreground">shares</span>
+              </p>
+              <p class="text-xs text-muted-foreground">{{ summary.detail }}</p>
+            </CardContent>
+          </Card>
+        </section>
+
+        <TabsRoot v-model="activeTab" class="w-full">
+          <TabsList
+            aria-label="Stock portfolio views"
+            class="mb-6 flex max-w-full gap-1 overflow-x-auto rounded-lg bg-muted p-1"
+          >
+            <TabsTrigger
+              v-for="tab in tabs"
+              :key="tab.value"
+              :value="tab.value"
+              class="shrink-0 rounded-md px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
             >
-              {{ formatShares(summary.value)
-              }}<span class="ml-2 text-xs font-normal text-muted-foreground">shares</span>
+              {{ tab.label }}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent
+            value="vesting"
+            class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            ><VestingTimeline :grants="grants" :today="today"
+          /></TabsContent>
+          <TabsContent
+            value="holdings"
+            class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            ><p
+              class="mb-4 rounded-lg border border-dashed bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
+            >
+              Sample preview · This tab does not reflect the grants entered above.
             </p>
-            <p class="text-xs text-muted-foreground">{{ summary.detail }}</p>
-          </CardContent>
-        </Card>
-      </section>
-
-      <TabsRoot v-model="activeTab" class="w-full">
-        <TabsList
-          aria-label="Stock portfolio views"
-          class="mb-6 flex max-w-full gap-1 overflow-x-auto rounded-lg bg-muted p-1"
-        >
-          <TabsTrigger
-            v-for="tab in tabs"
-            :key="tab.value"
-            :value="tab.value"
-            class="shrink-0 rounded-md px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+            <HoldingsAndSales
+          /></TabsContent>
+          <TabsContent
+            value="grants"
+            class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {{ tab.label }}
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent
-          value="vesting"
-          class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          ><VestingTimeline :grants="grants" :today="today"
-        /></TabsContent>
-        <TabsContent
-          value="holdings"
-          class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          ><p
-            class="mb-4 rounded-lg border border-dashed bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
-          >
-            Sample preview · This tab does not reflect the grants entered above.
-          </p>
-          <HoldingsAndSales
-        /></TabsContent>
-        <TabsContent
-          value="grants"
-          class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <GrantsOverview :grants="grants" :today="today" @delete="grantToDelete = $event" />
-        </TabsContent>
-      </TabsRoot>
-      <AddGrantWizardModal
-        :key="route.params.stockId"
-        v-model:open="showAddGrant"
-        :ticker="stockSymbol"
-        @confirmed="addGrant"
-      />
-      <DeleteConfirmModal
-        :open="Boolean(grantToDelete)"
-        title="Delete grant"
-        :description="
-          grantToDelete
-            ? `Delete “${grantToDelete.title}” (${formatShares(grantToDelete.quantity)} shares)? The grant and all of its vesting releases will be removed from this view.`
-            : ''
-        "
-        confirm-label="Delete grant"
-        @update:open="
-          (open) => {
-            if (!open) grantToDelete = null
-          }
-        "
-        @cancel="grantToDelete = null"
-        @confirm="deleteGrant"
-      />
+            <GrantsOverview :grants="grants" :today="today" @delete="requestDeleteGrant" />
+          </TabsContent>
+        </TabsRoot>
+        <AddGrantWizardModal
+          :key="route.params.stockId"
+          v-model:open="showAddGrant"
+          :ticker="stockSymbol"
+          :saving="entry.saving"
+          :save-error="entry.saveError"
+          @confirmed="addGrant"
+        />
+        <DeleteConfirmModal
+          :open="Boolean(grantToDelete)"
+          title="Delete grant"
+          :description="
+            grantToDelete
+              ? `Permanently delete “${grantToDelete.title}” (${formatShares(grantToDelete.quantity)} shares)? The grant and all of its vesting releases will be removed. This cannot be undone.`
+              : ''
+          "
+          confirm-label="Delete grant"
+          :busy="entry.deletingId !== null"
+          :error="entry.deleteError"
+          @update:open="
+            (open) => {
+              if (!open && entry.deletingId === null) grantToDelete = null
+            }
+          "
+          @cancel="grantToDelete = null"
+          @confirm="deleteGrant"
+        />
+      </template>
     </div>
   </main>
 </template>

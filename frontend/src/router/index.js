@@ -35,10 +35,6 @@ const router = createRouter({
       path: '/stocks/:stockId',
       name: 'stock',
       component: StockDetailView,
-      props: (route) => ({
-        stockName: typeof route.query.name === 'string' ? route.query.name : undefined,
-        stockSymbol: typeof route.query.symbol === 'string' ? route.query.symbol : undefined,
-      }),
     },
     {
       path: '/tax-returns',

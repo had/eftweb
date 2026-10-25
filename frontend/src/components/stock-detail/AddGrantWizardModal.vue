@@ -34,7 +34,12 @@ import {
   validateVestings,
 } from './vesting.js'
 
-const props = defineProps({ open: Boolean, ticker: { type: String, default: 'STOCK' } })
+const props = defineProps({
+  open: Boolean,
+  ticker: { type: String, default: 'STOCK' },
+  saving: Boolean,
+  saveError: { type: String, default: '' },
+})
 const emit = defineEmits(['update:open', 'confirmed'])
 const step = ref(1)
 const details = ref({})
@@ -46,6 +51,7 @@ const regenerationNeeded = ref(false)
 const generatedParameters = ref('')
 const generatedRows = ref('')
 const submitted = ref(false)
+const creationToken = ref('')
 const body = ref(null)
 const stepHeading = ref(null)
 const stepLabels = ['Grant details', 'Adjust vesting', 'Review & confirm']
@@ -89,9 +95,26 @@ const reset = () => {
   generatedParameters.value = ''
   generatedRows.value = ''
   submitted.value = false
+  creationToken.value = createId()
 }
 
 watch(() => props.open, reset, { immediate: true })
+watch(
+  () => props.saving,
+  (saving) => {
+    if (!saving) submitted.value = false
+  },
+)
+watch(
+  () => props.saveError,
+  async (message) => {
+    if (message) {
+      submitted.value = false
+      await nextTick()
+      body.value?.scrollTo({ top: 0 })
+    }
+  },
+)
 watch(step, async () => {
   await nextTick()
   body.value?.scrollTo({ top: 0 })
@@ -113,6 +136,7 @@ const setStartDate = (value) => {
   details.value.startDate = value
 }
 const close = () => {
+  if (props.saving || submitted.value) return
   reset()
   emit('update:open', false)
 }
@@ -160,12 +184,13 @@ const insertAfter = async (index) => {
   body.value?.querySelector(`[data-vesting-date="${id}"]`)?.focus()
 }
 const confirm = () => {
-  if (!props.open || submitted.value || step.value !== 3) return
+  if (!props.open || props.saving || submitted.value || step.value !== 3) return
   fieldErrors.value = validateGrantDetails(details.value)
   error.value = validateVestings(vestings.value, details.value.quantity)
   if (Object.keys(fieldErrors.value).length || error.value) return
   submitted.value = true
   emit('confirmed', {
+    creationToken: creationToken.value,
     title: effectiveTitle.value,
     grantDate: details.value.grantDate,
     quantity: Number(details.value.quantity),
@@ -177,7 +202,9 @@ const confirm = () => {
       quantity: Number(release.quantity),
     })),
   })
-  emit('update:open', false)
+}
+const preventDismiss = (event) => {
+  if (props.saving || submitted.value) event.preventDefault()
 }
 </script>
 
@@ -190,7 +217,12 @@ const confirm = () => {
       }
     "
   >
-    <DialogContent class="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
+    <DialogContent
+      class="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+      :show-close-button="!saving && !submitted"
+      @escape-key-down="preventDismiss"
+      @interact-outside="preventDismiss"
+    >
       <DialogHeader class="shrink-0 p-6 pb-4">
         <DialogTitle>Add grant · {{ ticker }}</DialogTitle>
         <DialogDescription
@@ -223,6 +255,7 @@ const confirm = () => {
           Step {{ step }}: {{ stepLabels[step - 1] }}
         </h3>
         <form id="add-grant-form" novalidate @submit.prevent="step === 3 ? confirm() : next()">
+          <p v-if="saveError" role="alert" class="mb-4 text-sm text-destructive">{{ saveError }}</p>
           <p v-if="error" role="alert" class="mb-4 text-sm text-destructive">{{ error }}</p>
           <div v-if="step === 1" class="space-y-5">
             <div class="grid gap-4 sm:grid-cols-2">
@@ -507,19 +540,27 @@ const confirm = () => {
               </table>
             </div>
             <p class="text-xs text-muted-foreground">
-              This grant will be kept only while this stock view is open. Navigating away or
-              reloading will discard it.
+              Confirm to save this grant and its vesting releases.
             </p>
           </div>
         </form>
       </div>
 
       <DialogFooter class="shrink-0 gap-2 border-t bg-background p-4 sm:justify-between">
-        <Button type="button" variant="outline" @click="close">Cancel</Button>
+        <Button type="button" variant="outline" :disabled="saving || submitted" @click="close"
+          >Cancel</Button
+        >
         <div class="flex justify-end gap-2">
-          <Button v-if="step > 1" type="button" variant="outline" @click="back">Back</Button>
-          <Button type="submit" form="add-grant-form" :disabled="submitted">{{
-            step === 3 ? 'Add grant' : 'Next'
+          <Button
+            v-if="step > 1"
+            type="button"
+            variant="outline"
+            :disabled="saving || submitted"
+            @click="back"
+            >Back</Button
+          >
+          <Button type="submit" form="add-grant-form" :disabled="saving || submitted">{{
+            saving || submitted ? 'Saving...' : step === 3 ? 'Add grant' : 'Next'
           }}</Button>
         </div>
       </DialogFooter>
