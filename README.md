@@ -20,3 +20,16 @@ Stock prices use Alpha Vantage's latest available end-of-day quote, with a one-h
 cache. If a refresh fails, the last known price is shown as cached with its retrieval
 time. Without a configured key or a cached quote, prices and estimated values are
 unavailable; stock and grant management still work. All prices and estimates are USD.
+
+## Stock sales
+
+Run `just migrate-up` before using the sales feature, and restart the backend to
+load the new API routes. Sales record whole shares, USD proceeds per share (up to
+six decimal places), and explicit quantities from each vesting release. A release
+must have vested by the transaction date; all existing sales reduce its available
+quantity, including sales recorded with a later transaction date.
+
+Use **Holdings & sales → Record sale** to enter a sale. The ledger supports year
+filtering and deletion to correct a sale by re-recording it. Grants with recorded
+sales cannot be deleted until those sales are removed. Proceeds are gross amounts;
+fees, capital gains, and taxes are not computed by this feature.

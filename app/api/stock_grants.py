@@ -10,9 +10,10 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app import db
 from app.constants import JAVASCRIPT_MAX_SAFE_INTEGER
-from app.stocks.models import GrantVesting, Stock, StockGrant
+from app.stocks.models import GrantVesting, Stock, StockGrant, StockSaleAllocation
 
 from . import api
+from .stock_transactions import stock_write
 
 
 def active_stock(stock_id):
@@ -162,17 +163,30 @@ def stock_grants(stock_id):
 
 @api.route("/api/stocks/<int:stock_id>/grants/<int:grant_id>", methods=["DELETE"])
 def delete_stock_grant(stock_id, grant_id):
-    _, error = active_stock(stock_id)
-    if error:
-        return error
-    grant = StockGrant.query.filter_by(id=grant_id, stock_id=stock_id).first()
-    if grant is None:
-        return jsonify({"error": "Grant not found for this stock"}), 404
-    db.session.delete(grant)
     try:
-        db.session.commit()
+        with stock_write(stock_id):
+            _, error = active_stock(stock_id)
+            if error:
+                return error
+            grant = StockGrant.query.filter_by(id=grant_id, stock_id=stock_id).first()
+            if grant is None:
+                return jsonify({"error": "Grant not found for this stock"}), 404
+            has_sales = (
+                StockSaleAllocation.query.join(
+                    GrantVesting, StockSaleAllocation.vesting_id == GrantVesting.id
+                )
+                .filter(GrantVesting.grant_id == grant_id)
+                .first()
+            )
+            if has_sales:
+                return jsonify(
+                    {
+                        "error": "This grant has recorded sales. Delete those sales before deleting the grant."
+                    }
+                ), 409
+            db.session.delete(grant)
+            db.session.commit()
+            return "", 204
     except SQLAlchemyError:
-        db.session.rollback()
         current_app.logger.exception("Could not delete grant")
         return jsonify({"error": "Could not delete the grant. Please try again."}), 500
-    return "", 204

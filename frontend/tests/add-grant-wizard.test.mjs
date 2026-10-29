@@ -194,9 +194,11 @@ function mountDetail(t) {
   axios.get = async (url) => {
     const stockId = Number(url.split('/')[3])
     return {
-      data: url.endsWith('/grants')
-        ? saved.get(stockId) || []
-        : { id: stockId, name: `Canonical ${stockId}`, symbol: `REAL${stockId}` },
+      data: url.endsWith('/sales')
+        ? []
+        : url.endsWith('/grants')
+          ? saved.get(stockId) || []
+          : { id: stockId, name: `Canonical ${stockId}`, symbol: `REAL${stockId}` },
     }
   }
   axios.post = async (url, data) => {

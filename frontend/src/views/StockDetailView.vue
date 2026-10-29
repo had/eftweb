@@ -9,6 +9,7 @@ import VestingTimeline from '@/components/stock-detail/VestingTimeline.vue'
 import HoldingsAndSales from '@/components/stock-detail/HoldingsAndSales.vue'
 import GrantsOverview from '@/components/stock-detail/GrantsOverview.vue'
 import AddGrantWizardModal from '@/components/stock-detail/AddGrantWizardModal.vue'
+import RecordSaleModal from '@/components/stock-detail/RecordSaleModal.vue'
 import DeleteConfirmModal from '@/components/DeleteConfirmModal.vue'
 import { useStockGrantsStore } from '@/stores/stockGrants'
 import { useStockQuotesStore } from '@/stores/stockQuotes'
@@ -28,6 +29,15 @@ const stockSymbol = computed(() => entry.value.stock?.symbol || '')
 const quoteEntry = computed(() => quotesStore.forSymbol(stockSymbol.value))
 const ready = computed(() => entry.value.loaded && !entry.value.loading && !entry.value.loadError)
 const showAddGrant = ref(false)
+const showRecordSale = ref(false)
+const saleToDelete = ref(null)
+const busy = computed(
+  () =>
+    entry.value.saving ||
+    entry.value.deletingId !== null ||
+    entry.value.savingSale ||
+    entry.value.deletingSaleId !== null,
+)
 const grantToDelete = ref(null)
 let viewGeneration = 0
 const today = ref(localDate())
@@ -46,6 +56,8 @@ watch(
   () => {
     viewGeneration += 1
     showAddGrant.value = false
+    showRecordSale.value = false
+    saleToDelete.value = null
     grantToDelete.value = null
     activeTab.value = 'vesting'
     void grantsStore.load(stockId.value)
@@ -55,6 +67,25 @@ watch(
 watch(showAddGrant, (open) => {
   if (open) entry.value.saveError = ''
 })
+watch(showRecordSale, (open) => {
+  if (open) entry.value.saleSaveError = ''
+})
+const recordSale = async (draft) => {
+  const generation = viewGeneration
+  const saved = await grantsStore.createSale(stockId.value, draft)
+  if (saved && generation === viewGeneration) showRecordSale.value = false
+}
+const requestDeleteSale = (sale) => {
+  if (!ready.value || busy.value) return
+  entry.value.saleDeleteError = ''
+  saleToDelete.value = sale
+}
+const deleteSale = async () => {
+  if (!saleToDelete.value) return
+  const generation = viewGeneration
+  const deleted = await grantsStore.deleteSale(stockId.value, saleToDelete.value.id)
+  if (deleted && generation === viewGeneration) saleToDelete.value = null
+}
 const addGrant = async (grant) => {
   const id = stockId.value
   const generation = viewGeneration
@@ -65,7 +96,7 @@ const addGrant = async (grant) => {
   }
 }
 const requestDeleteGrant = (grant) => {
-  if (!ready.value || entry.value.saving || entry.value.deletingId !== null) return
+  if (!ready.value || busy.value) return
   entry.value.deleteError = ''
   grantToDelete.value = grant
 }
@@ -126,7 +157,7 @@ const summaries = computed(() => [
       <div
         v-if="entry.loading"
         role="status"
-        aria-label="Loading stock and grants"
+        aria-label="Loading stock, grants and sales"
         class="space-y-4"
       >
         <div class="h-28 animate-pulse rounded-lg bg-muted" />
@@ -194,10 +225,7 @@ const summaries = computed(() => [
           >
             <VestingTimeline :grants="grants" :today="today">
               <template #actions>
-                <Button
-                  variant="outline"
-                  :disabled="entry.saving || entry.deletingId !== null"
-                  @click="showAddGrant = true"
+                <Button variant="outline" :disabled="busy" @click="showAddGrant = true"
                   ><Plus class="h-4 w-4" /> Add grant</Button
                 >
               </template>
@@ -206,14 +234,17 @@ const summaries = computed(() => [
           <TabsContent
             value="holdings"
             class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            ><p
-              class="mb-4 rounded-lg border border-dashed bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
+          >
+            <HoldingsAndSales
+              :key="stockId"
+              :grants="grants"
+              :sales="entry.sales"
+              :today="today"
+              :busy="busy"
+              @delete-sale="requestDeleteSale"
             >
-              Sample preview · This tab does not reflect the grants entered above.
-            </p>
-            <HoldingsAndSales>
               <template #actions>
-                <Button disabled title="Recording sales is coming soon"
+                <Button :disabled="busy" @click="showRecordSale = true"
                   ><ArrowUpRight class="h-4 w-4" /> Record sale</Button
                 >
               </template>
@@ -233,6 +264,36 @@ const summaries = computed(() => [
           :saving="entry.saving"
           :save-error="entry.saveError"
           @confirmed="addGrant"
+        />
+        <RecordSaleModal
+          :key="`sale-${stockId}`"
+          v-model:open="showRecordSale"
+          :ticker="stockSymbol"
+          :grants="grants"
+          :sales="entry.sales"
+          :today="today"
+          :saving="entry.savingSale"
+          :save-error="entry.saleSaveError"
+          @confirmed="recordSale"
+        />
+        <DeleteConfirmModal
+          :open="Boolean(saleToDelete)"
+          title="Delete sale"
+          :description="
+            saleToDelete
+              ? `Delete the sale of ${formatShares(saleToDelete.quantity)} shares on ${saleToDelete.transactionDate}? The shares will become available in their original vesting pockets. This cannot be undone.`
+              : 'The shares will become available in their original vesting pockets.'
+          "
+          confirm-label="Delete sale"
+          :busy="entry.deletingSaleId !== null"
+          :error="entry.saleDeleteError"
+          @update:open="
+            (open) => {
+              if (!open && entry.deletingSaleId === null) saleToDelete = null
+            }
+          "
+          @cancel="saleToDelete = null"
+          @confirm="deleteSale"
         />
         <DeleteConfirmModal
           :open="Boolean(grantToDelete)"

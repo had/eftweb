@@ -16,6 +16,21 @@ const fromApi = (grant) => ({
   vestings: grant.vestings,
   color: grantColor(grant.id - 1),
 })
+const saleFromApi = (sale) => ({
+  id: sale.id,
+  stockId: sale.stock_id,
+  transactionDate: sale.transaction_date,
+  quantity: sale.quantity,
+  proceedsPerShare: sale.proceeds_per_share,
+  currency: sale.currency,
+  allocations: sale.allocations.map(({ vesting_id, quantity }) => ({
+    vestingId: vesting_id,
+    quantity,
+  })),
+})
+const saleOrder = (a, b) => a.transactionDate.localeCompare(b.transactionDate) || a.id - b.id
+const busy = (entry) =>
+  entry.saving || entry.deletingId !== null || entry.savingSale || entry.deletingSaleId !== null
 const byDate = (a, b) => a.grantDate.localeCompare(b.grantDate) || a.id - b.id
 
 export const useStockGrantsStore = defineStore('stockGrants', () => {
@@ -27,6 +42,11 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
       stocks.value[stockId] = {
         stock: null,
         grants: [],
+        sales: [],
+        savingSale: false,
+        saleSaveError: '',
+        deletingSaleId: null,
+        saleDeleteError: '',
         loading: false,
         loaded: false,
         loadError: '',
@@ -50,13 +70,15 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
       const pending = pendingWrites.get(stockId)
       if (pending) await pending.catch(() => {})
       if (generation !== entry.loadGeneration) return false
-      const [stock, grants] = await Promise.all([
+      const [stock, grants, sales] = await Promise.all([
         axios.get(`/api/stocks/${stockId}`),
         axios.get(`/api/stocks/${stockId}/grants`),
+        axios.get(`/api/stocks/${stockId}/sales`),
       ])
       if (generation !== entry.loadGeneration) return false
       entry.stock = stock.data
       entry.grants = grants.data.map(fromApi).sort(byDate)
+      entry.sales = sales.data.map(saleFromApi).sort(saleOrder)
       entry.loaded = true
       return true
     } catch (error) {
@@ -64,7 +86,7 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
         entry.loaded = false
         entry.loadError = errorMessage(
           error,
-          'Could not load this stock and its grants. Please try again.',
+          'Could not load this stock, its grants and sales. Please try again.',
         )
       }
       return false
@@ -75,7 +97,7 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
 
   async function createGrant(stockId, draft) {
     const entry = forStock(stockId)
-    if (!entry.loaded || entry.loading || entry.saving || entry.deletingId !== null) return null
+    if (!entry.loaded || entry.loading || busy(entry)) return null
     entry.saving = true
     entry.saveError = ''
     let request
@@ -111,7 +133,7 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
 
   async function deleteGrant(stockId, grantId) {
     const entry = forStock(stockId)
-    if (!entry.loaded || entry.loading || entry.saving || entry.deletingId !== null) return false
+    if (!entry.loaded || entry.loading || busy(entry)) return false
     entry.deletingId = grantId
     entry.deleteError = ''
     let request
@@ -130,5 +152,63 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
     }
   }
 
-  return { stocks, forStock, load, createGrant, deleteGrant }
+  async function createSale(stockId, draft) {
+    const entry = forStock(stockId)
+    if (!entry.loaded || entry.loading || busy(entry)) return null
+    entry.savingSale = true
+    entry.saleSaveError = ''
+    let request
+    try {
+      request = axios.post(
+        `/api/stocks/${stockId}/sales`,
+        {
+          transaction_date: draft.transactionDate,
+          quantity: draft.quantity,
+          proceeds_per_share: draft.proceedsPerShare,
+          allocations: draft.allocations.map(({ vestingId, quantity }) => ({
+            vesting_id: vestingId,
+            quantity,
+          })),
+        },
+        { headers: { 'Idempotency-Key': draft.creationToken } },
+      )
+      pendingWrites.set(stockId, request)
+      const response = await request
+      const saved = saleFromApi(response.data)
+      entry.sales = [...entry.sales.filter((sale) => sale.id !== saved.id), saved].sort(saleOrder)
+      return saved
+    } catch (error) {
+      entry.saleSaveError = errorMessage(
+        error,
+        'Could not save the sale. Your draft is still here; please try again.',
+      )
+      return null
+    } finally {
+      entry.savingSale = false
+      if (pendingWrites.get(stockId) === request) pendingWrites.delete(stockId)
+    }
+  }
+
+  async function deleteSale(stockId, saleId) {
+    const entry = forStock(stockId)
+    if (!entry.loaded || entry.loading || busy(entry)) return false
+    entry.deletingSaleId = saleId
+    entry.saleDeleteError = ''
+    let request
+    try {
+      request = axios.delete(`/api/stocks/${stockId}/sales/${saleId}`)
+      pendingWrites.set(stockId, request)
+      await request
+      entry.sales = entry.sales.filter((sale) => sale.id !== saleId)
+      return true
+    } catch (error) {
+      entry.saleDeleteError = errorMessage(error, 'Could not delete the sale. Please try again.')
+      return false
+    } finally {
+      entry.deletingSaleId = null
+      if (pendingWrites.get(stockId) === request) pendingWrites.delete(stockId)
+    }
+  }
+
+  return { stocks, forStock, load, createGrant, deleteGrant, createSale, deleteSale }
 })

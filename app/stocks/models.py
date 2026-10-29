@@ -20,6 +20,11 @@ class Stock(db.Model):
         order_by="StockGrant.grant_date, StockGrant.id",
     )
 
+    sales = db.relationship(
+        "StockSale", back_populates="stock", cascade="all, delete-orphan",
+        order_by="StockSale.transaction_date, StockSale.id",
+    )
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -86,6 +91,78 @@ class GrantVesting(db.Model):
 
     def to_dict(self):
         return {"id": self.id, "date": self.date.isoformat(), "quantity": self.quantity}
+
+
+class StockSale(db.Model):
+    __tablename__ = "stock_sales"
+    __table_args__ = (
+        db.UniqueConstraint("stock_id", "creation_token", name="uq_stock_sale_creation_token"),
+        db.CheckConstraint(
+            f"quantity > 0 AND quantity <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
+            name="ck_stock_sale_quantity",
+        ),
+        db.CheckConstraint("proceeds_per_share > 0", name="ck_stock_sale_price"),
+        db.CheckConstraint("currency = 'USD'", name="ck_stock_sale_currency"),
+        {"sqlite_autoincrement": True},
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    stock_id = db.Column(
+        db.Integer, db.ForeignKey("stocks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    transaction_date = db.Column(db.Date, nullable=False)
+    quantity = db.Column(db.BigInteger, nullable=False)
+    proceeds_per_share = db.Column(db.Numeric(14, 6), nullable=False)
+    currency = db.Column(db.String(3), nullable=False, default="USD")
+    creation_token = db.Column(db.String(36), nullable=False)
+    request_hash = db.Column(db.String(64), nullable=False)
+
+    stock = db.relationship("Stock", back_populates="sales")
+    allocations = db.relationship(
+        "StockSaleAllocation",
+        back_populates="sale",
+        cascade="all, delete-orphan",
+        order_by="StockSaleAllocation.vesting_id",
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "stock_id": self.stock_id,
+            "transaction_date": self.transaction_date.isoformat(),
+            "quantity": self.quantity,
+            "proceeds_per_share": format(self.proceeds_per_share, ".6f"),
+            "currency": self.currency,
+            "allocations": [allocation.to_dict() for allocation in self.allocations],
+        }
+
+
+class StockSaleAllocation(db.Model):
+    __tablename__ = "stock_sale_allocations"
+    __table_args__ = (
+        db.UniqueConstraint("sale_id", "vesting_id", name="uq_stock_sale_allocation_vesting"),
+        db.CheckConstraint(
+            f"quantity > 0 AND quantity <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
+            name="ck_stock_sale_allocation_quantity",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    sale_id = db.Column(
+        db.Integer, db.ForeignKey("stock_sales.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    vesting_id = db.Column(
+        db.Integer,
+        db.ForeignKey("grant_vestings.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    quantity = db.Column(db.BigInteger, nullable=False)
+
+    sale = db.relationship("StockSale", back_populates="allocations")
+
+    def to_dict(self):
+        return {"vesting_id": self.vesting_id, "quantity": self.quantity}
 
 
 class DirectStocksPlan(db.Model):
