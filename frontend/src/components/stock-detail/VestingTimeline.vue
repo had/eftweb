@@ -2,21 +2,24 @@
 import { computed, ref, watch } from 'vue'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import GrantsEmptyState from './GrantsEmptyState.vue'
+import { acquisitionPlans } from './acquisitions.js'
 import {
   addMonths,
   buildQuarters,
   formatDate,
   formatShares,
   localDate,
-  summarizeGrants,
+  summarizePortfolio,
 } from './vesting.js'
 
 const props = defineProps({
   grants: { type: Array, default: () => [] },
+  purchases: { type: Array, default: () => [] },
   today: { type: String, default: () => localDate() },
 })
-const quarters = computed(() => buildQuarters(props.grants, props.today))
-const summary = computed(() => summarizeGrants(props.grants, props.today))
+const quarters = computed(() => buildQuarters(props.grants, props.today, props.purchases))
+const summary = computed(() => summarizePortfolio(props.grants, props.purchases, props.today))
+const plans = computed(() => acquisitionPlans(props.grants, props.purchases))
 const selectedId = ref('')
 watch(
   quarters,
@@ -85,7 +88,7 @@ const yearLabels = computed(() =>
       <div>
         <h2 class="text-xl font-semibold">When shares become yours</h2>
         <p class="mt-1 text-sm text-muted-foreground">
-          Quarterly releases across your grants, past and future.
+          RSU vestings and stock purchases, grouped by quarter.
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-4">
@@ -96,21 +99,21 @@ const yearLabels = computed(() =>
           >
           · {{ formatDate(summary.nextRelease.date) }}
         </p>
-        <p v-else-if="grants.length" class="text-sm text-muted-foreground">
-          All entered shares have vested.
+        <p v-else-if="plans.length" class="text-sm text-muted-foreground">
+          All entered shares have been acquired.
         </p>
         <slot name="actions" />
       </div>
     </div>
 
-    <GrantsEmptyState v-if="!grants.length" />
+    <GrantsEmptyState v-if="!plans.length" />
     <Card v-else class="gap-0 py-0">
       <CardHeader class="gap-3 p-5 pb-0">
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle class="text-base">Vesting by quarter</CardTitle>
+          <CardTitle class="text-base">Acquisitions by quarter</CardTitle>
           <div class="flex gap-4 text-xs text-muted-foreground">
             <span class="inline-flex items-center gap-2"
-              ><span class="h-3 w-3 rounded-sm bg-primary" /> Vested</span
+              ><span class="h-3 w-3 rounded-sm bg-primary" /> Acquired</span
             ><span class="inline-flex items-center gap-2"
               ><span class="h-3 w-3 rounded-sm border-2 border-primary" /> Scheduled</span
             >
@@ -118,16 +121,16 @@ const yearLabels = computed(() =>
         </div>
         <div
           class="flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground"
-          aria-label="Grant legend"
+          aria-label="Plan legend"
         >
           <span
-            v-for="grant in grants"
-            :key="grant.id"
+            v-for="plan in plans"
+            :key="plan.key"
             class="inline-flex max-w-full items-center gap-2 break-words"
             ><span
               class="h-2.5 w-2.5 shrink-0 rounded-full"
-              :style="{ backgroundColor: grant.color }"
-            />{{ grant.title }}</span
+              :style="{ backgroundColor: plan.color }"
+            />{{ plan.title }}</span
           >
         </div>
       </CardHeader>
@@ -140,11 +143,11 @@ const yearLabels = computed(() =>
             role="group"
             aria-labelledby="vesting-chart-title vesting-chart-description"
           >
-            <title id="vesting-chart-title">Quarterly vesting timeline</title>
+            <title id="vesting-chart-title">Quarterly acquisition timeline</title>
             <desc id="vesting-chart-description">
-              Filled segments have vested; outlined segments are scheduled after today. A quarter
-              may contain both. Select a quarter for exact dates and grant contributions, or use the
-              quarter selector below.
+              Filled segments have been acquired; outlined segments are scheduled after today. A
+              quarter may contain both. Select a quarter for exact dates and plan contributions, or
+              use the quarter selector below.
             </desc>
             <rect
               :x="todayX"
@@ -180,7 +183,7 @@ const yearLabels = computed(() =>
               @click="selectedId = bar.id"
             >
               <title>
-                {{ bar.quarter }} {{ bar.year }}: {{ formatShares(bar.vested) }} vested,
+                {{ bar.quarter }} {{ bar.year }}: {{ formatShares(bar.vested) }} acquired,
                 {{ formatShares(bar.scheduled) }} scheduled shares
               </title>
               <rect
@@ -266,7 +269,7 @@ const yearLabels = computed(() =>
                 <span class="text-sm font-normal text-muted-foreground">shares</span>
               </p>
               <p class="mt-1 text-xs text-muted-foreground">
-                {{ formatShares(selectedQuarter.vested) }} vested ·
+                {{ formatShares(selectedQuarter.vested) }} acquired ·
                 {{ formatShares(selectedQuarter.scheduled) }} scheduled
               </p>
             </div>
@@ -274,11 +277,11 @@ const yearLabels = computed(() =>
           <div v-if="selectedQuarter.releases.length" class="overflow-x-auto">
             <table class="w-full min-w-[400px] text-sm">
               <caption class="sr-only">
-                Selected quarter releases by grant
+                Selected quarter acquisitions by plan
               </caption>
               <thead>
                 <tr class="border-b text-xs text-muted-foreground">
-                  <th scope="col" class="py-2 pr-3 text-left font-medium">Date / grant</th>
+                  <th scope="col" class="py-2 pr-3 text-left font-medium">Date / plan</th>
                   <th scope="col" class="py-2 pr-3 text-right font-medium">Shares</th>
                   <th scope="col" class="py-2 text-right font-medium">Status</th>
                 </tr>
@@ -286,7 +289,7 @@ const yearLabels = computed(() =>
               <tbody>
                 <tr
                   v-for="release in selectedQuarter.releases"
-                  :key="release.id"
+                  :key="release.key"
                   class="border-b last:border-0"
                 >
                   <td class="py-3 pr-3">
@@ -302,18 +305,18 @@ const yearLabels = computed(() =>
                     {{ formatShares(release.quantity) }}
                   </td>
                   <td class="py-3 text-right text-xs text-muted-foreground">
-                    {{ release.scheduled ? 'Scheduled' : 'Vested' }}
+                    {{ release.scheduled ? 'Scheduled' : 'Acquired' }}
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p v-else class="text-sm text-muted-foreground">No vesting releases in this quarter.</p>
+          <p v-else class="text-sm text-muted-foreground">No acquisitions in this quarter.</p>
         </div>
       </CardContent>
     </Card>
-    <p v-if="grants.length" class="text-xs text-muted-foreground">
-      Vesting shows when shares become available. It does not subtract sales.
+    <p v-if="plans.length" class="text-xs text-muted-foreground">
+      Acquisitions show when shares become available. Totals do not subtract sales.
     </p>
   </div>
 </template>

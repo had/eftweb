@@ -18,6 +18,7 @@ const props = defineProps({
   open: Boolean,
   ticker: { type: String, default: 'STOCK' },
   grants: { type: Array, default: () => [] },
+  purchases: { type: Array, default: () => [] },
   sales: { type: Array, default: () => [] },
   today: { type: String, default: () => localDate() },
   saving: Boolean,
@@ -30,12 +31,18 @@ const errors = ref({})
 const creationToken = ref('')
 const submitted = ref(false)
 const pockets = computed(() =>
-  availablePockets(props.grants, props.sales, details.value.transactionDate),
+  availablePockets(props.grants, props.sales, details.value.transactionDate, props.purchases),
 )
 const allocations = computed(() =>
   Object.entries(quantities.value)
     .filter(([, quantity]) => quantity !== '' && Number(quantity) !== 0)
-    .map(([vestingId, quantity]) => ({ vestingId: Number(vestingId), quantity: Number(quantity) })),
+    .map(([key, quantity]) => {
+      const [type, id] = key.split(':')
+      return {
+        [type === 'purchase' ? 'purchaseId' : 'vestingId']: Number(id),
+        quantity: Number(quantity),
+      }
+    }),
 )
 const allocated = computed(() => allocations.value.reduce((sum, row) => sum + row.quantity, 0))
 const proceeds = computed(() =>
@@ -70,7 +77,7 @@ watch(
 watch(
   () => details.value.transactionDate,
   () => {
-    const ids = new Set(pockets.value.map((pocket) => String(pocket.id)))
+    const ids = new Set(pockets.value.map((pocket) => pocket.key))
     quantities.value = Object.fromEntries(
       Object.entries(quantities.value).filter(([id]) => ids.has(id)),
     )
@@ -115,7 +122,7 @@ const confirm = () => {
       <DialogHeader class="p-6 pb-4">
         <DialogTitle>Record sale · {{ ticker }}</DialogTitle>
         <DialogDescription
-          >Enter the transaction and choose which vested shares you sold.</DialogDescription
+          >Enter the transaction and choose which acquired shares you sold.</DialogDescription
         >
       </DialogHeader>
       <form class="flex min-h-0 flex-1 flex-col" @submit.prevent="confirm">
@@ -190,26 +197,26 @@ const confirm = () => {
           </fieldset>
           <section aria-labelledby="sale-pockets-heading" class="space-y-3">
             <div>
-              <h3 id="sale-pockets-heading" class="font-medium">Shares sold by vesting pocket</h3>
+              <h3 id="sale-pockets-heading" class="font-medium">Shares sold by acquisition lot</h3>
               <p class="mt-1 text-xs text-muted-foreground">
                 Acquired by the transaction date, after all recorded sales. Enter part or all of
-                each pocket.
+                each lot.
               </p>
             </div>
             <p
               v-if="!pockets.length"
               class="rounded-md border border-dashed p-5 text-sm text-muted-foreground"
             >
-              No unsold vested shares are available on this date.
+              No unsold acquired shares are available on this date.
             </p>
             <div v-else class="divide-y rounded-md border">
               <div
                 v-for="pocket in pockets"
-                :key="pocket.id"
+                :key="pocket.key"
                 class="flex flex-wrap items-center justify-between gap-3 p-4"
               >
                 <div class="min-w-0">
-                  <Label :for="`sale-pocket-${pocket.id}`" class="break-words">{{
+                  <Label :for="`sale-pocket-${pocket.key}`" class="break-words">{{
                     pocket.grantTitle
                   }}</Label>
                   <p class="mt-1 text-xs text-muted-foreground">
@@ -217,13 +224,13 @@ const confirm = () => {
                   </p>
                   <p class="mt-1 text-xs text-muted-foreground">
                     {{ formatShares(pocket.remaining) }} available ·
-                    {{ formatShares(pocket.quantity) }} originally vested
+                    {{ formatShares(pocket.quantity) }} originally acquired
                   </p>
                 </div>
                 <div class="flex items-center gap-2">
                   <Input
-                    :id="`sale-pocket-${pocket.id}`"
-                    v-model="quantities[pocket.id]"
+                    :id="`sale-pocket-${pocket.key}`"
+                    v-model="quantities[pocket.key]"
                     type="number"
                     min="0"
                     :max="pocket.remaining"
@@ -238,7 +245,7 @@ const confirm = () => {
                     variant="outline"
                     size="sm"
                     :disabled="busy"
-                    @click="quantities[pocket.id] = pocket.remaining"
+                    @click="quantities[pocket.key] = pocket.remaining"
                     >Use all</Button
                   >
                 </div>

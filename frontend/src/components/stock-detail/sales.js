@@ -1,4 +1,5 @@
 import { isCalendarDate, isWholeQuantity } from './vesting.js'
+import { acquisitionLots, allocationKey } from './acquisitions.js'
 
 // Use integer millionths for exact decimal input and gross proceeds calculation.
 export function priceMicros(value) {
@@ -17,23 +18,21 @@ export function saleProceeds(quantity, price) {
   return `$${new Intl.NumberFormat('en-US').format(dollars)}.${String(cents % 100n).padStart(2, '0')}`
 }
 
-export function availablePockets(grants, sales, transactionDate) {
+export function availablePockets(grants, sales, transactionDate, purchases = []) {
   const used = new Map()
   for (const sale of sales)
     for (const allocation of sale.allocations)
-      used.set(allocation.vestingId, (used.get(allocation.vestingId) || 0) + allocation.quantity)
-  return grants
-    .flatMap((grant) =>
-      grant.vestings.map((release) => ({
-        ...release,
-        grantId: grant.id,
-        grantTitle: grant.title,
-        color: grant.color,
-        remaining: release.quantity - (used.get(release.id) || 0),
-      })),
-    )
+      used.set(
+        allocationKey(allocation),
+        (used.get(allocationKey(allocation)) || 0) + allocation.quantity,
+      )
+  return acquisitionLots(grants, purchases)
+    .map((lot) => ({
+      ...lot,
+      grantTitle: lot.title,
+      remaining: lot.quantity - (used.get(lot.key) || 0),
+    }))
     .filter((pocket) => pocket.date <= transactionDate && pocket.remaining > 0)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.grantId - b.grantId || a.id - b.id)
 }
 
 export function validateSale(draft, pockets, today) {
@@ -47,15 +46,17 @@ export function validateSale(draft, pockets, today) {
   let total = 0
   const seen = new Set()
   for (const allocation of draft.allocations) {
-    const pocket = pockets.find((row) => row.id === allocation.vestingId)
+    const key = allocationKey(allocation)
+    const pocket = pockets.find((row) => row.key === key)
     if (
-      seen.has(allocation.vestingId) ||
+      seen.has(key) ||
+      (allocation.vestingId !== undefined && allocation.purchaseId !== undefined) ||
       !pocket ||
       !isWholeQuantity(allocation.quantity) ||
       Number(allocation.quantity) > pocket.remaining
     )
-      errors.allocations = 'Use positive whole quantities within each pocket’s available shares.'
-    seen.add(allocation.vestingId)
+      errors.allocations = 'Use positive whole quantities within each lot’s available shares.'
+    seen.add(key)
     total += Number(allocation.quantity)
   }
   if (!draft.allocations.length || total !== Number(draft.quantity))
@@ -63,23 +64,21 @@ export function validateSale(draft, pockets, today) {
   return errors
 }
 
-export function buildHoldings(grants, sales, today) {
+export function buildHoldings(grants, sales, today, purchases = []) {
   const pockets = new Map()
   const events = []
-  for (const grant of grants) {
-    for (const release of grant.vestings) {
-      pockets.set(release.id, { grantTitle: grant.title, date: release.date })
-      if (release.date <= today)
-        events.push({
-          id: `vesting-${release.id}`,
-          order: release.id,
-          date: release.date,
-          type: 'vesting',
-          label: 'Vesting',
-          grantTitle: grant.title,
-          change: release.quantity,
-        })
-    }
+  for (const lot of acquisitionLots(grants, purchases)) {
+    pockets.set(lot.key, { grantTitle: lot.title, date: lot.date })
+    if (lot.date <= today)
+      events.push({
+        id: lot.key.replace(':', '-'),
+        order: lot.id,
+        date: lot.date,
+        type: lot.type,
+        label: lot.type === 'purchase' ? 'Purchase' : 'Vesting',
+        grantTitle: lot.title,
+        change: lot.quantity,
+      })
   }
   for (const sale of sales) {
     if (sale.transactionDate > today) continue
@@ -94,23 +93,28 @@ export function buildHoldings(grants, sales, today) {
       proceeds: saleProceeds(sale.quantity, sale.proceedsPerShare),
       allocations: sale.allocations.map((allocation) => ({
         ...allocation,
-        ...pockets.get(allocation.vestingId),
+        key: allocationKey(allocation),
+        ...pockets.get(allocationKey(allocation)),
       })),
     })
   }
   events.sort(
     (a, b) =>
       a.date.localeCompare(b.date) ||
-      (a.type === b.type ? a.order - b.order : a.type === 'vesting' ? -1 : 1),
+      Number(a.type === 'sale') - Number(b.type === 'sale') ||
+      a.type.localeCompare(b.type) ||
+      a.order - b.order,
   )
   let balance = 0,
     vested = 0,
+    acquired = 0,
     sold = 0
   for (const event of events) {
     balance += event.change
     event.balance = balance
+    if (event.type === 'sale') sold -= event.change
+    else acquired += event.change
     if (event.type === 'vesting') vested += event.change
-    else sold -= event.change
   }
-  return { events, vested, sold, held: balance }
+  return { events, vested, acquired, sold, held: balance }
 }

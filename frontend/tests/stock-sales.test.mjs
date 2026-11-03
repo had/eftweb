@@ -189,6 +189,7 @@ test('holdings use full history, deterministic same-day order, pocket metadata a
   assert.deepEqual(sales.buildHoldings([], [], '2026-10-29'), {
     events: [],
     vested: 0,
+    acquired: 0,
     sold: 0,
     held: 0,
   })
@@ -201,7 +202,7 @@ test('modal validates allocations and emits one independent draft only on confir
   assert.ok(modal.errors.value.quantity)
   modal.details.value.quantity = '40'
   modal.details.value.proceedsPerShare = '123.456789'
-  modal.quantities.value = { 10: '30', 12: '10' }
+  modal.quantities.value = { 'vesting:10': '30', 'vesting:12': '10' }
   assert.equal(modal.allocated.value, 40)
   assert.equal(modal.proceeds.value, '$4,938.27')
   modal.confirm()
@@ -225,10 +226,10 @@ test('modal validates allocations and emits one independent draft only on confir
 
 test('changing transaction date clears ineligible pocket choices; cancel and reopen resets the draft', async (t) => {
   const { modal, props } = mountModal(t)
-  modal.quantities.value = { 10: '10', 11: '20', 12: '10' }
+  modal.quantities.value = { 'vesting:10': '10', 'vesting:11': '20', 'vesting:12': '10' }
   modal.details.value.transactionDate = '2024-12-31'
   await Vue.nextTick()
-  assert.deepEqual(modal.quantities.value, { 10: '10' })
+  assert.deepEqual(modal.quantities.value, { 'vesting:10': '10' })
   const token = modal.creationToken.value
   modal.close()
   await Vue.nextTick()
@@ -285,7 +286,7 @@ function mockStore(t, overrides = {}) {
   Object.assign(axios, {
     get: async (url) => ({
       data:
-        url.endsWith('/sales') || url.endsWith('/grants')
+        url.endsWith('/sales') || url.endsWith('/grants') || url.endsWith('/purchases')
           ? []
           : { id: Number(url.split('/').at(-1)), name: 'Apple', symbol: 'AAPL' },
     }),
@@ -301,7 +302,11 @@ test('store round-trips sales, preserves exact decimal strings, and retries with
   const requests = []
   const store = mockStore(t, {
     get: async (url) => ({
-      data: url.endsWith('/sales') ? saved : url.endsWith('/grants') ? [] : { id: 1 },
+      data: url.endsWith('/sales')
+        ? saved
+        : url.endsWith('/grants') || url.endsWith('/purchases')
+          ? []
+          : { id: 1 },
     }),
     post: async (...args) => {
       requests.push(args)
@@ -358,7 +363,7 @@ test('refresh waits for a sale write, and sale completion remains scoped to its 
           ? saved
             ? [apiSale()]
             : []
-          : url.endsWith('/grants')
+          : url.endsWith('/grants') || url.endsWith('/purchases')
             ? []
             : { id: 1 },
       }
@@ -368,7 +373,7 @@ test('refresh waits for a sale write, and sale completion remains scoped to its 
   await store.load(1)
   const writing = store.createSale(1, draft())
   const reading = store.load(1)
-  assert.equal(gets, 3)
+  assert.equal(gets, 4)
   await store.load(2)
   saved = true
   pending.resolve({ data: apiSale() })

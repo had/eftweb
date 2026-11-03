@@ -25,11 +25,30 @@ unavailable; stock and grant management still work. All prices and estimates are
 
 Run `just migrate-up` before using the sales feature, and restart the backend to
 load the new API routes. Sales record whole shares, USD proceeds per share (up to
-six decimal places), and explicit quantities from each vesting release. A release
-must have vested by the transaction date; all existing sales reduce its available
-quantity, including sales recorded with a later transaction date.
+six decimal places), and explicit quantities from each acquisition lot (an RSU
+vesting release or stock purchase). Shares must have been acquired by the
+transaction date; all existing sales reduce the lot's available quantity,
+including sales recorded with a later transaction date. A sale can combine RSU
+and ESPP shares.
 
 Use **Holdings & sales → Record sale** to enter a sale. The ledger supports year
 filtering and deletion to correct a sale by re-recording it. Grants with recorded
-sales cannot be deleted until those sales are removed. Proceeds are gross amounts;
+sales, and purchases with recorded sales, cannot be deleted until those sales are removed. Proceeds are gross amounts;
 fees, capital gains, and taxes are not computed by this feature.
+
+## ESPP purchases
+
+Run `just migrate-up` and restart the backend before using purchases. The migration
+adds `stock_purchases` and extends sale allocations while preserving existing RSU
+grants and sales. Downgrading requires deleting sales allocated to purchases first;
+the downgrade removes purchase records.
+
+Use **Acquisition timeline → Add → ESPP purchase** to record a completed purchase's
+date and whole-share quantity. Enter each six-month purchase separately. Purchases
+appear under **ESPP** in the timeline, **Plans & purchases**, holdings, and sale lot
+selection. To correct a purchase, delete it and record it again.
+
+Purchases use the general-purpose `StockPurchase` model and stock-scoped
+`/api/stocks/<stock_id>/purchases` API (list, create, and delete). API clients can
+provide a different `plan_name`; the ESPP form uses `ESPP`. Prices, rebates,
+fractional shares, future purchases, and purchase tax calculations are not recorded.

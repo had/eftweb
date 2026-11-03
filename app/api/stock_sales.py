@@ -1,4 +1,4 @@
-"""Persist sales and their explicit vesting-pocket allocations, without tax computation."""
+"""Persist sales and explicit acquisition-lot allocations, without tax computation."""
 
 import hashlib
 import json
@@ -12,7 +12,13 @@ from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 
 from app import db
-from app.stocks.models import GrantVesting, StockGrant, StockSale, StockSaleAllocation
+from app.stocks.models import (
+    GrantVesting,
+    StockGrant,
+    StockPurchase,
+    StockSale,
+    StockSaleAllocation,
+)
 
 from . import api
 from .stock_grants import active_stock, calendar_date, positive_quantity
@@ -43,19 +49,24 @@ def sale_payload(data):
         raise ValueError("Only USD sales are supported")
     rows = data.get("allocations")
     if not isinstance(rows, list) or not rows:
-        raise ValueError("Allocate shares to at least one vesting pocket")
+        raise ValueError("Allocate shares to at least one acquisition lot")
     allocations = []
     seen = set()
     for row in rows:
         if not isinstance(row, dict):
             raise ValueError("Each allocation must be an object")
-        vesting_id = positive_quantity(row.get("vesting_id"), "Vesting ID")
-        if vesting_id in seen:
-            raise ValueError("Each vesting pocket can appear only once")
-        seen.add(vesting_id)
+        sources = [key for key in ("vesting_id", "purchase_id") if key in row]
+        if len(sources) != 1:
+            raise ValueError("Each allocation must identify exactly one vesting or purchase")
+        source = sources[0]
+        source_id = positive_quantity(row[source], "Acquisition ID")
+        key = (source, source_id)
+        if key in seen:
+            raise ValueError("Each acquisition lot can appear only once")
+        seen.add(key)
         allocations.append(
             {
-                "vesting_id": vesting_id,
+                source: source_id,
                 "quantity": positive_quantity(row.get("quantity"), "Allocated quantity"),
             }
         )
@@ -66,7 +77,11 @@ def sale_payload(data):
         "quantity": quantity,
         "proceeds_per_share": format(price, ".6f"),
         "currency": "USD",
-        "allocations": sorted(allocations, key=lambda row: row["vesting_id"]),
+        # Preserve legacy RSU canonicalization so existing retry hashes remain valid.
+        "allocations": sorted(
+            allocations,
+            key=lambda row: ("purchase_id" in row, row.get("vesting_id", row.get("purchase_id"))),
+        ),
     }
 
 
@@ -94,44 +109,74 @@ def stock_sales(stock_id):
             existing = StockSale.query.filter_by(stock_id=stock_id, creation_token=token).first()
             if existing:
                 if existing.request_hash != request_hash:
-                    return jsonify(
-                        {
-                            "error": "This creation token was already used for different sale data. Reload to review the saved sale."
-                        }
-                    ), 409
+                    return (
+                        jsonify(
+                            {
+                                "error": "This creation token was already used for different sale data. Reload to review the saved sale."
+                            }
+                        ),
+                        409,
+                    )
                 return jsonify(existing.to_dict()), 200
 
+            vesting_ids = [row["vesting_id"] for row in data["allocations"] if "vesting_id" in row]
+            purchase_ids = [
+                row["purchase_id"] for row in data["allocations"] if "purchase_id" in row
+            ]
             pockets = {
-                pocket.id: pocket
+                ("vesting_id", pocket.id): (pocket.date, pocket.quantity)
                 for pocket in GrantVesting.query.join(StockGrant)
                 .filter(
                     StockGrant.stock_id == stock_id,
-                    GrantVesting.id.in_([row["vesting_id"] for row in data["allocations"]]),
+                    GrantVesting.id.in_(vesting_ids),
                 )
                 .all()
             }
-            used = dict(
-                db.session.query(
-                    StockSaleAllocation.vesting_id, func.sum(StockSaleAllocation.quantity)
-                )
-                .filter(StockSaleAllocation.vesting_id.in_(pockets))
-                .group_by(StockSaleAllocation.vesting_id)
-                .all()
+            pockets.update(
+                {
+                    ("purchase_id", purchase.id): (purchase.purchase_date, purchase.quantity)
+                    for purchase in StockPurchase.query.filter(
+                        StockPurchase.stock_id == stock_id, StockPurchase.id.in_(purchase_ids)
+                    ).all()
+                }
             )
+            used = {}
+            for source, ids in (("vesting_id", vesting_ids), ("purchase_id", purchase_ids)):
+                column = getattr(StockSaleAllocation, source)
+                used.update(
+                    {
+                        (source, source_id): quantity
+                        for source_id, quantity in db.session.query(
+                            column, func.sum(StockSaleAllocation.quantity)
+                        )
+                        .filter(column.in_(ids))
+                        .group_by(column)
+                        .all()
+                    }
+                )
             for row in data["allocations"]:
-                pocket = pockets.get(row["vesting_id"])
+                source = "vesting_id" if "vesting_id" in row else "purchase_id"
+                key = (source, row[source])
+                pocket = pockets.get(key)
                 if pocket is None:
-                    return jsonify({"error": "Vesting pocket not found for this stock"}), 400
-                if pocket.date.isoformat() > data["transaction_date"]:
-                    return jsonify(
-                        {"error": "Shares must have vested by the transaction date"}
-                    ), 400
-                if row["quantity"] > pocket.quantity - used.get(pocket.id, 0):
-                    return jsonify(
-                        {
-                            "error": "A vesting pocket no longer has enough available shares. Reload to review its balance."
-                        }
-                    ), 409
+                    return jsonify({"error": "Acquisition lot not found for this stock"}), 400
+                acquired_date, quantity = pocket
+                if acquired_date.isoformat() > data["transaction_date"]:
+                    return (
+                        jsonify(
+                            {"error": "Shares must have been acquired by the transaction date"}
+                        ),
+                        400,
+                    )
+                if row["quantity"] > quantity - used.get(key, 0):
+                    return (
+                        jsonify(
+                            {
+                                "error": "An acquisition lot no longer has enough available shares. Reload to review its balance."
+                            }
+                        ),
+                        409,
+                    )
             allocations = data.pop("allocations")
             sale = StockSale(
                 stock_id=stock_id,

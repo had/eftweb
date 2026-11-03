@@ -23,14 +23,27 @@ const saleFromApi = (sale) => ({
   quantity: sale.quantity,
   proceedsPerShare: sale.proceeds_per_share,
   currency: sale.currency,
-  allocations: sale.allocations.map(({ vesting_id, quantity }) => ({
-    vestingId: vesting_id,
+  allocations: sale.allocations.map(({ vesting_id, purchase_id, quantity }) => ({
+    ...(purchase_id !== undefined ? { purchaseId: purchase_id } : { vestingId: vesting_id }),
     quantity,
   })),
 })
+const purchaseFromApi = (purchase) => ({
+  id: purchase.id,
+  stockId: purchase.stock_id,
+  purchaseDate: purchase.purchase_date,
+  quantity: purchase.quantity,
+  planName: purchase.plan_name,
+})
+const purchaseOrder = (a, b) => a.purchaseDate.localeCompare(b.purchaseDate) || a.id - b.id
 const saleOrder = (a, b) => a.transactionDate.localeCompare(b.transactionDate) || a.id - b.id
 const busy = (entry) =>
-  entry.saving || entry.deletingId !== null || entry.savingSale || entry.deletingSaleId !== null
+  entry.saving ||
+  entry.deletingId !== null ||
+  entry.savingSale ||
+  entry.deletingSaleId !== null ||
+  entry.savingPurchase ||
+  entry.deletingPurchaseId !== null
 const byDate = (a, b) => a.grantDate.localeCompare(b.grantDate) || a.id - b.id
 
 export const useStockGrantsStore = defineStore('stockGrants', () => {
@@ -42,6 +55,11 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
       stocks.value[stockId] = {
         stock: null,
         grants: [],
+        purchases: [],
+        savingPurchase: false,
+        purchaseSaveError: '',
+        deletingPurchaseId: null,
+        purchaseDeleteError: '',
         sales: [],
         savingSale: false,
         saleSaveError: '',
@@ -70,15 +88,17 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
       const pending = pendingWrites.get(stockId)
       if (pending) await pending.catch(() => {})
       if (generation !== entry.loadGeneration) return false
-      const [stock, grants, sales] = await Promise.all([
+      const [stock, grants, sales, purchases] = await Promise.all([
         axios.get(`/api/stocks/${stockId}`),
         axios.get(`/api/stocks/${stockId}/grants`),
         axios.get(`/api/stocks/${stockId}/sales`),
+        axios.get(`/api/stocks/${stockId}/purchases`),
       ])
       if (generation !== entry.loadGeneration) return false
       entry.stock = stock.data
       entry.grants = grants.data.map(fromApi).sort(byDate)
       entry.sales = sales.data.map(saleFromApi).sort(saleOrder)
+      entry.purchases = purchases.data.map(purchaseFromApi).sort(purchaseOrder)
       entry.loaded = true
       return true
     } catch (error) {
@@ -86,7 +106,7 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
         entry.loaded = false
         entry.loadError = errorMessage(
           error,
-          'Could not load this stock, its grants and sales. Please try again.',
+          'Could not load this stock, its grants, purchases and sales. Please try again.',
         )
       }
       return false
@@ -165,8 +185,8 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
           transaction_date: draft.transactionDate,
           quantity: draft.quantity,
           proceeds_per_share: draft.proceedsPerShare,
-          allocations: draft.allocations.map(({ vestingId, quantity }) => ({
-            vesting_id: vestingId,
+          allocations: draft.allocations.map(({ vestingId, purchaseId, quantity }) => ({
+            ...(purchaseId !== undefined ? { purchase_id: purchaseId } : { vesting_id: vestingId }),
             quantity,
           })),
         },
@@ -210,5 +230,75 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
     }
   }
 
-  return { stocks, forStock, load, createGrant, deleteGrant, createSale, deleteSale }
+  async function createPurchase(stockId, draft) {
+    const entry = forStock(stockId)
+    if (!entry.loaded || entry.loading || busy(entry)) return null
+    entry.savingPurchase = true
+    entry.purchaseSaveError = ''
+    let request
+    try {
+      request = axios.post(
+        `/api/stocks/${stockId}/purchases`,
+        {
+          purchase_date: draft.purchaseDate,
+          quantity: draft.quantity,
+          plan_name: 'ESPP',
+        },
+        { headers: { 'Idempotency-Key': draft.creationToken } },
+      )
+      pendingWrites.set(stockId, request)
+      const response = await request
+      const saved = purchaseFromApi(response.data)
+      entry.purchases = [
+        ...entry.purchases.filter((purchase) => purchase.id !== saved.id),
+        saved,
+      ].sort(purchaseOrder)
+      return saved
+    } catch (error) {
+      entry.purchaseSaveError = errorMessage(
+        error,
+        'Could not save the purchase. Your draft is still here; please try again.',
+      )
+      return null
+    } finally {
+      entry.savingPurchase = false
+      if (pendingWrites.get(stockId) === request) pendingWrites.delete(stockId)
+    }
+  }
+
+  async function deletePurchase(stockId, purchaseId) {
+    const entry = forStock(stockId)
+    if (!entry.loaded || entry.loading || busy(entry)) return false
+    entry.deletingPurchaseId = purchaseId
+    entry.purchaseDeleteError = ''
+    let request
+    try {
+      request = axios.delete(`/api/stocks/${stockId}/purchases/${purchaseId}`)
+      pendingWrites.set(stockId, request)
+      await request
+      entry.purchases = entry.purchases.filter((purchase) => purchase.id !== purchaseId)
+      return true
+    } catch (error) {
+      entry.purchaseDeleteError = errorMessage(
+        error,
+        'Could not delete the purchase. Please try again.',
+      )
+      return false
+    } finally {
+      entry.deletingPurchaseId = null
+      if (pendingWrites.get(stockId) === request) pendingWrites.delete(stockId)
+    }
+  }
+
+  return {
+    stocks,
+    forStock,
+    load,
+    createGrant,
+    deleteGrant,
+    createSale,
+    deleteSale,
+    createPurchase,
+    deletePurchase,
+  }
 })

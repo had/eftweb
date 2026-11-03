@@ -3,15 +3,25 @@ import { computed } from 'vue'
 import { Trash2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { SCHEDULES, formatDate, formatShares, localDate, summarizeGrants } from './vesting.js'
+import {
+  SCHEDULES,
+  formatDate,
+  formatShares,
+  localDate,
+  summarizeGrants,
+  summarizePortfolio,
+} from './vesting.js'
 import GrantsEmptyState from './GrantsEmptyState.vue'
+import { purchaseColor } from './acquisitions.js'
 
 const props = defineProps({
   grants: { type: Array, default: () => [] },
+  purchases: { type: Array, default: () => [] },
+  busy: Boolean,
   today: { type: String, default: () => localDate() },
 })
-defineEmits(['delete'])
-const portfolio = computed(() => summarizeGrants(props.grants, props.today))
+defineEmits(['delete', 'delete-purchase'])
+const portfolio = computed(() => summarizePortfolio(props.grants, props.purchases, props.today))
 const rows = computed(() =>
   props.grants.map((grant) => {
     const summary = summarizeGrants([grant], props.today)
@@ -35,17 +45,19 @@ const rows = computed(() =>
 <template>
   <div class="space-y-4">
     <div>
-      <h2 class="text-xl font-semibold">Your grants</h2>
+      <h2 class="text-xl font-semibold">Your plans &amp; purchases</h2>
       <p class="mt-1 text-sm text-muted-foreground">
-        Review each grant’s vesting progress and remove any grants you need to replace.
+        Review RSU vesting progress and completed stock purchases.
       </p>
     </div>
-    <GrantsEmptyState v-if="!grants.length" />
+    <GrantsEmptyState v-if="!grants.length && !purchases.length" />
     <Card v-else class="gap-0 overflow-hidden py-0">
       <CardHeader class="p-5">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <CardTitle class="text-base"
-            >{{ grants.length }} {{ grants.length === 1 ? 'grant' : 'grants' }}</CardTitle
+            >{{ grants.length }} {{ grants.length === 1 ? 'grant' : 'grants' }} ·
+            {{ purchases.length }}
+            {{ purchases.length === 1 ? 'purchase' : 'purchases' }}</CardTitle
           >
           <span class="text-xs text-muted-foreground">As of {{ formatDate(today) }}</span>
         </div>
@@ -53,16 +65,17 @@ const rows = computed(() =>
       <CardContent class="overflow-x-auto px-0">
         <table class="w-full min-w-[900px] text-sm">
           <caption class="sr-only">
-            Entered grants, vested and remaining shares, next releases, and completion dates
+            Entered grants and purchases, acquired and remaining shares, next releases, and
+            completion dates
           </caption>
           <thead class="border-y bg-muted/40 text-xs text-muted-foreground">
             <tr>
-              <th scope="col" class="px-5 py-3 text-left font-medium">Grant</th>
-              <th scope="col" class="px-4 py-3 text-right font-medium">Awarded</th>
-              <th scope="col" class="px-4 py-3 text-right font-medium">Vested</th>
+              <th scope="col" class="px-5 py-3 text-left font-medium">Plan / purchase</th>
+              <th scope="col" class="px-4 py-3 text-right font-medium">Total shares</th>
+              <th scope="col" class="px-4 py-3 text-right font-medium">Acquired</th>
               <th scope="col" class="px-4 py-3 text-right font-medium">Still to vest</th>
               <th scope="col" class="px-4 py-3 text-left font-medium">Next release</th>
-              <th scope="col" class="px-5 py-3 text-left font-medium">Fully vested</th>
+              <th scope="col" class="px-5 py-3 text-left font-medium">Completion date</th>
               <th scope="col" class="px-5 py-3 text-right font-medium">Actions</th>
             </tr>
           </thead>
@@ -118,6 +131,7 @@ const rows = computed(() =>
               <td class="px-5 py-5 text-right">
                 <Button
                   variant="ghost"
+                  :disabled="busy"
                   class="text-destructive"
                   :aria-label="`Delete ${grant.title}`"
                   @click="$emit('delete', grant)"
@@ -125,15 +139,49 @@ const rows = computed(() =>
                 >
               </td>
             </tr>
+            <tr v-for="purchase in purchases" :key="`purchase-${purchase.id}`" class="border-b">
+              <th scope="row" class="min-w-64 px-5 py-5 text-left font-normal">
+                <span class="inline-flex items-center gap-2 font-medium"
+                  ><span
+                    class="h-2.5 w-2.5 rounded-full"
+                    :style="{ backgroundColor: purchaseColor }"
+                  />{{ purchase.planName }}</span
+                >
+                <p class="mt-1 text-xs text-muted-foreground">
+                  Purchased {{ formatDate(purchase.purchaseDate) }}
+                </p>
+              </th>
+              <td class="px-4 py-5 text-right tabular-nums">
+                {{ formatShares(purchase.quantity) }}
+              </td>
+              <td class="px-4 py-5 text-right tabular-nums">
+                {{ formatShares(purchase.quantity) }}
+              </td>
+              <td class="px-4 py-5 text-right text-muted-foreground">—</td>
+              <td class="px-4 py-5 text-muted-foreground">—</td>
+              <td class="whitespace-nowrap px-5 py-5 text-muted-foreground">
+                {{ formatDate(purchase.purchaseDate) }}
+              </td>
+              <td class="px-5 py-5 text-right">
+                <Button
+                  variant="ghost"
+                  class="text-destructive"
+                  :disabled="busy"
+                  :aria-label="`Delete ${purchase.planName} purchase on ${formatDate(purchase.purchaseDate)}`"
+                  @click="$emit('delete-purchase', purchase)"
+                  ><Trash2 class="h-4 w-4" /> Delete</Button
+                >
+              </td>
+            </tr>
           </tbody>
           <tfoot class="bg-muted/30 font-medium">
             <tr>
-              <th scope="row" class="px-5 py-4 text-left">All grants</th>
+              <th scope="row" class="px-5 py-4 text-left">All plans &amp; purchases</th>
               <td class="px-4 py-4 text-right tabular-nums">
-                {{ formatShares(portfolio.awarded) }}
+                {{ formatShares(portfolio.total) }}
               </td>
               <td class="px-4 py-4 text-right tabular-nums">
-                {{ formatShares(portfolio.vested) }}
+                {{ formatShares(portfolio.acquired) }}
               </td>
               <td class="px-4 py-4 text-right tabular-nums">
                 {{ formatShares(portfolio.unvested) }}
@@ -144,9 +192,9 @@ const rows = computed(() =>
         </table>
       </CardContent>
     </Card>
-    <p v-if="grants.length" class="text-xs text-muted-foreground">
-      Vested quantities reflect the release dates you entered, before any sales. Deleting a grant
-      also removes its releases from the vesting timeline.
+    <p v-if="grants.length || purchases.length" class="text-xs text-muted-foreground">
+      Acquired quantities reflect vestings and purchases before any sales. Deleting a grant or
+      purchase also removes its acquisitions from the timeline.
     </p>
   </div>
 </template>

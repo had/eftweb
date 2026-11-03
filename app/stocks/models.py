@@ -24,6 +24,10 @@ class Stock(db.Model):
         "StockSale", back_populates="stock", cascade="all, delete-orphan",
         order_by="StockSale.transaction_date, StockSale.id",
     )
+    purchases = db.relationship(
+        "StockPurchase", back_populates="stock", cascade="all, delete-orphan",
+        order_by="StockPurchase.purchase_date, StockPurchase.id",
+    )
 
     def to_dict(self):
         return {
@@ -93,6 +97,39 @@ class GrantVesting(db.Model):
         return {"id": self.id, "date": self.date.isoformat(), "quantity": self.quantity}
 
 
+class StockPurchase(db.Model):
+    __tablename__ = "stock_purchases"
+    __table_args__ = (
+        db.UniqueConstraint("stock_id", "creation_token", name="uq_stock_purchase_creation_token"),
+        db.CheckConstraint(
+            f"quantity > 0 AND quantity <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
+            name="ck_stock_purchase_quantity",
+        ),
+        {"sqlite_autoincrement": True},
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    stock_id = db.Column(
+        db.Integer, db.ForeignKey("stocks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    purchase_date = db.Column(db.Date, nullable=False)
+    quantity = db.Column(db.BigInteger, nullable=False)
+    plan_name = db.Column(db.String(256), nullable=False, default="ESPP")
+    creation_token = db.Column(db.String(36), nullable=False)
+    request_hash = db.Column(db.String(64), nullable=False)
+
+    stock = db.relationship("Stock", back_populates="purchases")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "stock_id": self.stock_id,
+            "purchase_date": self.purchase_date.isoformat(),
+            "quantity": self.quantity,
+            "plan_name": self.plan_name,
+        }
+
+
 class StockSale(db.Model):
     __tablename__ = "stock_sales"
     __table_args__ = (
@@ -122,7 +159,7 @@ class StockSale(db.Model):
         "StockSaleAllocation",
         back_populates="sale",
         cascade="all, delete-orphan",
-        order_by="StockSaleAllocation.vesting_id",
+        order_by="StockSaleAllocation.vesting_id, StockSaleAllocation.purchase_id",
     )
 
     def to_dict(self):
@@ -141,6 +178,12 @@ class StockSaleAllocation(db.Model):
     __tablename__ = "stock_sale_allocations"
     __table_args__ = (
         db.UniqueConstraint("sale_id", "vesting_id", name="uq_stock_sale_allocation_vesting"),
+        db.UniqueConstraint("sale_id", "purchase_id", name="uq_stock_sale_allocation_purchase"),
+        db.CheckConstraint(
+            "(vesting_id IS NOT NULL AND purchase_id IS NULL) OR "
+            "(vesting_id IS NULL AND purchase_id IS NOT NULL)",
+            name="ck_stock_sale_allocation_source",
+        ),
         db.CheckConstraint(
             f"quantity > 0 AND quantity <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
             name="ck_stock_sale_allocation_quantity",
@@ -154,7 +197,13 @@ class StockSaleAllocation(db.Model):
     vesting_id = db.Column(
         db.Integer,
         db.ForeignKey("grant_vestings.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    purchase_id = db.Column(
+        db.Integer,
+        db.ForeignKey("stock_purchases.id", ondelete="RESTRICT"),
+        nullable=True,
         index=True,
     )
     quantity = db.Column(db.BigInteger, nullable=False)
@@ -162,7 +211,12 @@ class StockSaleAllocation(db.Model):
     sale = db.relationship("StockSale", back_populates="allocations")
 
     def to_dict(self):
-        return {"vesting_id": self.vesting_id, "quantity": self.quantity}
+        source = (
+            {"vesting_id": self.vesting_id}
+            if self.vesting_id is not None
+            else {"purchase_id": self.purchase_id}
+        )
+        return {**source, "quantity": self.quantity}
 
 
 class DirectStocksPlan(db.Model):

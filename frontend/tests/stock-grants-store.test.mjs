@@ -38,11 +38,12 @@ function mockHttp(t, overrides = {}) {
   t.after(() => Object.assign(axios, originals))
   Object.assign(axios, {
     get: async (url) => ({
-      data: url.endsWith('/sales')
-        ? []
-        : url.endsWith('/grants')
+      data:
+        url.endsWith('/sales') || url.endsWith('/purchases')
           ? []
-          : { id: Number(url.split('/').at(-1)), name: 'Canonical stock', symbol: 'REAL' },
+          : url.endsWith('/grants')
+            ? []
+            : { id: Number(url.split('/').at(-1)), name: 'Canonical stock', symbol: 'REAL' },
     }),
     post: async () => ({ data: apiGrant(1) }),
     delete: async () => ({}),
@@ -54,11 +55,12 @@ function mockHttp(t, overrides = {}) {
 test('loads canonical metadata, maps fields, and retains stable colors across reloads', async (t) => {
   const store = mockHttp(t, {
     get: async (url) => ({
-      data: url.endsWith('/sales')
-        ? []
-        : url.endsWith('/grants')
-          ? [apiGrant(4), apiGrant(2)]
-          : { id: 1, name: 'Real stock', symbol: 'REAL' },
+      data:
+        url.endsWith('/sales') || url.endsWith('/purchases')
+          ? []
+          : url.endsWith('/grants')
+            ? [apiGrant(4), apiGrant(2)]
+            : { id: 1, name: 'Real stock', symbol: 'REAL' },
     }),
   })
   const pending = store.load(1)
@@ -85,7 +87,11 @@ test('failed loads are errors rather than empty portfolios, and retry can recove
   assert.equal(store.forStock(1).loaded, false)
   assert.equal(store.forStock(1).loadError, 'Stock is archived')
   axios.get = async (url) => ({
-    data: url.endsWith('/sales') ? [] : url.endsWith('/grants') ? [] : { id: 1, symbol: 'AAPL' },
+    data: url.endsWith('/sales')
+      ? []
+      : url.endsWith('/grants') || url.endsWith('/purchases')
+        ? []
+        : { id: 1, symbol: 'AAPL' },
   })
   assert.equal(await store.load(1), true)
   assert.equal(store.forStock(1).loadError, '')
@@ -103,11 +109,12 @@ test('older loads cannot overwrite a refreshed stock and separate stocks retain 
         return old.promise
       }
       return Promise.resolve({
-        data: url.endsWith('/sales')
-          ? []
-          : url.endsWith('/grants')
-            ? [apiGrant(2, Number(url.split('/')[3]))]
-            : { id: Number(url.split('/').at(-1)), symbol: 'REAL' },
+        data:
+          url.endsWith('/sales') || url.endsWith('/purchases')
+            ? []
+            : url.endsWith('/grants')
+              ? [apiGrant(2, Number(url.split('/')[3]))]
+              : { id: Number(url.split('/').at(-1)), symbol: 'REAL' },
       })
     },
   })
@@ -195,7 +202,13 @@ test('refresh waits for pending writes so an older snapshot cannot resurrect del
   const store = mockHttp(t, {
     get: async (url) => {
       gets += 1
-      return { data: url.endsWith('/sales') ? [] : url.endsWith('/grants') ? [] : { id: 1 } }
+      return {
+        data: url.endsWith('/sales')
+          ? []
+          : url.endsWith('/grants') || url.endsWith('/purchases')
+            ? []
+            : { id: 1 },
+      }
     },
     delete: () => pending.promise,
   })
@@ -203,10 +216,10 @@ test('refresh waits for pending writes so an older snapshot cannot resurrect del
   await store.createGrant(1, draft())
   const deleting = store.deleteGrant(1, 1)
   const loading = store.load(1)
-  assert.equal(gets, 3)
+  assert.equal(gets, 4)
   pending.resolve({})
   await deleting
   await loading
-  assert.equal(gets, 6)
+  assert.equal(gets, 8)
   assert.deepEqual(store.forStock(1).grants, [])
 })

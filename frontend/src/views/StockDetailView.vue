@@ -1,21 +1,32 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { ArrowLeft, ArrowUpRight, Plus } from 'lucide-vue-next'
-import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
+import { ArrowLeft, ArrowUpRight, ChevronDown, Plus } from 'lucide-vue-next'
+import {
+  DropdownMenuRoot,
+  DropdownMenuTrigger,
+  DropdownMenuPortal,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  TabsContent,
+  TabsList,
+  TabsRoot,
+  TabsTrigger,
+} from 'reka-ui'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import VestingTimeline from '@/components/stock-detail/VestingTimeline.vue'
 import HoldingsAndSales from '@/components/stock-detail/HoldingsAndSales.vue'
 import GrantsOverview from '@/components/stock-detail/GrantsOverview.vue'
 import AddGrantWizardModal from '@/components/stock-detail/AddGrantWizardModal.vue'
+import AddPurchaseModal from '@/components/stock-detail/AddPurchaseModal.vue'
 import RecordSaleModal from '@/components/stock-detail/RecordSaleModal.vue'
 import DeleteConfirmModal from '@/components/DeleteConfirmModal.vue'
 import { useStockGrantsStore } from '@/stores/stockGrants'
 import { useStockQuotesStore } from '@/stores/stockQuotes'
 import StockQuote from '@/components/StockQuote.vue'
 import { formatStockValue } from '@/lib/stockQuotes.js'
-import { formatShares, localDate, summarizeGrants } from '@/components/stock-detail/vesting.js'
+import { formatShares, localDate, summarizePortfolio } from '@/components/stock-detail/vesting.js'
 
 const activeTab = ref('vesting')
 const route = useRoute()
@@ -29,6 +40,8 @@ const stockSymbol = computed(() => entry.value.stock?.symbol || '')
 const quoteEntry = computed(() => quotesStore.forSymbol(stockSymbol.value))
 const ready = computed(() => entry.value.loaded && !entry.value.loading && !entry.value.loadError)
 const showAddGrant = ref(false)
+const showAddPurchase = ref(false)
+const purchaseToDelete = ref(null)
 const showRecordSale = ref(false)
 const saleToDelete = ref(null)
 const busy = computed(
@@ -36,7 +49,9 @@ const busy = computed(
     entry.value.saving ||
     entry.value.deletingId !== null ||
     entry.value.savingSale ||
-    entry.value.deletingSaleId !== null,
+    entry.value.deletingSaleId !== null ||
+    entry.value.savingPurchase ||
+    entry.value.deletingPurchaseId !== null,
 )
 const grantToDelete = ref(null)
 let viewGeneration = 0
@@ -56,6 +71,8 @@ watch(
   () => {
     viewGeneration += 1
     showAddGrant.value = false
+    showAddPurchase.value = false
+    purchaseToDelete.value = null
     showRecordSale.value = false
     saleToDelete.value = null
     grantToDelete.value = null
@@ -70,6 +87,28 @@ watch(showAddGrant, (open) => {
 watch(showRecordSale, (open) => {
   if (open) entry.value.saleSaveError = ''
 })
+watch(showAddPurchase, (open) => {
+  if (open) entry.value.purchaseSaveError = ''
+})
+const addPurchase = async (draft) => {
+  const generation = viewGeneration
+  const saved = await grantsStore.createPurchase(stockId.value, draft)
+  if (saved && generation === viewGeneration) {
+    showAddPurchase.value = false
+    activeTab.value = 'vesting'
+  }
+}
+const requestDeletePurchase = (purchase) => {
+  if (!ready.value || busy.value) return
+  entry.value.purchaseDeleteError = ''
+  purchaseToDelete.value = purchase
+}
+const deletePurchase = async () => {
+  if (!purchaseToDelete.value) return
+  const generation = viewGeneration
+  const deleted = await grantsStore.deletePurchase(stockId.value, purchaseToDelete.value.id)
+  if (deleted && generation === viewGeneration) purchaseToDelete.value = null
+}
 const recordSale = async (draft) => {
   const generation = viewGeneration
   const saved = await grantsStore.createSale(stockId.value, draft)
@@ -107,20 +146,22 @@ const deleteGrant = async () => {
   if (deleted && generation === viewGeneration) grantToDelete.value = null
 }
 const tabs = [
-  { value: 'vesting', label: 'Vesting timeline' },
+  { value: 'vesting', label: 'Acquisition timeline' },
   { value: 'holdings', label: 'Holdings & sales' },
-  { value: 'grants', label: 'By grant' },
+  { value: 'grants', label: 'Plans & purchases' },
 ]
-const portfolio = computed(() => summarizeGrants(grants.value, today.value))
+const portfolio = computed(() =>
+  summarizePortfolio(grants.value, entry.value.purchases, today.value),
+)
 const summaries = computed(() => [
   {
-    label: 'Total awarded',
-    value: portfolio.value.awarded,
-    detail: `Across ${grants.value.length} ${grants.value.length === 1 ? 'grant' : 'grants'}`,
+    label: 'Total shares',
+    value: portfolio.value.total,
+    detail: 'Granted and purchased, including scheduled shares',
   },
   {
-    label: 'Vested so far',
-    value: portfolio.value.vested,
+    label: 'Acquired shares',
+    value: portfolio.value.acquired,
     detail: 'Before any sales',
     emphasized: true,
   },
@@ -157,7 +198,7 @@ const summaries = computed(() => [
       <div
         v-if="entry.loading"
         role="status"
-        aria-label="Loading stock, grants and sales"
+        aria-label="Loading stock, grants, purchases and sales"
         class="space-y-4"
       >
         <div class="h-28 animate-pulse rounded-lg bg-muted" />
@@ -223,11 +264,33 @@ const summaries = computed(() => [
             value="vesting"
             class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <VestingTimeline :grants="grants" :today="today">
+            <VestingTimeline :grants="grants" :purchases="entry.purchases" :today="today">
               <template #actions>
-                <Button variant="outline" :disabled="busy" @click="showAddGrant = true"
-                  ><Plus class="h-4 w-4" /> Add grant</Button
-                >
+                <DropdownMenuRoot>
+                  <DropdownMenuTrigger as-child>
+                    <Button variant="outline" :disabled="busy"
+                      ><Plus class="h-4 w-4" /> Add <ChevronDown class="h-4 w-4"
+                    /></Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuPortal>
+                    <DropdownMenuContent
+                      align="end"
+                      :side-offset="6"
+                      class="z-50 min-w-44 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+                    >
+                      <DropdownMenuItem
+                        class="cursor-pointer rounded-sm px-3 py-2 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
+                        @select="showAddGrant = true"
+                        >RSU grant</DropdownMenuItem
+                      >
+                      <DropdownMenuItem
+                        class="cursor-pointer rounded-sm px-3 py-2 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
+                        @select="showAddPurchase = true"
+                        >ESPP purchase</DropdownMenuItem
+                      >
+                    </DropdownMenuContent>
+                  </DropdownMenuPortal>
+                </DropdownMenuRoot>
               </template>
             </VestingTimeline>
           </TabsContent>
@@ -238,6 +301,7 @@ const summaries = computed(() => [
             <HoldingsAndSales
               :key="stockId"
               :grants="grants"
+              :purchases="entry.purchases"
               :sales="entry.sales"
               :today="today"
               :busy="busy"
@@ -254,7 +318,14 @@ const summaries = computed(() => [
             value="grants"
             class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <GrantsOverview :grants="grants" :today="today" @delete="requestDeleteGrant" />
+            <GrantsOverview
+              :grants="grants"
+              :purchases="entry.purchases"
+              :today="today"
+              :busy="busy"
+              @delete="requestDeleteGrant"
+              @delete-purchase="requestDeletePurchase"
+            />
           </TabsContent>
         </TabsRoot>
         <AddGrantWizardModal
@@ -270,19 +341,48 @@ const summaries = computed(() => [
           v-model:open="showRecordSale"
           :ticker="stockSymbol"
           :grants="grants"
+          :purchases="entry.purchases"
           :sales="entry.sales"
           :today="today"
           :saving="entry.savingSale"
           :save-error="entry.saleSaveError"
           @confirmed="recordSale"
         />
+        <AddPurchaseModal
+          :key="`purchase-${stockId}`"
+          v-model:open="showAddPurchase"
+          :ticker="stockSymbol"
+          :today="today"
+          :saving="entry.savingPurchase"
+          :save-error="entry.purchaseSaveError"
+          @confirmed="addPurchase"
+        />
+        <DeleteConfirmModal
+          :open="Boolean(purchaseToDelete)"
+          title="Delete purchase"
+          :description="
+            purchaseToDelete
+              ? `Permanently delete the ${purchaseToDelete.planName} purchase of ${formatShares(purchaseToDelete.quantity)} shares on ${purchaseToDelete.purchaseDate}? This cannot be undone.`
+              : ''
+          "
+          confirm-label="Delete purchase"
+          :busy="entry.deletingPurchaseId !== null"
+          :error="entry.purchaseDeleteError"
+          @update:open="
+            (open) => {
+              if (!open && entry.deletingPurchaseId === null) purchaseToDelete = null
+            }
+          "
+          @cancel="purchaseToDelete = null"
+          @confirm="deletePurchase"
+        />
         <DeleteConfirmModal
           :open="Boolean(saleToDelete)"
           title="Delete sale"
           :description="
             saleToDelete
-              ? `Delete the sale of ${formatShares(saleToDelete.quantity)} shares on ${saleToDelete.transactionDate}? The shares will become available in their original vesting pockets. This cannot be undone.`
-              : 'The shares will become available in their original vesting pockets.'
+              ? `Delete the sale of ${formatShares(saleToDelete.quantity)} shares on ${saleToDelete.transactionDate}? The shares will become available in their original acquisition lots. This cannot be undone.`
+              : 'The shares will become available in their original acquisition lots.'
           "
           confirm-label="Delete sale"
           :busy="entry.deletingSaleId !== null"

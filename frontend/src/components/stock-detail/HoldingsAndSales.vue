@@ -8,12 +8,15 @@ import { buildHoldings } from './sales.js'
 
 const props = defineProps({
   grants: { type: Array, default: () => [] },
+  purchases: { type: Array, default: () => [] },
   sales: { type: Array, default: () => [] },
   today: { type: String, default: () => localDate() },
   busy: Boolean,
 })
 defineEmits(['delete-sale'])
-const portfolio = computed(() => buildHoldings(props.grants, props.sales, props.today))
+const portfolio = computed(() =>
+  buildHoldings(props.grants, props.sales, props.today, props.purchases),
+)
 const selectedYear = ref(props.today.slice(0, 4))
 const years = computed(() =>
   [
@@ -76,14 +79,14 @@ const firstDate = computed(() => new Date(start.value).toISOString().slice(0, 10
       <div>
         <h2 class="text-xl font-semibold">What you held, and when</h2>
         <p class="mt-1 text-sm text-muted-foreground">
-          Vesting adds shares. Sales reduce your available balance.
+          Vestings and purchases add shares. Sales reduce your available balance.
         </p>
       </div>
       <slot name="actions" />
     </div>
     <Card class="gap-0 py-0">
       <CardHeader class="flex flex-row flex-wrap items-center justify-between gap-3 p-5 pb-0">
-        <CardTitle class="text-base">Vested, unsold shares</CardTitle>
+        <CardTitle class="text-base">Shares held</CardTitle>
         <div class="flex gap-4 text-xs text-muted-foreground">
           <span class="inline-flex items-center gap-2"
             ><span class="h-0.5 w-4 bg-primary" /> Shares held</span
@@ -105,9 +108,9 @@ const firstDate = computed(() => new Date(start.value).toISOString().slice(0, 10
               Holdings from {{ formatDate(firstDate) }} to {{ formatDate(today) }}
             </title>
             <desc id="holdings-chart-description">
-              {{ formatShares(portfolio.held) }} vested, unsold shares as of
-              {{ formatDate(today) }}. Upward steps are vesting events and downward steps are sales.
-              Exact dates and balances are in the activity ledger below.
+              {{ formatShares(portfolio.held) }} unsold acquired shares as of
+              {{ formatDate(today) }}. Upward steps are vestings and purchases and downward steps
+              are sales. Exact dates and balances are in the activity ledger below.
             </desc>
             <g v-for="tick in ticks" :key="tick">
               <line
@@ -170,8 +173,10 @@ const firstDate = computed(() => new Date(start.value).toISOString().slice(0, 10
         </div>
         <div class="mt-2 flex flex-wrap gap-x-8 gap-y-2 border-t pt-4 text-sm">
           <p>
-            <span class="text-muted-foreground">Lifetime vested</span>
-            <span class="ml-2 font-medium tabular-nums">{{ formatShares(portfolio.vested) }}</span>
+            <span class="text-muted-foreground">Lifetime acquired</span>
+            <span class="ml-2 font-medium tabular-nums">{{
+              formatShares(portfolio.acquired)
+            }}</span>
           </p>
           <p>
             <span class="text-muted-foreground">Lifetime sold</span>
@@ -209,7 +214,7 @@ const firstDate = computed(() => new Date(start.value).toISOString().slice(0, 10
       <CardContent class="overflow-x-auto px-0">
         <table class="w-full min-w-[860px] text-sm">
           <caption class="sr-only">
-            Vesting and sale activity with full-history share balances
+            Acquisition and sale activity with full-history share balances
           </caption>
           <thead class="border-y bg-muted/40 text-xs text-muted-foreground">
             <tr>
@@ -227,7 +232,7 @@ const firstDate = computed(() => new Date(start.value).toISOString().slice(0, 10
                 {{
                   portfolio.events.length
                     ? 'No activity in this year.'
-                    : 'No vested shares or sales yet.'
+                    : 'No acquired shares or sales yet.'
                 }}
               </td>
             </tr>
@@ -249,13 +254,13 @@ const firstDate = computed(() => new Date(start.value).toISOString().slice(0, 10
                     :class="
                       event.type === 'sale'
                         ? 'bg-destructive'
-                        : event.type === 'vesting'
+                        : event.type !== 'sale'
                           ? 'bg-primary'
                           : 'bg-muted-foreground'
                     "
                   />{{ event.label }}</span
                 >
-                <p v-if="event.type === 'vesting'" class="mt-1 text-xs text-muted-foreground">
+                <p v-if="event.type !== 'sale'" class="mt-1 text-xs text-muted-foreground">
                   {{ event.grantTitle }}
                 </p>
                 <template v-else>
@@ -266,10 +271,10 @@ const firstDate = computed(() => new Date(start.value).toISOString().slice(0, 10
                   <details class="mt-2 text-xs text-muted-foreground">
                     <summary class="cursor-pointer">
                       {{ event.allocations.length }}
-                      {{ event.allocations.length === 1 ? 'pocket' : 'pockets' }} sold
+                      {{ event.allocations.length === 1 ? 'lot' : 'lots' }} sold
                     </summary>
                     <ul class="mt-2 space-y-1">
-                      <li v-for="allocation in event.allocations" :key="allocation.vestingId">
+                      <li v-for="allocation in event.allocations" :key="allocation.key">
                         {{ allocation.grantTitle }} · Acquired {{ formatDate(allocation.date) }} ·
                         {{ formatShares(allocation.quantity) }} shares
                       </li>

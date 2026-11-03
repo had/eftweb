@@ -10,6 +10,7 @@ import { formatStockValue } from '../src/lib/stockQuotes.js'
 import * as Vue from 'vue'
 import { parse } from 'vue/compiler-sfc'
 import * as vesting from '../src/components/stock-detail/vesting.js'
+import * as acquisitions from '../src/components/stock-detail/acquisitions.js'
 
 function setupComponent(t, path, dependencies, exposed) {
   const { descriptor } = parse(readFileSync(new URL(path, import.meta.url), 'utf8'))
@@ -25,6 +26,7 @@ function setupComponent(t, path, dependencies, exposed) {
     watch: Vue.watch,
     nextTick: Vue.nextTick,
     ...vesting,
+    ...acquisitions,
     ...dependencies,
   }
   return scope.run(() =>
@@ -194,11 +196,12 @@ function mountDetail(t) {
   axios.get = async (url) => {
     const stockId = Number(url.split('/')[3])
     return {
-      data: url.endsWith('/sales')
-        ? []
-        : url.endsWith('/grants')
-          ? saved.get(stockId) || []
-          : { id: stockId, name: `Canonical ${stockId}`, symbol: `REAL${stockId}` },
+      data:
+        url.endsWith('/sales') || url.endsWith('/purchases')
+          ? []
+          : url.endsWith('/grants')
+            ? saved.get(stockId) || []
+            : { id: stockId, name: `Canonical ${stockId}`, symbol: `REAL${stockId}` },
     }
   }
   axios.post = async (url, data) => {

@@ -1,3 +1,5 @@
+import { acquisitionLots, acquisitionPlans } from './acquisitions.js'
+
 export const SCHEDULES = [
   {
     value: 'quarterly',
@@ -144,17 +146,30 @@ export function summarizeGrants(grants, today) {
 const quarterIndex = (date) =>
   Number(date.slice(0, 4)) * 4 + Math.floor((Number(date.slice(5, 7)) - 1) / 3)
 
-export function buildQuarters(grants, today) {
-  if (!grants.length) return []
-  const releases = grants.flatMap((grant) =>
-    grant.vestings.map((release) => ({
-      ...release,
-      grantId: grant.id,
-      title: grant.title,
-      color: grant.color,
-      scheduled: release.date > today,
-    })),
-  )
+export function summarizePortfolio(grants, purchases, today) {
+  const summary = summarizeGrants(grants, today)
+  const purchased = (purchases || [])
+    .filter((purchase) => purchase.purchaseDate <= today)
+    .reduce((sum, purchase) => sum + purchase.quantity, 0)
+  return { ...summary, total: summary.awarded + purchased, acquired: summary.vested + purchased }
+}
+
+export function validatePurchase(details, today) {
+  const errors = {}
+  if (!isCalendarDate(details.purchaseDate) || details.purchaseDate > today)
+    errors.purchaseDate = 'Enter a valid purchase date, today or earlier.'
+  if (!isWholeQuantity(details.quantity))
+    errors.quantity = 'Enter a positive whole number of shares.'
+  return errors
+}
+
+export function buildQuarters(grants, today, purchases = []) {
+  const releases = acquisitionLots(grants, purchases).map((lot) => ({
+    ...lot,
+    scheduled: lot.date > today,
+  }))
+  if (!releases.length) return []
+  const plans = acquisitionPlans(grants, purchases)
   const indices = [quarterIndex(today), ...releases.map((release) => quarterIndex(release.date))]
   const first = Math.min(...indices)
   const last = Math.max(...indices)
@@ -177,16 +192,16 @@ export function buildQuarters(grants, today) {
   for (const release of releases) buckets[quarterIndex(release.date) - first].releases.push(release)
   for (const bucket of buckets) {
     bucket.releases.sort((a, b) => a.date.localeCompare(b.date))
-    for (const grant of grants) {
+    for (const plan of plans) {
       for (const scheduled of [false, true]) {
         const quantity = bucket.releases
-          .filter((release) => release.grantId === grant.id && release.scheduled === scheduled)
+          .filter((release) => release.planKey === plan.key && release.scheduled === scheduled)
           .reduce((sum, release) => sum + release.quantity, 0)
         if (quantity)
           bucket.segments.push({
-            id: `${grant.id}-${scheduled}`,
+            id: `${plan.key}-${scheduled}`,
             quantity,
-            color: grant.color,
+            color: plan.color,
             scheduled,
           })
         bucket[scheduled ? 'scheduled' : 'vested'] += quantity
