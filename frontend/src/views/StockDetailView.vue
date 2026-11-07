@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { ArrowLeft, ArrowUpRight, ChevronDown, Plus } from 'lucide-vue-next'
+import { ArrowLeft, ArrowUpRight, ChevronDown, Download, Plus } from 'lucide-vue-next'
 import {
   DropdownMenuRoot,
   DropdownMenuTrigger,
@@ -26,6 +26,7 @@ import { useStockGrantsStore } from '@/stores/stockGrants'
 import { useStockQuotesStore } from '@/stores/stockQuotes'
 import StockQuote from '@/components/StockQuote.vue'
 import { formatStockValue } from '@/lib/stockQuotes.js'
+import { downloadStockExport } from '@/lib/stockExport.js'
 import { formatShares, localDate, summarizePortfolio } from '@/components/stock-detail/vesting.js'
 
 const activeTab = ref('vesting')
@@ -55,6 +56,33 @@ const busy = computed(
 )
 const grantToDelete = ref(null)
 let viewGeneration = 0
+const exporting = ref(false)
+const exportError = ref('')
+let exportController
+const cancelExport = () => {
+  exportController?.abort()
+  exportController = null
+  exporting.value = false
+  exportError.value = ''
+}
+const exportStock = async () => {
+  if (!ready.value || busy.value || exporting.value) return
+  const generation = viewGeneration
+  const controller = new AbortController()
+  exportController = controller
+  exporting.value = true
+  exportError.value = ''
+  try {
+    await downloadStockExport(stockId.value, controller.signal)
+  } catch (error) {
+    if (generation === viewGeneration) exportError.value = error.message
+  } finally {
+    if (generation === viewGeneration) {
+      exporting.value = false
+      exportController = null
+    }
+  }
+}
 const today = ref(localDate())
 let dateTimer
 onMounted(() => {
@@ -65,11 +93,13 @@ onMounted(() => {
 onBeforeUnmount(() => {
   clearInterval(dateTimer)
   viewGeneration += 1
+  cancelExport()
 })
 watch(
   () => route.params.stockId,
   () => {
     viewGeneration += 1
+    cancelExport()
     showAddGrant.value = false
     showAddPurchase.value = false
     purchaseToDelete.value = null
@@ -173,12 +203,27 @@ const summaries = computed(() => [
 <template>
   <main class="min-w-0 flex-1 p-6 lg:p-8">
     <div class="mx-auto max-w-7xl space-y-6">
-      <RouterLink
-        to="/stocks"
-        class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft class="h-4 w-4" /> All stocks
-      </RouterLink>
+      <div class="space-y-2">
+        <div class="flex items-center justify-between gap-4">
+          <RouterLink
+            to="/stocks"
+            class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft class="h-4 w-4" /> All stocks
+          </RouterLink>
+          <Button
+            variant="outline"
+            :disabled="!ready || busy || exporting"
+            :aria-busy="exporting"
+            @click="exportStock"
+          >
+            <Download class="h-4 w-4" /> {{ exporting ? 'Exporting…' : 'Export' }}
+          </Button>
+        </div>
+        <p v-if="exportError" role="alert" class="text-right text-sm text-destructive">
+          {{ exportError }}
+        </p>
+      </div>
 
       <header class="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
         <div class="flex min-w-0 flex-wrap items-center gap-3">

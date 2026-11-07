@@ -52,3 +52,12 @@ Purchases use the general-purpose `StockPurchase` model and stock-scoped
 `/api/stocks/<stock_id>/purchases` API (list, create, and delete). API clients can
 provide a different `plan_name`; the ESPP form uses `ESPP`. Prices, rebates,
 fractional shares, future purchases, and purchase tax calculations are not recorded.
+
+## Stock export
+
+Use **Export** at the top right of a stock's detail page to download an Excel file
+with all its grants, exact vesting schedules, purchases, sales, and sale allocations.
+The export includes all dates, regardless of the selected tab or sales year filter.
+It contains two sheets, **Plans & vestings** and **Sales**, with metadata and linked
+record keys to support a future import into another instance. Import is not yet
+available. See [the version 1 export format](doc/stock-export.md) for the schema.
