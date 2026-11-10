@@ -25,6 +25,12 @@ const themes = [
     description: 'Soft and relaxed, with a warm accent.',
     colors: ['#F7F6F3', '#ECEAE5', '#FFFFFF', '#986B56'],
   },
+  {
+    id: 'midnight-slate',
+    name: 'Midnight slate',
+    description: 'Low glare, with a soft teal accent.',
+    colors: ['#141D22', '#1B282E', '#202D33', '#83C5B6'],
+  },
 ]
 </script>
 
@@ -41,7 +47,7 @@ const themes = [
         :model-value="theme"
         :disabled="saving"
         aria-label="Color theme"
-        class="grid gap-4 md:grid-cols-3"
+        class="grid gap-4 md:grid-cols-2 xl:grid-cols-4"
         @update:model-value="settingsStore.selectTheme"
       >
         <div

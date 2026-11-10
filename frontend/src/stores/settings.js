@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 import axios from 'axios'
 
 const defaultTheme = 'sage-slate'
-const validThemes = new Set(['sage-slate', 'mist-blue', 'warm-stone'])
+const validThemes = new Set(['sage-slate', 'mist-blue', 'warm-stone', 'midnight-slate'])
 
 export const useSettingsStore = defineStore('settings', () => {
   const theme = ref(defaultTheme)
@@ -14,6 +14,7 @@ export const useSettingsStore = defineStore('settings', () => {
   function applyTheme(value) {
     theme.value = value
     document.documentElement.dataset.theme = value
+    document.documentElement.classList.toggle('dark', value === 'midnight-slate')
   }
 
   async function loadSettings() {

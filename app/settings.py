@@ -8,7 +8,7 @@ from pathlib import Path
 from flask import current_app
 
 DEFAULT_THEME = "sage-slate"
-VALID_THEMES = {"sage-slate", "mist-blue", "warm-stone"}
+VALID_THEMES = {"sage-slate", "mist-blue", "warm-stone", "midnight-slate"}
 
 
 def settings_path():

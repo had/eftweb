@@ -30,6 +30,14 @@ def test_default_and_persistence(client, tmp_path):
     assert response.status_code == 200
     assert client.get("/api/settings").get_json() == {"theme": "warm-stone"}
 
+    response = client.put("/api/settings", json={"theme": "midnight-slate"})
+    assert response.status_code == 200
+    assert response.get_json() == {"theme": "midnight-slate"}
+    assert json.loads(settings_file.read_text(encoding="utf-8")) == {"theme": "midnight-slate"}
+    assert restarted_app.test_client().get("/api/settings").get_json() == {
+        "theme": "midnight-slate"
+    }
+
 
 @pytest.mark.parametrize(
     "payload",
