@@ -2,36 +2,19 @@
 
 import hashlib
 import json
-from datetime import date, datetime
+from datetime import date
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from flask import current_app, jsonify, request
 from sqlalchemy.exc import SQLAlchemyError
 
 from app import db
 from app.stocks.models import StockPurchase, StockSaleAllocation
+from app.stocks.validation import purchase_payload
 
 from . import api
-from .stock_grants import active_stock, calendar_date, positive_quantity
+from .stock_grants import active_stock
 from .stock_transactions import stock_write
-
-
-def purchase_payload(data):
-    if not isinstance(data, dict):
-        raise ValueError("Purchase data must be an object")
-    purchase_date = calendar_date(data.get("purchase_date"), "Purchase date")
-    if purchase_date > datetime.now(ZoneInfo("Europe/Paris")).date():
-        raise ValueError("Purchase date cannot be in the future")
-    quantity = positive_quantity(data.get("quantity"), "Purchased quantity")
-    plan_name = data.get("plan_name", "ESPP")
-    if not isinstance(plan_name, str) or not plan_name.strip() or len(plan_name.strip()) > 256:
-        raise ValueError("Plan name must be a nonempty string of at most 256 characters")
-    return {
-        "purchase_date": purchase_date.isoformat(),
-        "quantity": quantity,
-        "plan_name": plan_name.strip(),
-    }
 
 
 @api.route("/api/stocks/<int:stock_id>/purchases", methods=["GET", "POST"])

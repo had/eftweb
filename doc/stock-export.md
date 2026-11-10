@@ -1,4 +1,4 @@
-# Stock XLSX export, version 1
+# Stock XLSX export, versions 1 and 2
 
 The stock detail page's **Export** button downloads all persisted records for the
 current stock, including future vestings and sales outside the current year filter.
@@ -8,6 +8,7 @@ JSON 404; archived stocks or families return JSON 410; export failures return JS
 
 There are exactly two worksheets, in this order: `Plans & vestings`, then `Sales`.
 Column names, worksheet names, and metadata keys are part of the interchange contract.
+New downloads use version 2. The importer continues to accept version 1 files.
 The export reads one database snapshot and does not fetch stock quotes.
 
 ## Metadata and cell types
@@ -17,7 +18,7 @@ On `Plans & vestings`, rows 1–4 are two-column key/value pairs:
 | Row | Column A | Column B |
 | --- | --- | --- |
 | 1 | `export_format` | `eftweb.stock` |
-| 2 | `schema_version` | numeric `1` |
+| 2 | `schema_version` | numeric `2` (`1` in older files) |
 | 3 | `stock_name` | the stock's name |
 | 4 | `stock_symbol` | the stock's ticker |
 
@@ -43,6 +44,9 @@ Headers, in order:
 `vesting_start_date`, `schedule_type`, `customized`, `vesting_key`, `vesting_date`,
 `vesting_quantity`, `purchase_key`, `purchase_date`, `purchase_quantity`.
 
+Version 2 appends `grant_number`. This is nullable literal text, repeated on each
+RSU grant/vesting row, and blank on purchase rows. Leading zeros are preserved.
+
 - `rsu_vesting`: one row per vesting. The grant's complete fields are repeated on
   each of its rows. `plan_name` is the grant title; `grant_quantity` is the entire
   grant, not this row's vested quantity. Purchase fields are blank.
@@ -65,6 +69,13 @@ Headers, in order:
 `sale_key`, `transaction_date`, `sale_quantity`, `proceeds_per_share`, `currency`,
 `vesting_key`, `purchase_key`, `allocation_quantity`.
 
+Version 2 appends `import_source`, `source_order_number`, `source_fingerprint`.
+These are all blank for manual sales, or `etrade`, the literal broker order number,
+and a SHA-256 fingerprint of normalized broker sale facts. All three fields repeat
+across a sale's allocation rows. A broker group is identified by stock, import
+source, order number, transaction date, exact price, and currency. The fingerprint
+is independent of local database IDs, file row order, and wash-sale row splitting.
+
 One row represents one allocation of a sale to an acquisition lot. The complete
 sale fields are repeated on each row. Exactly one of `vesting_key` or `purchase_key`
 identifies the source lot in `Plans & vestings`. `allocation_quantity` is the shares
@@ -76,16 +87,16 @@ allocations precede purchase allocations, each ordered by source lot ID. A sale 
 no allocations is preserved as one row with blank source and allocation fields;
 normal sale entry requires allocations.
 
-## Future import and exclusions
+## Import and exclusions
 
-An importer should check the format/version, create the stock in a chosen destination
-family, group grants by `grant_key`, create their exact vestings and purchases, and
-map every file key to a newly generated destination ID. Group sales by `sale_key`
-and remap their allocation references through those mappings. Repeated fields within
+The importer checks the format/version and requires an existing empty destination
+stock with the same ticker. It groups grants by `grant_key`, creates their exact
+vestings and purchases, and maps every file key to a newly generated destination ID.
+Sales are grouped by `sale_key`, with allocation references remapped through those mappings. Repeated fields within
 one grant or sale must agree. New creation tokens and request hashes belong to the
 destination instance and are intentionally absent from the file.
 
-This version provides export only. It excludes legacy project-based tax portfolios,
+The format excludes legacy project-based tax portfolios,
 other stocks and family personal data, derived summaries, cached quotes, and UI state.
 Recreated records yield the same acquisition quantities, allocations, and remaining
 lot balances; date-dependent summaries need the same valuation date and market-value

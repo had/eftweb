@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { Trash2 } from 'lucide-vue-next'
+import { Pencil, Trash2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -20,7 +20,7 @@ const props = defineProps({
   busy: Boolean,
   today: { type: String, default: () => localDate() },
 })
-defineEmits(['delete', 'delete-purchase'])
+defineEmits(['delete', 'delete-purchase', 'edit-grant-number'])
 const portfolio = computed(() => summarizePortfolio(props.grants, props.purchases, props.today))
 const rows = computed(() =>
   props.grants.map((grant) => {
@@ -92,6 +92,9 @@ const rows = computed(() =>
                   Granted {{ formatDate(grant.grantDate) }}
                 </p>
                 <p class="mt-1 text-xs text-muted-foreground">
+                  Grant number: {{ grant.grantNumber || 'Not entered' }}
+                </p>
+                <p class="mt-1 text-xs text-muted-foreground">
                   {{ grant.scheduleLabel }}{{ grant.customized ? ' · Customized' : '' }}
                 </p>
                 <div
@@ -126,9 +129,17 @@ const rows = computed(() =>
                 >
               </td>
               <td class="whitespace-nowrap px-5 py-5 text-muted-foreground">
-                {{ formatDate(grant.completion) }}
+                {{ grant.completion ? formatDate(grant.completion) : 'Not scheduled' }}
               </td>
               <td class="px-5 py-5 text-right">
+                <Button
+                  variant="ghost"
+                  :disabled="busy"
+                  :aria-label="`Edit grant number for ${grant.title}`"
+                  @click="$emit('edit-grant-number', grant)"
+                >
+                  <Pencil class="h-4 w-4" /> Grant number
+                </Button>
                 <Button
                   variant="ghost"
                   :disabled="busy"

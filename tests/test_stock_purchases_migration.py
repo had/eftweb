@@ -58,6 +58,8 @@ def test_purchases_migration_preserves_rsu_sales_retries_and_can_be_reapplied(
                 )
             )
         upgrade(directory=MIGRATIONS, revision=REVISION)
+        # Exercise current ORM/API code only after applying its current schema.
+        upgrade(directory=MIGRATIONS, revision="head")
         client = app.test_client()
         replay = client.post("/api/stocks/1/sales", json=data, headers={"Idempotency-Key": token})
         assert replay.status_code == 200
@@ -79,9 +81,11 @@ def test_purchases_migration_preserves_rsu_sales_retries_and_can_be_reapplied(
         )
         assert sale.status_code == 201
         db.session.remove()
+        downgrade(directory=MIGRATIONS, revision=REVISION)
         with pytest.raises(SystemExit) as blocked:
             downgrade(directory=MIGRATIONS, revision=PREVIOUS)
         assert blocked.value.code == 1
+        upgrade(directory=MIGRATIONS, revision="head")
         assert client.delete(f"/api/stocks/1/sales/{sale.get_json()['id']}").status_code == 204
         db.session.remove()
         downgrade(directory=MIGRATIONS, revision=PREVIOUS)
@@ -97,6 +101,7 @@ def test_purchases_migration_preserves_rsu_sales_retries_and_can_be_reapplied(
                 connection.execute(sa.text("SELECT quantity FROM stock_grants")).scalar_one() == 100
             )
         upgrade(directory=MIGRATIONS, revision=REVISION)
+        upgrade(directory=MIGRATIONS, revision="head")
         assert client.get("/api/stocks/1/purchases").get_json() == []
         assert (
             client.post(

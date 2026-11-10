@@ -59,5 +59,25 @@ Use **Export** at the top right of a stock's detail page to download an Excel fi
 with all its grants, exact vesting schedules, purchases, sales, and sale allocations.
 The export includes all dates, regardless of the selected tab or sales year filter.
 It contains two sheets, **Plans & vestings** and **Sales**, with metadata and linked
-record keys to support a future import into another instance. Import is not yet
-available. See [the version 1 export format](doc/stock-export.md) for the schema.
+record keys to import into another instance. Exports now use version 2, preserving
+broker grant numbers and sale provenance; version 1 files can still be imported.
+See [the export format](doc/stock-export.md) for the schema.
+
+## Stock import
+
+Run `just migrate-up` and restart the backend before using imports or grant numbers.
+Use **Import** beside **Export** to upload an app export or E*TRADE expanded
+gains/losses workbook. Preview does not save anything; confirm after reviewing the
+records. App exports restore all data into an empty stock with the same ticker.
+
+For E*TRADE, enter grants (including broker grant numbers) and ESPP purchases first.
+Use **Plans & purchases → Grant number** to add or correct an existing grant's number.
+The preview matches RSU vestings by grant number and vest date, and ESPP purchases
+by purchase date. You can resolve lots, split allocations, or skip sales before
+confirming. Summary and `ESPP STC` rows are ignored entirely. Prices are USD, and
+wash-sale-adjusted dates and tax figures are not used.
+
+Known imported orders are skipped. Possible manual duplicates require review;
+changed facts for a recorded order/price group cannot overwrite existing sales.
+All selected records save together, and retries cannot duplicate a committed batch.
+See [the import workflow and API](doc/stock-import.md) for details.

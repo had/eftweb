@@ -9,8 +9,8 @@ from flask import current_app, jsonify, request
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app import db
-from app.constants import JAVASCRIPT_MAX_SAFE_INTEGER
 from app.stocks.models import GrantVesting, Stock, StockGrant, StockSaleAllocation
+from app.stocks.validation import grant_number_value, grant_payload
 
 from . import api
 from .stock_transactions import stock_write
@@ -23,70 +23,6 @@ def active_stock(stock_id):
     if stock.is_archived or stock.family.is_archived:
         return None, (jsonify({"error": "Stock or family is archived"}), 410)
     return stock, None
-
-
-def calendar_date(value, label):
-    try:
-        parsed = date.fromisoformat(value) if isinstance(value, str) else None
-        if parsed is None or parsed.isoformat() != value:
-            raise ValueError()
-    except ValueError:
-        raise ValueError(f"{label} must be a valid date in YYYY-MM-DD format") from None
-    return parsed
-
-
-def positive_quantity(value, label):
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, int)
-        or not 0 < value <= JAVASCRIPT_MAX_SAFE_INTEGER
-    ):
-        raise ValueError(
-            f"{label} must be a positive whole number of shares within the safe integer range"
-        )
-    return value
-
-
-def grant_payload(data, stock):
-    if not isinstance(data, dict):
-        raise ValueError("Grant data must be an object")
-    grant_date = calendar_date(data.get("grant_date"), "Grant date")
-    title = data.get("title", "")
-    if not isinstance(title, str) or len(title.strip()) > 256:
-        raise ValueError("Grant title must be a string of at most 256 characters")
-    title = title.strip() or f"{stock.symbol}-{grant_date.isoformat()}"
-    quantity = positive_quantity(data.get("quantity"), "Granted quantity")
-    start_date = calendar_date(data.get("vesting_start_date"), "Vesting reference date")
-    schedule_type = data.get("schedule_type")
-    if schedule_type not in ("quarterly", "cliff-quarterly"):
-        raise ValueError("Choose a valid vesting schedule")
-    customized = data.get("customized")
-    if not isinstance(customized, bool):
-        raise ValueError("customized must be a boolean")
-    rows = data.get("vestings")
-    if not isinstance(rows, list) or not rows:
-        raise ValueError("Add at least one vesting release")
-    releases = []
-    for row in rows:
-        if not isinstance(row, dict):
-            raise ValueError("Each vesting release must be an object")
-        releases.append(
-            {
-                "date": calendar_date(row.get("date"), "Release date").isoformat(),
-                "quantity": positive_quantity(row.get("quantity"), "Release quantity"),
-            }
-        )
-    if sum(row["quantity"] for row in releases) != quantity:
-        raise ValueError("Scheduled shares must exactly match the granted quantity")
-    return {
-        "title": title,
-        "grant_date": grant_date.isoformat(),
-        "quantity": quantity,
-        "vesting_start_date": start_date.isoformat(),
-        "schedule_type": schedule_type,
-        "customized": customized,
-        "vestings": sorted(releases, key=lambda row: (row["date"], row["quantity"])),
-    }
 
 
 def replay_grant(grant, request_hash):
@@ -112,11 +48,23 @@ def get_stock(stock_id):
 
 @api.route("/api/stocks/<int:stock_id>/grants", methods=["GET", "POST"])
 def stock_grants(stock_id):
-    stock, error = active_stock(stock_id)
-    if error:
-        return error
     if request.method == "GET":
+        stock, error = active_stock(stock_id)
+        if error:
+            return error
         return jsonify([grant.to_dict() for grant in stock.grants])
+    try:
+        with stock_write(stock_id):
+            stock, error = active_stock(stock_id)
+            if error:
+                return error
+            return create_stock_grant(stock)
+    except SQLAlchemyError:
+        current_app.logger.exception("Could not save grant")
+        return jsonify({"error": "Could not save the grant. Please try again."}), 500
+
+
+def create_stock_grant(stock):
     try:
         token = str(UUID(request.headers.get("Idempotency-Key", "")))
     except (ValueError, AttributeError):
@@ -129,6 +77,11 @@ def stock_grants(stock_id):
     existing = StockGrant.query.filter_by(stock_id=stock.id, creation_token=token).first()
     if existing:
         return replay_grant(existing, request_hash)
+    if (
+        data.get("grant_number")
+        and StockGrant.query.filter_by(stock_id=stock.id, grant_number=data["grant_number"]).first()
+    ):
+        return jsonify({"error": "This grant number already exists for this stock"}), 409
     rows = data.pop("vestings")
     grant = StockGrant(
         stock_id=stock.id,
@@ -179,14 +132,43 @@ def delete_stock_grant(stock_id, grant_id):
                 .first()
             )
             if has_sales:
-                return jsonify(
-                    {
-                        "error": "This grant has recorded sales. Delete those sales before deleting the grant."
-                    }
-                ), 409
+                return (
+                    jsonify(
+                        {
+                            "error": "This grant has recorded sales. Delete those sales before deleting the grant."
+                        }
+                    ),
+                    409,
+                )
             db.session.delete(grant)
             db.session.commit()
             return "", 204
     except SQLAlchemyError:
         current_app.logger.exception("Could not delete grant")
         return jsonify({"error": "Could not delete the grant. Please try again."}), 500
+
+
+@api.route("/api/stocks/<int:stock_id>/grants/<int:grant_id>", methods=["PATCH"])
+def edit_grant_number(stock_id, grant_id):
+    try:
+        with stock_write(stock_id):
+            _, error = active_stock(stock_id)
+            if error:
+                return error
+            grant = StockGrant.query.filter_by(id=grant_id, stock_id=stock_id).first()
+            if grant is None:
+                return jsonify({"error": "Grant not found for this stock"}), 404
+            data = request.get_json(silent=True)
+            if not isinstance(data, dict) or set(data) != {"grant_number"}:
+                return jsonify({"error": "Provide only grant_number"}), 400
+            try:
+                grant.grant_number = grant_number_value(data["grant_number"])
+            except ValueError as error:
+                return jsonify({"error": str(error)}), 400
+            db.session.commit()
+            return jsonify(grant.to_dict())
+    except IntegrityError:
+        return jsonify({"error": "This grant number already exists for this stock"}), 409
+    except SQLAlchemyError:
+        current_app.logger.exception("Could not update grant number")
+        return jsonify({"error": "Could not update the grant number. Please try again."}), 500

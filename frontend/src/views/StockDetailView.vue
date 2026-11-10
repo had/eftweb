@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { ArrowLeft, ArrowUpRight, ChevronDown, Download, Plus } from 'lucide-vue-next'
+import { ArrowLeft, ArrowUpRight, ChevronDown, Download, Plus, Upload } from 'lucide-vue-next'
 import {
   DropdownMenuRoot,
   DropdownMenuTrigger,
@@ -21,6 +21,8 @@ import GrantsOverview from '@/components/stock-detail/GrantsOverview.vue'
 import AddGrantWizardModal from '@/components/stock-detail/AddGrantWizardModal.vue'
 import AddPurchaseModal from '@/components/stock-detail/AddPurchaseModal.vue'
 import RecordSaleModal from '@/components/stock-detail/RecordSaleModal.vue'
+import ImportStockModal from '@/components/stock-detail/ImportStockModal.vue'
+import EditGrantNumberModal from '@/components/stock-detail/EditGrantNumberModal.vue'
 import DeleteConfirmModal from '@/components/DeleteConfirmModal.vue'
 import { useStockGrantsStore } from '@/stores/stockGrants'
 import { useStockQuotesStore } from '@/stores/stockQuotes'
@@ -45,8 +47,12 @@ const showAddPurchase = ref(false)
 const purchaseToDelete = ref(null)
 const showRecordSale = ref(false)
 const saleToDelete = ref(null)
+const showImport = ref(false)
+const importBusy = ref(false)
+const grantNumberToEdit = ref(null)
 const busy = computed(
   () =>
+    importBusy.value ||
     entry.value.saving ||
     entry.value.deletingId !== null ||
     entry.value.savingSale ||
@@ -106,6 +112,9 @@ watch(
     showRecordSale.value = false
     saleToDelete.value = null
     grantToDelete.value = null
+    grantNumberToEdit.value = null
+    showImport.value = false
+    importBusy.value = false
     activeTab.value = 'vesting'
     void grantsStore.load(stockId.value)
   },
@@ -127,6 +136,24 @@ const addPurchase = async (draft) => {
     showAddPurchase.value = false
     activeTab.value = 'vesting'
   }
+}
+const editGrantNumber = (grant) => {
+  if (!ready.value || busy.value) return
+  entry.value.saveError = ''
+  grantNumberToEdit.value = grant
+}
+const saveGrantNumber = async (number) => {
+  if (!grantNumberToEdit.value) return
+  const generation = viewGeneration
+  const saved = await grantsStore.updateGrantNumber(
+    stockId.value,
+    grantNumberToEdit.value.id,
+    number,
+  )
+  if (saved && generation === viewGeneration) grantNumberToEdit.value = null
+}
+const imported = () => {
+  void grantsStore.load(stockId.value)
 }
 const requestDeletePurchase = (purchase) => {
   if (!ready.value || busy.value) return
@@ -211,14 +238,22 @@ const summaries = computed(() => [
           >
             <ArrowLeft class="h-4 w-4" /> All stocks
           </RouterLink>
-          <Button
-            variant="outline"
-            :disabled="!ready || busy || exporting"
-            :aria-busy="exporting"
-            @click="exportStock"
-          >
-            <Download class="h-4 w-4" /> {{ exporting ? 'Exporting…' : 'Export' }}
-          </Button>
+          <div class="ml-auto flex items-center gap-2">
+            <Button
+              variant="outline"
+              :disabled="!ready || busy || exporting"
+              @click="showImport = true"
+              ><Upload class="h-4 w-4" /> Import</Button
+            >
+            <Button
+              variant="outline"
+              :disabled="!ready || busy || exporting"
+              :aria-busy="exporting"
+              @click="exportStock"
+            >
+              <Download class="h-4 w-4" /> {{ exporting ? 'Exporting…' : 'Export' }}
+            </Button>
+          </div>
         </div>
         <p v-if="exportError" role="alert" class="text-right text-sm text-destructive">
           {{ exportError }}
@@ -370,6 +405,7 @@ const summaries = computed(() => [
               :busy="busy"
               @delete="requestDeleteGrant"
               @delete-purchase="requestDeletePurchase"
+              @edit-grant-number="editGrantNumber"
             />
           </TabsContent>
         </TabsRoot>
@@ -460,6 +496,20 @@ const summaries = computed(() => [
           @confirm="deleteGrant"
         />
       </template>
+      <ImportStockModal
+        :key="`import-${stockId}`"
+        v-model:open="showImport"
+        :stock-id="stockId"
+        @busy="importBusy = $event"
+        @imported="imported"
+      />
+      <EditGrantNumberModal
+        :grant="grantNumberToEdit"
+        :saving="entry.saving"
+        :error="entry.saveError"
+        @close="grantNumberToEdit = null"
+        @save="saveGrantNumber"
+      />
     </div>
   </main>
 </template>

@@ -43,6 +43,7 @@ class StockGrant(db.Model):
     __tablename__ = "stock_grants"
     __table_args__ = (
         db.UniqueConstraint("stock_id", "creation_token", name="uq_stock_grant_creation_token"),
+        db.UniqueConstraint("stock_id", "grant_number", name="uq_stock_grant_number"),
         db.CheckConstraint(
             f"quantity > 0 AND quantity <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
             name="ck_stock_grant_quantity",
@@ -54,6 +55,7 @@ class StockGrant(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     stock_id = db.Column(db.Integer, db.ForeignKey("stocks.id", ondelete="CASCADE"), nullable=False)
     title = db.Column(db.String(256), nullable=False)
+    grant_number = db.Column(db.String(256), nullable=True)
     grant_date = db.Column(db.Date, nullable=False)
     quantity = db.Column(db.BigInteger, nullable=False)
     vesting_start_date = db.Column(db.Date, nullable=False)
@@ -73,6 +75,7 @@ class StockGrant(db.Model):
             "id": self.id, "stock_id": self.stock_id, "title": self.title,
             "grant_date": self.grant_date.isoformat(), "quantity": self.quantity,
             "vesting_start_date": self.vesting_start_date.isoformat(),
+            "grant_number": self.grant_number,
             "schedule_type": self.schedule_type, "customized": self.customized,
             "vestings": [vesting.to_dict() for vesting in self.vestings],
         }
@@ -134,6 +137,10 @@ class StockSale(db.Model):
     __tablename__ = "stock_sales"
     __table_args__ = (
         db.UniqueConstraint("stock_id", "creation_token", name="uq_stock_sale_creation_token"),
+        db.UniqueConstraint(
+            "stock_id", "import_source", "source_order_number", "transaction_date",
+            "proceeds_per_share", "currency", name="uq_stock_sale_source_group",
+        ),
         db.CheckConstraint(
             f"quantity > 0 AND quantity <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
             name="ck_stock_sale_quantity",
@@ -151,6 +158,9 @@ class StockSale(db.Model):
     quantity = db.Column(db.BigInteger, nullable=False)
     proceeds_per_share = db.Column(db.Numeric(14, 6), nullable=False)
     currency = db.Column(db.String(3), nullable=False, default="USD")
+    import_source = db.Column(db.String(32), nullable=True)
+    source_order_number = db.Column(db.String(256), nullable=True)
+    source_fingerprint = db.Column(db.String(64), nullable=True)
     creation_token = db.Column(db.String(36), nullable=False)
     request_hash = db.Column(db.String(64), nullable=False)
 
@@ -170,6 +180,9 @@ class StockSale(db.Model):
             "quantity": self.quantity,
             "proceeds_per_share": format(self.proceeds_per_share, ".6f"),
             "currency": self.currency,
+            "import_source": self.import_source,
+            "source_order_number": self.source_order_number,
+            "source_fingerprint": self.source_fingerprint,
             "allocations": [allocation.to_dict() for allocation in self.allocations],
         }
 
@@ -217,6 +230,19 @@ class StockSaleAllocation(db.Model):
             else {"purchase_id": self.purchase_id}
         )
         return {**source, "quantity": self.quantity}
+
+
+class StockImportReceipt(db.Model):
+    __tablename__ = "stock_import_receipts"
+    __table_args__ = (
+        db.UniqueConstraint("stock_id", "creation_token", name="uq_stock_import_token"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    stock_id = db.Column(db.Integer, db.ForeignKey("stocks.id", ondelete="CASCADE"), nullable=False)
+    creation_token = db.Column(db.String(36), nullable=False)
+    request_hash = db.Column(db.String(64), nullable=False)
+    result = db.Column(db.JSON, nullable=False)
 
 
 class DirectStocksPlan(db.Model):

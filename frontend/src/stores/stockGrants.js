@@ -8,6 +8,7 @@ const fromApi = (grant) => ({
   id: grant.id,
   stockId: grant.stock_id,
   title: grant.title,
+  grantNumber: grant.grant_number || '',
   grantDate: grant.grant_date,
   quantity: grant.quantity,
   startDate: grant.vesting_start_date,
@@ -124,6 +125,7 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
     try {
       const payload = {
         title: draft.title,
+        ...(draft.grantNumber?.trim() ? { grant_number: draft.grantNumber.trim() } : {}),
         grant_date: draft.grantDate,
         quantity: draft.quantity,
         vesting_start_date: draft.startDate,
@@ -168,6 +170,29 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
       return false
     } finally {
       entry.deletingId = null
+      if (pendingWrites.get(stockId) === request) pendingWrites.delete(stockId)
+    }
+  }
+
+  async function updateGrantNumber(stockId, grantId, number) {
+    const entry = forStock(stockId)
+    if (!entry.loaded || entry.loading || busy(entry)) return null
+    entry.saving = true
+    entry.saveError = ''
+    let request
+    try {
+      request = axios.patch(`/api/stocks/${stockId}/grants/${grantId}`, {
+        grant_number: number.trim() || null,
+      })
+      pendingWrites.set(stockId, request)
+      const saved = fromApi((await request).data)
+      entry.grants = entry.grants.map((grant) => (grant.id === saved.id ? saved : grant))
+      return saved
+    } catch (error) {
+      entry.saveError = errorMessage(error, 'Could not update the grant number. Please try again.')
+      return null
+    } finally {
+      entry.saving = false
       if (pendingWrites.get(stockId) === request) pendingWrites.delete(stockId)
     }
   }
@@ -295,6 +320,7 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
     forStock,
     load,
     createGrant,
+    updateGrantNumber,
     deleteGrant,
     createSale,
     deleteSale,

@@ -82,6 +82,7 @@ const reset = () => {
   details.value = {
     grantDate: today,
     title: '',
+    grantNumber: '',
     quantity: '',
     startDate: today,
     scheduleType: SCHEDULES[0].value,
@@ -192,6 +193,7 @@ const confirm = () => {
   emit('confirmed', {
     creationToken: creationToken.value,
     title: effectiveTitle.value,
+    ...(details.value.grantNumber?.trim() ? { grantNumber: details.value.grantNumber.trim() } : {}),
     grantDate: details.value.grantDate,
     quantity: Number(details.value.quantity),
     startDate: details.value.startDate,
@@ -319,6 +321,18 @@ const preventDismiss = (event) => {
               </p>
               <p v-if="fieldErrors.title" role="alert" class="text-xs text-destructive">
                 {{ fieldErrors.title }}
+              </p>
+            </div>
+            <div class="space-y-2">
+              <Label for="grant-number">Broker grant number (optional)</Label>
+              <Input
+                id="grant-number"
+                v-model="details.grantNumber"
+                :maxlength="256"
+                aria-describedby="grant-number-hint"
+              />
+              <p id="grant-number-hint" class="text-xs text-muted-foreground">
+                Enter the exact grant number, including any leading zeros, to match E*TRADE sales.
               </p>
             </div>
             <div class="space-y-2">
@@ -495,6 +509,10 @@ const preventDismiss = (event) => {
                 <div>
                   <dt class="text-xs text-muted-foreground">Grant date</dt>
                   <dd class="mt-1">{{ formatDate(details.grantDate) }}</dd>
+                </div>
+                <div v-if="details.grantNumber?.trim()">
+                  <dt class="text-xs text-muted-foreground">Broker grant number</dt>
+                  <dd class="mt-1">{{ details.grantNumber.trim() }}</dd>
                 </div>
                 <div>
                   <dt class="text-xs text-muted-foreground">Granted quantity</dt>

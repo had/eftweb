@@ -2,10 +2,9 @@
 
 import hashlib
 import json
-from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from datetime import date
+from decimal import Decimal
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from flask import current_app, jsonify, request
 from sqlalchemy import func
@@ -19,70 +18,11 @@ from app.stocks.models import (
     StockSale,
     StockSaleAllocation,
 )
+from app.stocks.validation import allocation_error, sale_payload
 
 from . import api
-from .stock_grants import active_stock, calendar_date, positive_quantity
+from .stock_grants import active_stock
 from .stock_transactions import stock_write
-
-
-def sale_payload(data):
-    if not isinstance(data, dict):
-        raise ValueError("Sale data must be an object")
-    transaction_date = calendar_date(data.get("transaction_date"), "Transaction date")
-    if transaction_date > datetime.now(ZoneInfo("Europe/Paris")).date():
-        raise ValueError("Transaction date cannot be in the future")
-    quantity = positive_quantity(data.get("quantity"), "Sale quantity")
-    value = data.get("proceeds_per_share")
-    try:
-        if isinstance(value, bool) or not isinstance(value, (str, int, float)):
-            raise InvalidOperation()
-        price = Decimal(str(value))
-        if not price.is_finite() or not 0 < price < 100_000_000:
-            raise InvalidOperation()
-        if price != price.quantize(Decimal("0.000001")):
-            raise InvalidOperation()
-    except InvalidOperation:
-        raise ValueError(
-            "Proceeds per share must be positive, below 100,000,000 USD, with at most six decimals"
-        ) from None
-    if data.get("currency", "USD") != "USD":
-        raise ValueError("Only USD sales are supported")
-    rows = data.get("allocations")
-    if not isinstance(rows, list) or not rows:
-        raise ValueError("Allocate shares to at least one acquisition lot")
-    allocations = []
-    seen = set()
-    for row in rows:
-        if not isinstance(row, dict):
-            raise ValueError("Each allocation must be an object")
-        sources = [key for key in ("vesting_id", "purchase_id") if key in row]
-        if len(sources) != 1:
-            raise ValueError("Each allocation must identify exactly one vesting or purchase")
-        source = sources[0]
-        source_id = positive_quantity(row[source], "Acquisition ID")
-        key = (source, source_id)
-        if key in seen:
-            raise ValueError("Each acquisition lot can appear only once")
-        seen.add(key)
-        allocations.append(
-            {
-                source: source_id,
-                "quantity": positive_quantity(row.get("quantity"), "Allocated quantity"),
-            }
-        )
-    if sum(row["quantity"] for row in allocations) != quantity:
-        raise ValueError("Allocated shares must exactly match the sale quantity")
-    return {
-        "transaction_date": transaction_date.isoformat(),
-        "quantity": quantity,
-        "proceeds_per_share": format(price, ".6f"),
-        "currency": "USD",
-        # Preserve legacy RSU canonicalization so existing retry hashes remain valid.
-        "allocations": sorted(
-            allocations,
-            key=lambda row: ("purchase_id" in row, row.get("vesting_id", row.get("purchase_id"))),
-        ),
-    }
 
 
 @api.route("/api/stocks/<int:stock_id>/sales", methods=["GET", "POST"])
@@ -154,29 +94,10 @@ def stock_sales(stock_id):
                         .all()
                     }
                 )
-            for row in data["allocations"]:
-                source = "vesting_id" if "vesting_id" in row else "purchase_id"
-                key = (source, row[source])
-                pocket = pockets.get(key)
-                if pocket is None:
-                    return jsonify({"error": "Acquisition lot not found for this stock"}), 400
-                acquired_date, quantity = pocket
-                if acquired_date.isoformat() > data["transaction_date"]:
-                    return (
-                        jsonify(
-                            {"error": "Shares must have been acquired by the transaction date"}
-                        ),
-                        400,
-                    )
-                if row["quantity"] > quantity - used.get(key, 0):
-                    return (
-                        jsonify(
-                            {
-                                "error": "An acquisition lot no longer has enough available shares. Reload to review its balance."
-                            }
-                        ),
-                        409,
-                    )
+            error = allocation_error(data, pockets, used)
+            if error:
+                message, status = error
+                return jsonify({"error": message}), status
             allocations = data.pop("allocations")
             sale = StockSale(
                 stock_id=stock_id,
