@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import axios from 'axios'
-import { Pencil, Plus, Trash2 } from 'lucide-vue-next'
+import { Archive, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-vue-next'
 import { useFamilyStore } from '@/stores/family'
 import EftLayout from '@/components/EftLayout.vue'
 import StockFormModal from '@/components/StockFormModal.vue'
@@ -29,6 +29,10 @@ const editingStock = ref(null)
 const archivingStock = ref(null)
 const archiving = ref(false)
 const archiveError = ref('')
+const actionStock = ref(null)
+const stockAction = ref('')
+const savingAction = ref(false)
+const actionError = ref('')
 
 watch(
   () => familyStore.familyId,
@@ -37,6 +41,8 @@ watch(
     editingStock.value = null
     archivingStock.value = null
     archiveError.value = ''
+    actionStock.value = null
+    actionError.value = ''
   },
 )
 
@@ -109,6 +115,41 @@ const archiveStock = async () => {
     archiving.value = false
   }
 }
+const openAction = (stock, action) => {
+  actionError.value = ''
+  stockAction.value = action
+  actionStock.value = stock
+}
+const closeAction = () => {
+  if (!savingAction.value) actionStock.value = null
+}
+const confirmAction = async () => {
+  if (!actionStock.value || savingAction.value) return
+  const familyId = familyStore.familyId
+  const target = actionStock.value
+  const action = stockAction.value
+  savingAction.value = true
+  actionError.value = ''
+  try {
+    if (action === 'restore') {
+      await axios.post(`/api/stocks/${target.id}/restore`)
+    } else {
+      await axios.delete(`/api/stocks/${target.id}`, { params: { permanent: true } })
+    }
+    if (familyId === familyStore.familyId && actionStock.value === target) {
+      actionStock.value = null
+      reload()
+    }
+  } catch (requestError) {
+    if (familyId === familyStore.familyId && actionStock.value === target) {
+      actionError.value =
+        requestError.response?.data?.error ||
+        `Failed to ${action === 'restore' ? 'restore' : 'permanently delete'} the stock. Please try again.`
+    }
+  } finally {
+    savingAction.value = false
+  }
+}
 </script>
 
 <template>
@@ -170,12 +211,33 @@ const archiveStock = async () => {
               class="text-destructive"
               :aria-label="`Archive ${stock.name}`"
               @click.stop="openArchive(stock)"
-              ><Trash2 class="h-4 w-4"
+              ><Archive class="h-4 w-4"
             /></Button>
           </div>
           <span class="max-w-full break-words text-lg font-medium">{{ stock.name }}</span>
           <span class="rounded bg-muted px-2 py-0.5 text-xs">{{ stock.symbol }}</span>
-          <StockQuote :stock="stock" />
+          <StockQuote v-if="!showArchived" :stock="stock" />
+          <div v-else class="mt-2 flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              :disabled="savingAction"
+              :aria-label="`Restore ${stock.name}`"
+              @click="openAction(stock, 'restore')"
+            >
+              <RotateCcw class="h-4 w-4" /> Restore
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              class="text-destructive"
+              :disabled="savingAction"
+              :aria-label="`Permanently delete ${stock.name}`"
+              @click="openAction(stock, 'delete')"
+            >
+              <Trash2 class="h-4 w-4" /> Delete permanently
+            </Button>
+          </div>
         </CardContent>
         <RouterLink
           v-if="!showArchived"
@@ -206,7 +268,7 @@ const archiveStock = async () => {
           <DialogDescription>
             Are you sure you want to archive {{ archivingStock?.name }} ({{
               archivingStock?.symbol
-            }})? It will be hidden from the active list.
+            }})? It will be hidden from the active list. You can restore it from Archived Stocks.
           </DialogDescription>
         </DialogHeader>
         <p v-if="archiveError" role="alert" class="text-sm text-destructive">{{ archiveError }}</p>
@@ -215,6 +277,40 @@ const archiveStock = async () => {
           <Button variant="destructive" :disabled="archiving" @click="archiveStock">{{
             archiving ? 'Archiving...' : 'Archive'
           }}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    <Dialog :open="Boolean(actionStock)" @update:open="closeAction">
+      <DialogContent class="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>{{
+            stockAction === 'restore' ? 'Restore Stock' : 'Permanently Delete Stock'
+          }}</DialogTitle>
+          <DialogDescription v-if="stockAction === 'restore'">
+            Restore {{ actionStock?.name }} ({{ actionStock?.symbol }}) to the active list? All its
+            grants, purchases, and sales will be available again.
+          </DialogDescription>
+          <DialogDescription v-else>
+            Permanently delete {{ actionStock?.name }} ({{ actionStock?.symbol }}) and all its
+            grants, vestings, purchases, sales, and import history? This cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <p v-if="actionError" role="alert" class="text-sm text-destructive">{{ actionError }}</p>
+        <DialogFooter>
+          <Button variant="outline" :disabled="savingAction" @click="closeAction">Cancel</Button>
+          <Button
+            :variant="stockAction === 'restore' ? 'default' : 'destructive'"
+            :disabled="savingAction"
+            @click="confirmAction"
+          >
+            {{
+              savingAction
+                ? 'Saving...'
+                : stockAction === 'restore'
+                  ? 'Restore'
+                  : 'Delete permanently'
+            }}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

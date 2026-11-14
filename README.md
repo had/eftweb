@@ -9,6 +9,21 @@ It uses flask and bootstrap - I'm learning these 2 frameworks as I code, so expe
 
 `FLASK_APP=app.py FLASK_ENV=development flask run`
 
+## Managing stocks
+
+Run `just migrate-up` and restart the backend to allow multiple stocks with the
+same ticker in a family. Give each holding a name identifying its broker or owner;
+grants, purchases, sales, and imports are tracked separately for each stock.
+
+Use **Show Archived** to **Restore** a stock or **Delete permanently**. Restoring
+keeps all its records. Permanent deletion requires confirmation and removes the
+stock and all its grants, vestings, purchases, sales, allocations, and import history.
+Active stocks must be archived first. API clients can use
+`POST /api/stocks/<stock_id>/restore` or
+`DELETE /api/stocks/<stock_id>?permanent=true`; ordinary `DELETE` still archives.
+Downgrading the migration requires resolving duplicate family tickers first,
+including archived stocks; the downgrade never deletes holdings automatically.
+
 ## Stock prices
 
 Run `uv sync`, copy `.env.example` to `.env`, and set `ALPHAVANTAGE_API_KEY` to your

@@ -75,12 +75,22 @@ const submit = async () => {
     <DialogContent class="sm:max-w-[425px]">
       <DialogHeader>
         <DialogTitle>{{ stock ? 'Edit Stock' : 'Add a New Stock' }}</DialogTitle>
-        <DialogDescription>Enter the stock name and its ticker symbol.</DialogDescription>
+        <DialogDescription>
+          Enter a name and ticker symbol. Use the name to distinguish brokers or owners; multiple
+          stocks can share the same ticker.
+        </DialogDescription>
       </DialogHeader>
       <form id="stock-form" class="space-y-4 py-4" @submit.prevent="submit">
         <div class="space-y-2">
           <Label for="stock-name">Stock name *</Label>
-          <Input id="stock-name" v-model="name" :maxlength="256" :disabled="loading" required />
+          <Input
+            id="stock-name"
+            v-model="name"
+            :maxlength="256"
+            :disabled="loading"
+            placeholder="e.g. Apple — Ada’s brokerage"
+            required
+          />
         </div>
         <div class="space-y-2">
           <Label for="stock-symbol">Ticker symbol *</Label>

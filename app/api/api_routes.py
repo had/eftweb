@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from flask import abort, current_app, jsonify, request
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from ..family.donation_types import DONATION_TYPE_CODES, DONATION_TYPES, DONATION_TYPES_BY_CODE
 from ..family.ifu_fields import IFU_FIELD_GROUPS, IFU_FIELD_KEYS
@@ -29,6 +29,7 @@ from ..tax.models import (
     TaxStatement,
 )
 from . import api
+from .stock_transactions import stock_write
 
 
 @api.route("/api/settings", methods=["GET", "PUT"])
@@ -376,42 +377,68 @@ def family_stocks(family_id):
 
     stock = Stock(family_id=family.id, **fields)
     db.session.add(stock)
-    try:
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        return jsonify({"error": "A stock with this ticker symbol already exists in this family (including archived stocks)"}), 409
+    db.session.commit()
     return jsonify(stock.to_dict()), 201
 
 
 @api.route("/api/stocks/<int:stock_id>", methods=["PUT", "DELETE"])
 def manage_stock(stock_id):
-    stock = db.session.get(Stock, stock_id)
-    if not stock:
-        abort(404)
-    if stock.family.is_archived:
-        return jsonify({"error": "Family is archived"}), 410
-    if stock.is_archived:
-        return jsonify({"error": "Stock is archived"}), 410
-
-    if request.method == "DELETE":
-        stock.is_archived = True
-        db.session.commit()
-        return jsonify({"message": "Stock archived successfully"})
-
     try:
-        fields = stock_fields_from_payload(request.get_json(silent=True))
-    except ValueError as error:
-        return jsonify({"error": str(error)}), 400
+        with stock_write(stock_id):
+            stock = db.session.get(Stock, stock_id)
+            if not stock:
+                abort(404)
+            if stock.family.is_archived:
+                return jsonify({"error": "Family is archived"}), 410
 
-    stock.name = fields["name"]
-    stock.symbol = fields["symbol"]
+            if request.method == "DELETE" and request.args.get("permanent") == "true":
+                if not stock.is_archived:
+                    return jsonify({"error": "Archive the stock before permanently deleting it"}), 409
+                # Remove allocations before their lots: lot foreign keys use RESTRICT.
+                stock.sales.clear()
+                db.session.flush()
+                db.session.delete(stock)
+                db.session.commit()
+                return "", 204
+
+            if stock.is_archived:
+                return jsonify({"error": "Stock is archived"}), 410
+            if request.method == "DELETE":
+                stock.is_archived = True
+                db.session.commit()
+                return jsonify({"message": "Stock archived successfully"})
+
+            try:
+                fields = stock_fields_from_payload(request.get_json(silent=True))
+            except ValueError as error:
+                return jsonify({"error": str(error)}), 400
+
+            stock.name = fields["name"]
+            stock.symbol = fields["symbol"]
+            db.session.commit()
+            return jsonify(stock.to_dict())
+    except SQLAlchemyError:
+        current_app.logger.exception("Could not update stock")
+        return jsonify({"error": "Could not update the stock. Please try again."}), 500
+
+
+@api.route("/api/stocks/<int:stock_id>/restore", methods=["POST"])
+def restore_stock(stock_id):
     try:
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        return jsonify({"error": "A stock with this ticker symbol already exists in this family (including archived stocks)"}), 409
-    return jsonify(stock.to_dict())
+        with stock_write(stock_id):
+            stock = db.session.get(Stock, stock_id)
+            if not stock:
+                abort(404)
+            if stock.family.is_archived:
+                return jsonify({"error": "Family is archived"}), 410
+            if not stock.is_archived:
+                return jsonify({"error": "Stock is already active"}), 409
+            stock.is_archived = False
+            db.session.commit()
+            return jsonify(stock.to_dict())
+    except SQLAlchemyError:
+        current_app.logger.exception("Could not restore stock")
+        return jsonify({"error": "Could not restore the stock. Please try again."}), 500
 
 
 @api.route("/api/families/<int:family_id>/tax-returns")

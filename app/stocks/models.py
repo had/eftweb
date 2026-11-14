@@ -6,7 +6,7 @@ from ..constants import JAVASCRIPT_MAX_SAFE_INTEGER
 
 class Stock(db.Model):
     __tablename__ = "stocks"
-    __table_args__ = (db.UniqueConstraint("family_id", "symbol", name="uq_stock_family_symbol"),)
+    __table_args__ = {"sqlite_autoincrement": True}
 
     id = db.Column(db.Integer, primary_key=True)
     family_id = db.Column(db.Integer, db.ForeignKey("families.id", ondelete="CASCADE"), nullable=False)
@@ -28,6 +28,7 @@ class Stock(db.Model):
         "StockPurchase", back_populates="stock", cascade="all, delete-orphan",
         order_by="StockPurchase.purchase_date, StockPurchase.id",
     )
+    import_receipts = db.relationship("StockImportReceipt", cascade="all, delete-orphan")
 
     def to_dict(self):
         return {

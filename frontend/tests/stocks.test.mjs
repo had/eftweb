@@ -46,7 +46,8 @@ function mountStocks(t, axios) {
       axios,
     },
     `stocks, showArchived, loading, error, showForm, editingStock, archivingStock,
-    archiving, archiveError, reload, openCreate, openEdit, stockSaved, openArchive, archiveStock`,
+    archiving, archiveError, reload, openCreate, openEdit, stockSaved, openArchive, archiveStock,
+    actionStock, stockAction, savingAction, actionError, openAction, closeAction, confirmAction`,
   )
   return { view, familyStore }
 }
@@ -137,7 +138,7 @@ test('stock form creates and edits normalized values and preserves input after A
   let fail = false
   const save = async (...args) => {
     requests.push(args)
-    if (fail) throw { response: { data: { error: 'Duplicate ticker' } } }
+    if (fail) throw { response: { data: { error: 'Could not save stock' } } }
   }
   const form = setupComponent(
     t,
@@ -172,7 +173,7 @@ test('stock form creates and edits normalized values and preserves input after A
   form.symbol.value = 'AAPL'
   fail = true
   await form.submit()
-  assert.equal(form.error.value, 'Duplicate ticker')
+  assert.equal(form.error.value, 'Could not save stock')
   assert.equal(form.name.value, 'Microsoft')
   assert.equal(form.loading.value, false)
   assert.equal(events.length, 2)
@@ -181,3 +182,83 @@ test('stock form creates and edits normalized values and preserves input after A
   assert.deepEqual(requests.at(-1), ['/api/stocks/9', { name: 'Microsoft', symbol: 'AAPL' }])
   assert.equal(events.length, 4)
 })
+
+for (const action of ['restore', 'delete']) {
+  test(`archived stock ${action} can be retried, prevents duplicate requests, and refreshes the list`, async (t) => {
+    const pending = deferred()
+    let fail = true
+    let loads = 0
+    const requests = []
+    const stock = { id: 3, name: 'Apple — broker 1', symbol: 'AAPL', is_archived: true }
+    const mutate = async (...args) => {
+      requests.push(args)
+      if (fail) throw { response: { data: { error: 'Database unavailable' } } }
+      await pending.promise
+    }
+    const { view } = mountStocks(t, {
+      async get() {
+        loads++
+        return { data: [stock] }
+      },
+      post: mutate,
+      delete: mutate,
+    })
+    await flush()
+    view.showArchived.value = true
+    await flush()
+    view.openAction(stock, action)
+    await view.confirmAction()
+    assert.equal(view.actionStock.value.id, stock.id)
+    assert.equal(view.actionError.value, 'Database unavailable')
+    assert.equal(view.savingAction.value, false)
+    fail = false
+    const saving = view.confirmAction()
+    assert.equal(view.actionError.value, '')
+    assert.equal(view.savingAction.value, true)
+    view.closeAction()
+    assert.equal(view.actionStock.value.id, stock.id)
+    await view.confirmAction()
+    assert.equal(requests.length, 2)
+    pending.resolve()
+    await saving
+    await flush()
+    assert.equal(view.actionStock.value, null)
+    assert.equal(view.showArchived.value, true)
+    assert.equal(view.savingAction.value, false)
+    assert.equal(loads, 3)
+    const expected =
+      action === 'restore'
+        ? ['/api/stocks/3/restore']
+        : ['/api/stocks/3', { params: { permanent: true } }]
+    assert.deepEqual(requests, [expected, expected])
+  })
+
+  for (const outcome of ['success', 'failure']) {
+    test(`late ${action} ${outcome} does not affect a different family`, async (t) => {
+      const pending = deferred()
+      let loads = 0
+      const { view, familyStore } = mountStocks(t, {
+        async get() {
+          loads++
+          return { data: [] }
+        },
+        post: () => pending.promise,
+        delete: () => pending.promise,
+      })
+      await flush()
+      view.openAction({ id: 3, name: 'Apple', symbol: 'AAPL' }, action)
+      const saving = view.confirmAction()
+      familyStore.familyId = 2
+      await flush()
+      assert.equal(view.actionStock.value, null)
+      view.openAction({ id: 4, name: 'Other Apple', symbol: 'AAPL' }, action)
+      if (outcome === 'success') pending.resolve()
+      else pending.reject(new Error('Offline'))
+      await saving
+      await flush()
+      assert.equal(view.actionStock.value.id, 4)
+      assert.equal(view.actionError.value, '')
+      assert.equal(loads, 2)
+    })
+  }
+}
