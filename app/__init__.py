@@ -1,4 +1,5 @@
 import datetime
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -9,6 +10,7 @@ from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from markupsafe import Markup
 
+from app.service.tax_parameters import load_tax_parameters
 from config import config
 
 db = SQLAlchemy()
@@ -42,6 +44,11 @@ def create_app(config_name):
 
     app.config.from_object(config[config_name])
     app.config.setdefault("SETTINGS_FILE", str(Path(app.instance_path) / "settings.json"))
+    app.config.setdefault(
+        "TAX_PARAMETERS_FILE",
+        os.environ.get("TAX_PARAMETERS_FILE", str(Path(app.root_path) / "tax_parameters.toml")),
+    )
+    load_tax_parameters(app.config["TAX_PARAMETERS_FILE"])
 
     bootstrap.init_app(app)
     app.jinja_env.globals["fontawesome_html"] = fontawesome_html

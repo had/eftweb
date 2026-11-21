@@ -119,6 +119,16 @@ def test_estimation_endpoint_returns_real_numeric_totals(app, tax_return):
     assert estimate_tax(tax_return.id) == response.get_json()
 
 
+def test_estimation_supports_2026_filing_year_with_provisional_2025_values(app, tax_return):
+    expected = estimate_tax(tax_return.id)
+    tax_return.year = 2026  # Filing in 2026 for income earned in 2025.
+    db.session.commit()
+
+    response = app.test_client().get(f"/api/tax-returns/{tax_return.id}/estimation")
+    assert response.status_code == 200
+    assert response.get_json() == expected
+
+
 @pytest.mark.parametrize("group", ["income", "donation", "investment"])
 def test_disabled_groups_are_excluded_but_preserved(app, tax_return, group):
     client = app.test_client()
@@ -179,7 +189,7 @@ def test_estimation_errors_do_not_invoke_simulator(app, tax_return, monkeypatch,
     elif condition == "family_archived":
         tax_return.family.is_archived = True
     else:
-        tax_return.year = 2026
+        tax_return.year = 2099
         status = 422
     db.session.commit()
 
@@ -188,4 +198,4 @@ def test_estimation_errors_do_not_invoke_simulator(app, tax_return, monkeypatch,
     assert set(response.get_json()) == {"error"}
     assert response.get_json()["error"]
     if condition == "unsupported_year":
-        assert "2026" in response.get_json()["error"]
+        assert "2099" in response.get_json()["error"]

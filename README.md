@@ -9,6 +9,20 @@ It uses flask and bootstrap - I'm learning these 2 frameworks as I code, so expe
 
 `FLASK_APP=app.py FLASK_ENV=development flask run`
 
+## Tax estimation parameters
+
+At startup, the backend loads [app/tax_parameters.toml](app/tax_parameters.toml)
+into easyfrenchtax's shared parameter dictionary. Each section is a **filing
+year**, not an income year: `[2026]` applies to the return filed in 2026 for income
+earned in 2025.
+
+Add a section with all five fields to support another year, or edit an existing
+section to override its library parameters. Unlisted years retain the library's
+values. Set `TAX_PARAMETERS_FILE` in `.env` or the environment to use a different
+TOML file; this replaces the bundled file. Restart all backend workers after
+editing it. Invalid or missing files prevent startup rather than silently using
+other rates.
+
 ## Managing stocks
 
 Run `just migrate-up` and restart the backend to allow multiple stocks with the

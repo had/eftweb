@@ -1,0 +1,14 @@
+[2026]                                            # filing year, '2026' covers revenue of 2025
+family_quotient_benefices_capping = 1807          # see https://www.economie.gouv.fr/particuliers/impots-et-fiscalite/gerer-mon-impot-sur-le-revenu/quotient-familial-et-impot-sur-le-revenu-comment-ca-marche
+slices_thresholds = [11600, 29579, 84577, 181917] # upper bounds of brackets
+slices_rates = [0.11, 0.30, 0.41, 0.45]           # see https://www.service-public.gouv.fr/particuliers/vosdroits/F1419
+fees_10p_deduction_ceiling = 14555                # see https://www.service-public.gouv.fr/particuliers/vosdroits/F1989
+fees_10p_deduction_floor = 509
+
+# 2027 (for revenues in 2026) are not decided yet, temp numbers based on 2026
+[2027]
+family_quotient_benefices_capping = 1807
+slices_thresholds = [11600, 29579, 84577, 181917]
+slices_rates = [0.11, 0.30, 0.41, 0.45]
+fees_10p_deduction_ceiling = 14555
+fees_10p_deduction_floor = 509
