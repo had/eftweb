@@ -14,6 +14,7 @@ from openpyxl import load_workbook
 
 from app.constants import JAVASCRIPT_MAX_SAFE_INTEGER
 
+from .tax_inputs import amount
 from .validation import (
     allocation_error,
     calendar_date,
@@ -98,11 +99,13 @@ def import_date(value, label, broker=False):
     return calendar_date(value, label).isoformat()
 
 
-def table(sheet, header_row, required):
+def table(sheet, header_row, required, optional=()):
     headers = [cell.value for cell in next(sheet.iter_rows(min_row=header_row, max_row=header_row))]
     if any(headers.count(name) != 1 for name in required):
         raise ValueError(f"{sheet.title}: missing or duplicate required columns")
-    indices = {name: headers.index(name) for name in required}
+    if any(headers.count(name) > 1 for name in optional):
+        raise ValueError(f"{sheet.title}: duplicate optional columns")
+    indices = {name: headers.index(name) for name in (*required, *optional) if name in headers}
     for row_number, cells in enumerate(sheet.iter_rows(min_row=header_row + 1), header_row + 1):
         if row_number > MAX_ROWS + header_row:
             raise ValueError("Workbook exceeds the 100,000-row limit")
@@ -174,7 +177,7 @@ def parse_native(workbook):
     if (
         metadata.get("export_format") != EXPORT_FORMAT
         or type(version) is not int
-        or version not in (1, 2)
+        or version not in (1, 2, 3)
     ):
         raise ValueError("Unsupported app export format or schema version")
     result = {
@@ -188,7 +191,15 @@ def parse_native(workbook):
         "ignored": [],
     }
     grants, purchases, lots, sales, numbers = {}, {}, {}, {}, set()
-    for row_number, row in table(sheet, 6, PLANS_HEADERS if version == 2 else PLANS_HEADERS[:-1]):
+    for row_number, row in table(
+        sheet,
+        6,
+        (
+            PLANS_HEADERS
+            if version == 3
+            else PLANS_HEADERS[:15] if version == 2 else PLANS_HEADERS[:14]
+        ),
+    ):
         kind = row["record_type"]
         if kind == "stock_purchase":
             if any(
@@ -218,7 +229,14 @@ def parse_native(workbook):
                     "plan_name": text_value(row["plan_name"], "Plan name"),
                 }
             )
-            purchases[key] = {**purchase, "key": key, "rows": [row_number]}
+            purchases[key] = {
+                "acquisition_fmv": format(
+                    amount(row.get("acquisition_fmv") or 0, "Acquisition FMV"), ".6f"
+                ),
+                **purchase,
+                "key": key,
+                "rows": [row_number],
+            }
             lots[key] = ("purchase_id", purchase["purchase_date"], purchase["quantity"])
         elif kind in ("rsu_vesting", "rsu_grant"):
             if any(
@@ -237,6 +255,12 @@ def parse_native(workbook):
                 "vesting_start_date": import_date(row["vesting_start_date"], "Vesting start date"),
                 "schedule_type": row["schedule_type"],
                 "customized": row["customized"],
+                **(
+                    {"approval_date": import_date(row["approval_date"], "Approval date")}
+                    if row.get("approval_date")
+                    else {}
+                ),
+                **({"taxpayer_role": row["taxpayer_role"]} if row.get("taxpayer_role") else {}),
             }
             if key in grants:
                 if grants[key]["details"] != details or kind == "rsu_grant" or grants[key]["empty"]:
@@ -261,6 +285,9 @@ def parse_native(workbook):
                     "key": vesting_key,
                     "date": import_date(row["vesting_date"], "Vesting date"),
                     "quantity": whole(row["vesting_quantity"], "Vesting quantity"),
+                    "acquisition_fmv": format(
+                        amount(row.get("acquisition_fmv") or 0, "Acquisition FMV"), ".6f"
+                    ),
                 }
                 grants[key]["vestings"].append(vesting)
                 lots[vesting_key] = ("vesting_id", vesting["date"], vesting["quantity"])
@@ -274,7 +301,9 @@ def parse_native(workbook):
     for grant in grants.values():
         normalized = grant_payload(
             {**grant["details"], "vestings": grant["vestings"]},
-            SimpleNamespace(symbol=result["symbol"]),
+            SimpleNamespace(
+                symbol=result["symbol"], family=SimpleNamespace(taxpayer1=True, taxpayer2=True)
+            ),
             allow_empty=True,
         )
         result["grants"].append(
@@ -288,7 +317,13 @@ def parse_native(workbook):
     result["purchases"] = list(purchases.values())
     allocation_keys = defaultdict(set)
     for row_number, row in table(
-        workbook["Sales"], 1, SALES_HEADERS if version == 2 else SALES_HEADERS[:-3]
+        workbook["Sales"],
+        1,
+        (
+            SALES_HEADERS
+            if version == 3
+            else SALES_HEADERS[:11] if version == 2 else SALES_HEADERS[:8]
+        ),
     ):
         key = text_value(row["sale_key"], "Sale key")
         details = {
@@ -296,9 +331,10 @@ def parse_native(workbook):
             "quantity": whole(row["sale_quantity"], "Sale quantity"),
             "proceeds_per_share": str(row["proceeds_per_share"]),
             "currency": row["currency"],
-            **{name: row.get(name) for name in SALES_HEADERS[-3:]},
+            **{name: row.get(name) for name in SALES_HEADERS[8:11]},
+            "fees": format(amount(row.get("fees") or 0, "Fees", places=2), ".2f"),
         }
-        provenance = [details[name] for name in SALES_HEADERS[-3:]]
+        provenance = [details[name] for name in SALES_HEADERS[8:11]]
         if any(value is not None for value in provenance):
             if (
                 details["import_source"] != "etrade"
@@ -376,7 +412,9 @@ def parse_etrade(sheet):
     }
     groups = {}
     symbols = set()
-    for row_number, row in table(sheet, 1, BROKER_HEADERS):
+    for row_number, row in table(
+        sheet, 1, BROKER_HEADERS, ("Vest Date FMV", "Purchase Date Fair Mkt. Value")
+    ):
         if row["Record Type"] == "Summary":
             result["ignored"].append({"row": row_number, "reason": "Summary"})
             continue
@@ -386,6 +424,7 @@ def parse_etrade(sheet):
         if row["Order Type"] == "ESPP STC":
             result["ignored"].append({"row": row_number, "reason": "ESPP STC (sell to cover)"})
             continue
+        fee_execution = {}
         try:
             if row["Record Type"] != "Sell" or (row["Plan Type"], row["Order Type"]) not in (
                 ("RS", "Sell Restricted Stock"),
@@ -404,6 +443,14 @@ def parse_etrade(sheet):
                 }
             )
             order = identifier(row["Order Number"], "Order Number")
+            # Even an execution with invalid acquisition facts keeps its order-fee share.
+            fee_execution = {
+                "quantity": quantity,
+                "transaction_date": sale["transaction_date"],
+                "proceeds_per_share": sale["proceeds_per_share"],
+                "source_order_number": order,
+                "currency": "USD",
+            }
             source = {
                 "plan_type": row["Plan Type"],
                 "acquired_date": import_date(row["Date Acquired"], "Date Acquired", broker=True),
@@ -416,6 +463,14 @@ def parse_etrade(sheet):
                 )
             else:
                 source["date"] = import_date(row["Purchase Date"], "Purchase Date", broker=True)
+            raw_fmv = row.get(
+                "Vest Date FMV" if source["plan_type"] == "RS" else "Purchase Date Fair Mkt. Value"
+            )
+            fmv = (
+                format(amount(raw_fmv, "Acquisition FMV", allow_zero=False), ".6f")
+                if raw_fmv not in (None, "", "--")
+                else None
+            )
             identity = (order, sale["transaction_date"], sale["proceeds_per_share"], "USD")
             group = groups.setdefault(
                 identity,
@@ -436,6 +491,8 @@ def parse_etrade(sheet):
             group["rows"].append(row_number)
             source_key = fingerprint(source)
             lot = group["sources"].setdefault(source_key, {**source, "quantity": 0, "rows": []})
+            
+            lot["acquisition_fmv"] = lot.get("acquisition_fmv") or fmv
             lot["quantity"] += quantity
             lot["rows"].append(row_number)
             try:
@@ -462,6 +519,7 @@ def parse_etrade(sheet):
                     "proceeds_per_share": None,
                     "sources": [],
                     "allocations": [],
+                    **fee_execution,
                 }
             )
     if len(symbols) > 1:

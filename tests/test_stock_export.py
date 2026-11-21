@@ -138,7 +138,7 @@ def test_empty_stock_has_metadata_two_sheets_and_download_headers(app, stock):
     plans = workbook.worksheets[0]
     assert list(plans.iter_rows(min_row=1, max_row=4, max_col=2, values_only=True)) == [
         ("export_format", "eftweb.stock"),
-        ("schema_version", 2),
+        ("schema_version", 3),
         ("stock_name", "Apple"),
         ("stock_symbol", "AAPL"),
     ]

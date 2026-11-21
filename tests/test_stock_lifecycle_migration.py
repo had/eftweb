@@ -84,6 +84,8 @@ def test_duplicate_ticker_migration_preserves_history_and_guards_downgrade(tmp_p
             {"name": "uq_stock_family_symbol", "column_names": ["family_id", "symbol"]}
         ]
         upgrade(directory=MIGRATIONS, revision=REVISION)
+        # The API uses current models, including the later grant tax metadata columns.
+        upgrade(directory=MIGRATIONS, revision="head")
         client = app.test_client()
         assert client.post("/api/stocks/1/restore").status_code == 200
         assert client.get("/api/stocks/1/grants").get_json()[0]["grant_number"] == "123"

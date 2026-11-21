@@ -20,6 +20,7 @@ const emit = defineEmits(['update:open', 'imported', 'busy'])
 const file = ref(null)
 const preview = ref(null)
 const drafts = ref({})
+const orderFees = ref({})
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -29,7 +30,19 @@ let generation = 0
 let disposed = false
 let token = ''
 let submittedSignature = ''
-const issues = computed(() => importIssues(preview.value, drafts.value))
+const issues = computed(() => {
+  const result = importIssues(preview.value, drafts.value)
+  if (
+    Object.values(orderFees.value).some(
+      (value) => !/^\d{1,8}(\.\d{1,2})?$/.test(String(value || '0')),
+    )
+  )
+    result.push('Order fees must be non-negative USD amounts with at most two decimals.')
+  return result
+})
+const brokerOrders = computed(() => [
+  ...new Set((preview.value?.sales || []).map((sale) => sale.source_order_number).filter(Boolean)),
+])
 const canConfirm = computed(
   () => preview.value && !loading.value && !saving.value && !result.value && !issues.value.length,
 )
@@ -37,7 +50,13 @@ const decisions = () =>
   preview.value.format === 'eftweb'
     ? {}
     : Object.fromEntries(
-        preview.value.sales.map((sale) => [sale.key, saleDecision(sale, drafts.value[sale.key])]),
+        preview.value.sales.map((sale) => [
+          sale.key,
+          saleDecision(sale, {
+            ...drafts.value[sale.key],
+            orderFee: orderFees.value[sale.source_order_number] || '0',
+          }),
+        ]),
       )
 
 const reset = () => {
@@ -47,6 +66,7 @@ const reset = () => {
   file.value = null
   preview.value = null
   drafts.value = {}
+  orderFees.value = {}
   error.value = ''
   result.value = null
   loading.value = false
@@ -114,8 +134,12 @@ const loadPreview = async () => {
           skip: sale.skip,
           reviewed: false,
           allocations: sale.allocations.length
-            ? sale.allocations.map((row) => ({ lot: lotKey(row), quantity: row.quantity }))
-            : [{ lot: '', quantity: '' }],
+            ? sale.allocations.map((row) => ({
+                lot: lotKey(row),
+                quantity: row.quantity,
+                acquisitionFmv: Number(row.acquisition_fmv) > 0 ? row.acquisition_fmv : '',
+              }))
+            : [{ lot: '', quantity: '', acquisitionFmv: '' }],
         },
       ]),
     )
@@ -166,6 +190,10 @@ const eligibleLots = (sale) =>
       lot.date <= sale.transaction_date &&
       sale.sources.some((source) => source.plan_type === lot.plan_type),
   )
+const selectLot = (allocation) => {
+  const lot = preview.value.lots.find((lot) => `${lot.source}:${lot.id}` === allocation.lot)
+  allocation.acquisitionFmv = Number(lot?.acquisition_fmv) > 0 ? lot.acquisition_fmv : ''
+}
 const preventDismiss = (event) => {
   if (saving.value) event.preventDefault()
 }
@@ -270,6 +298,26 @@ const preventDismiss = (event) => {
             </div>
             <div v-else class="space-y-4">
               <section
+                v-if="brokerOrders.length"
+                class="space-y-3 rounded-lg border p-4"
+                aria-label="Broker order fees"
+              >
+                <p class="text-sm text-muted-foreground">
+                  Enter one total USD fee per order. It is shared across all that order's executions
+                  in this workbook, including skipped or previously imported executions.
+                </p>
+                <div v-for="(order, index) in brokerOrders" :key="order" class="max-w-sm space-y-2">
+                  <Label :for="`order-fee-${index}`">Order {{ order }} fee (USD, optional)</Label>
+                  <Input
+                    :id="`order-fee-${index}`"
+                    v-model="orderFees[order]"
+                    inputmode="decimal"
+                    placeholder="0.00"
+                    :disabled="saving"
+                  />
+                </div>
+              </section>
+              <section
                 v-for="sale in preview.sales"
                 :key="sale.key"
                 class="space-y-3 rounded-lg border p-4"
@@ -342,6 +390,7 @@ const preventDismiss = (event) => {
                     >
                       <select
                         v-model="allocation.lot"
+                        @change="selectLot(allocation)"
                         :aria-label="`Source lot ${index + 1} for order ${sale.source_order_number}`"
                         class="min-w-0 flex-1 rounded-md border bg-background p-2 text-sm"
                       >
@@ -362,6 +411,13 @@ const preventDismiss = (event) => {
                         class="w-24"
                         :aria-label="`Allocated shares ${index + 1} for order ${sale.source_order_number}`"
                       />
+                      <Input
+                        v-model="allocation.acquisitionFmv"
+                        inputmode="decimal"
+                        placeholder="Acquisition FMV (USD)"
+                        class="w-44"
+                        :aria-label="`Acquisition FMV ${index + 1} for order ${sale.source_order_number}`"
+                      />
                       <Button
                         variant="ghost"
                         size="icon"
@@ -373,7 +429,13 @@ const preventDismiss = (event) => {
                     <Button
                       variant="outline"
                       size="sm"
-                      @click="drafts[sale.key].allocations.push({ lot: '', quantity: '' })"
+                      @click="
+                        drafts[sale.key].allocations.push({
+                          lot: '',
+                          quantity: '',
+                          acquisitionFmv: '',
+                        })
+                      "
                       ><Plus class="h-4 w-4" /> Add allocation</Button
                     >
                   </fieldset>

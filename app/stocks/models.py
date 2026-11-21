@@ -58,6 +58,8 @@ class StockGrant(db.Model):
     title = db.Column(db.String(256), nullable=False)
     grant_number = db.Column(db.String(256), nullable=True)
     grant_date = db.Column(db.Date, nullable=False)
+    approval_date = db.Column(db.Date, nullable=True)
+    taxpayer_role = db.Column(db.String(16), nullable=True)
     quantity = db.Column(db.BigInteger, nullable=False)
     vesting_start_date = db.Column(db.Date, nullable=False)
     schedule_type = db.Column(db.String(32), nullable=False)
@@ -77,6 +79,8 @@ class StockGrant(db.Model):
             "grant_date": self.grant_date.isoformat(), "quantity": self.quantity,
             "vesting_start_date": self.vesting_start_date.isoformat(),
             "grant_number": self.grant_number,
+            "approval_date": self.approval_date.isoformat() if self.approval_date else None,
+            "taxpayer_role": self.taxpayer_role,
             "schedule_type": self.schedule_type, "customized": self.customized,
             "vestings": [vesting.to_dict() for vesting in self.vestings],
         }
@@ -95,10 +99,12 @@ class GrantVesting(db.Model):
     grant_id = db.Column(db.Integer, db.ForeignKey("stock_grants.id", ondelete="CASCADE"), nullable=False, index=True)
     date = db.Column(db.Date, nullable=False)
     quantity = db.Column(db.BigInteger, nullable=False)
+    acquisition_fmv = db.Column(db.Numeric(14, 6), nullable=False, default=0)
     grant = db.relationship("StockGrant", back_populates="vestings")
 
     def to_dict(self):
-        return {"id": self.id, "date": self.date.isoformat(), "quantity": self.quantity}
+        return {"id": self.id, "date": self.date.isoformat(), "quantity": self.quantity,
+                "acquisition_fmv": format(self.acquisition_fmv or 0, ".6f")}
 
 
 class StockPurchase(db.Model):
@@ -119,6 +125,7 @@ class StockPurchase(db.Model):
     purchase_date = db.Column(db.Date, nullable=False)
     quantity = db.Column(db.BigInteger, nullable=False)
     plan_name = db.Column(db.String(256), nullable=False, default="ESPP")
+    acquisition_fmv = db.Column(db.Numeric(14, 6), nullable=False, default=0)
     creation_token = db.Column(db.String(36), nullable=False)
     request_hash = db.Column(db.String(64), nullable=False)
 
@@ -131,6 +138,7 @@ class StockPurchase(db.Model):
             "purchase_date": self.purchase_date.isoformat(),
             "quantity": self.quantity,
             "plan_name": self.plan_name,
+            "acquisition_fmv": format(self.acquisition_fmv or 0, ".6f"),
         }
 
 
@@ -158,6 +166,7 @@ class StockSale(db.Model):
     transaction_date = db.Column(db.Date, nullable=False)
     quantity = db.Column(db.BigInteger, nullable=False)
     proceeds_per_share = db.Column(db.Numeric(14, 6), nullable=False)
+    fees = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     currency = db.Column(db.String(3), nullable=False, default="USD")
     import_source = db.Column(db.String(32), nullable=True)
     source_order_number = db.Column(db.String(256), nullable=True)
@@ -180,6 +189,7 @@ class StockSale(db.Model):
             "transaction_date": self.transaction_date.isoformat(),
             "quantity": self.quantity,
             "proceeds_per_share": format(self.proceeds_per_share, ".6f"),
+            "fees": format(self.fees or 0, ".2f"),
             "currency": self.currency,
             "import_source": self.import_source,
             "source_order_number": self.source_order_number,

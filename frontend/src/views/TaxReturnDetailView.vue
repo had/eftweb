@@ -11,6 +11,7 @@ import TaxReturnFormModal from '@/components/TaxReturnFormModal.vue'
 import DonationStatementsSection from '@/components/tax-return-detail/DonationStatementsSection.vue'
 import IncomeStatementsSection from '@/components/tax-return-detail/IncomeStatementsSection.vue'
 import InvestmentStatementsSection from '@/components/tax-return-detail/InvestmentStatementsSection.vue'
+import StockTaxSection from '@/components/tax-return-detail/StockTaxSection.vue'
 import TaxReturnHeader from '@/components/tax-return-detail/TaxReturnHeader.vue'
 import TaxReturnSummary from '@/components/tax-return-detail/TaxReturnSummary.vue'
 
@@ -32,13 +33,16 @@ const showDonationStatementForm = ref(false)
 const editingDonationStatement = ref(null)
 const showIfuStatementForm = ref(false)
 const editingIfuStatement = ref(null)
+const stockStatementCount = ref(0)
 const activeStatementTab = ref(null)
 const estimate = ref(null)
 const estimationLoading = ref(false)
 const estimationError = ref('')
 let loadGeneration = 0
 
-onBeforeUnmount(() => { loadGeneration += 1 })
+onBeforeUnmount(() => {
+  loadGeneration += 1
+})
 
 const loadTaxEstimation = async (taxReturnId, generation) => {
   estimationLoading.value = true
@@ -47,7 +51,8 @@ const loadTaxEstimation = async (taxReturnId, generation) => {
     if (generation === loadGeneration) estimate.value = response.data
   } catch (error) {
     if (generation === loadGeneration) {
-      estimationError.value = error.response?.data?.error || 'Tax estimation is unavailable. Please try again.'
+      estimationError.value =
+        error.response?.data?.error || 'Tax estimation is unavailable. Please try again.'
     }
   } finally {
     if (generation === loadGeneration) estimationLoading.value = false
@@ -65,6 +70,7 @@ const loadTaxReturn = async () => {
   donationTypes.value = []
   ifuStatements.value = []
   ifuFieldGroups.value = []
+  stockStatementCount.value = 0
   unavailable.value = false
   estimate.value = null
   estimationLoading.value = false
@@ -92,6 +98,7 @@ const loadTaxReturn = async () => {
       donationTypesResponse,
       ifuStatementsResponse,
       ifuFieldsResponse,
+      stockStatementsResponse,
     ] = await Promise.all([
       axios.get(`/api/families/${familyId}`),
       taxReturn.value.has_income_statements
@@ -109,6 +116,9 @@ const loadTaxReturn = async () => {
       taxReturn.value.has_investment_statements
         ? axios.get('/api/ifu-fields')
         : Promise.resolve({ data: [] }),
+      taxReturn.value.has_stock_statements
+        ? axios.get(`/api/tax-returns/${taxReturnId}/capital-gain-statements`)
+        : Promise.resolve({ data: { statements: [] } }),
     ])
     if (generation !== loadGeneration) return
     family.value = familyResponse.data
@@ -117,6 +127,7 @@ const loadTaxReturn = async () => {
     donationTypes.value = donationTypesResponse.data
     ifuStatements.value = ifuStatementsResponse.data
     ifuFieldGroups.value = ifuFieldsResponse.data
+    stockStatementCount.value = stockStatementsResponse.data.statements.length
   } catch {
     if (generation === loadGeneration) unavailable.value = true
   } finally {
@@ -149,6 +160,11 @@ const taxpayers = computed(() =>
 
 const statementTabs = computed(() =>
   [
+    taxReturn.value?.has_stock_statements && {
+      value: 'stocks',
+      label: 'Stock gains/losses',
+      count: stockStatementCount.value,
+    },
     taxReturn.value?.has_income_statements && {
       value: 'income',
       label: 'Income statements',
@@ -239,7 +255,7 @@ const deleteIfuStatement = async (statement) => {
 </script>
 
 <template>
-  <main class="p-8">
+  <main class="min-w-0 flex-1 p-4 sm:p-8">
     <div v-if="loading" class="space-y-4">
       <div class="h-10 w-64 animate-pulse rounded bg-muted" />
       <div class="h-48 animate-pulse rounded-lg bg-muted" />
@@ -272,6 +288,15 @@ const deleteIfuStatement = async (statement) => {
           </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="stocks" class="mt-0 focus-visible:outline-none">
+          <StockTaxSection
+            v-if="taxReturn.has_stock_statements"
+            :key="taxReturn.id"
+            :tax-return-id="taxReturn.id"
+            :filing-year="taxReturn.year"
+            @count="stockStatementCount = $event"
+          />
+        </TabsContent>
         <TabsContent value="income" class="mt-0 focus-visible:outline-none">
           <IncomeStatementsSection
             :family="family"

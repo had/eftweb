@@ -6,18 +6,25 @@ export const lotKey = (allocation) =>
 export function editedAllocations(rows) {
   return rows.map((row) => {
     const [source, id] = row.lot.split(':')
-    return { [source]: Number(id), quantity: Number(row.quantity) }
+    return {
+      [source]: Number(id),
+      quantity: Number(row.quantity),
+      ...(row.acquisitionFmv ? { acquisition_fmv: row.acquisitionFmv } : {}),
+    }
   })
 }
 
 const signature = (allocations) =>
-  JSON.stringify(allocations.map((row) => [lotKey(row), row.quantity]).sort())
+  JSON.stringify(
+    allocations.map((row) => [lotKey(row), row.quantity, row.acquisition_fmv || '']).sort(),
+  )
 
 export function saleDecision(sale, draft) {
   const allocations = editedAllocations(draft.allocations)
   return {
     skip: draft.skip,
     reviewed: draft.reviewed,
+    ...(draft.orderFee !== undefined ? { order_fee: draft.orderFee || '0' } : {}),
     ...(signature(allocations) !== signature(sale.allocations) ? { allocations } : {}),
   }
 }
@@ -45,6 +52,11 @@ export function importIssues(preview, drafts) {
       !draft.reviewed
     )
       issues.push('Confirm that you reviewed each flagged or edited sale.')
+    if (
+      draft.orderFee !== undefined &&
+      !/^\d{1,8}(\.\d{1,2})?$/.test(String(draft.orderFee || '0'))
+    )
+      issues.push('Order fees must be non-negative USD amounts with at most two decimals.')
     const seen = new Set()
     let quantity = 0
     const allocatedByType = { vesting_id: 0, purchase_id: 0 }
@@ -61,6 +73,12 @@ export function importIssues(preview, drafts) {
         issues.push('Choose distinct acquired lots and positive whole-share quantities.')
         continue
       }
+      if (
+        row.acquisitionFmv !== undefined &&
+        (!/^\d{1,8}(\.\d{1,6})?$/.test(String(row.acquisitionFmv)) ||
+          Number(row.acquisitionFmv) <= 0)
+      )
+        issues.push('Enter a positive acquisition FMV for every selected lot.')
       seen.add(row.lot)
       quantity += shares
       allocatedByType[lot.source] += shares

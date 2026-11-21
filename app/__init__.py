@@ -54,6 +54,7 @@ def create_app(config_name):
     from .stocks import stocks as stocks_bp
     app.register_blueprint(stocks_bp)
     from .tax import tax as tax_bp
+    from .tax import views as tax_views  # noqa: F401
     app.register_blueprint(tax_bp)
     from .api import api as api_bp
     app.register_blueprint(api_bp)

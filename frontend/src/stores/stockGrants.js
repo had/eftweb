@@ -10,6 +10,8 @@ const fromApi = (grant) => ({
   title: grant.title,
   grantNumber: grant.grant_number || '',
   grantDate: grant.grant_date,
+  approvalDate: grant.approval_date,
+  taxpayerRole: grant.taxpayer_role,
   quantity: grant.quantity,
   startDate: grant.vesting_start_date,
   scheduleType: grant.schedule_type,
@@ -24,6 +26,7 @@ const saleFromApi = (sale) => ({
   quantity: sale.quantity,
   proceedsPerShare: sale.proceeds_per_share,
   currency: sale.currency,
+  fees: sale.fees || '0.00',
   allocations: sale.allocations.map(({ vesting_id, purchase_id, quantity }) => ({
     ...(purchase_id !== undefined ? { purchaseId: purchase_id } : { vestingId: vesting_id }),
     quantity,
@@ -35,6 +38,7 @@ const purchaseFromApi = (purchase) => ({
   purchaseDate: purchase.purchase_date,
   quantity: purchase.quantity,
   planName: purchase.plan_name,
+  acquisition_fmv: purchase.acquisition_fmv,
 })
 const purchaseOrder = (a, b) => a.purchaseDate.localeCompare(b.purchaseDate) || a.id - b.id
 const saleOrder = (a, b) => a.transactionDate.localeCompare(b.transactionDate) || a.id - b.id
@@ -42,6 +46,7 @@ const busy = (entry) =>
   entry.saving ||
   entry.deletingId !== null ||
   entry.savingSale ||
+  entry.deletingAllSales ||
   entry.deletingSaleId !== null ||
   entry.savingPurchase ||
   entry.deletingPurchaseId !== null
@@ -65,6 +70,7 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
         savingSale: false,
         saleSaveError: '',
         deletingSaleId: null,
+        deletingAllSales: false,
         saleDeleteError: '',
         loading: false,
         loaded: false,
@@ -127,6 +133,9 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
         title: draft.title,
         ...(draft.grantNumber?.trim() ? { grant_number: draft.grantNumber.trim() } : {}),
         grant_date: draft.grantDate,
+        ...(draft.approvalDate
+          ? { approval_date: draft.approvalDate, taxpayer_role: draft.taxpayerRole }
+          : {}),
         quantity: draft.quantity,
         vesting_start_date: draft.startDate,
         schedule_type: draft.scheduleType,
@@ -174,28 +183,31 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
     }
   }
 
-  async function updateGrantNumber(stockId, grantId, number) {
+  async function updateGrant(stockId, grantId, changes) {
     const entry = forStock(stockId)
     if (!entry.loaded || entry.loading || busy(entry)) return null
     entry.saving = true
     entry.saveError = ''
     let request
     try {
-      request = axios.patch(`/api/stocks/${stockId}/grants/${grantId}`, {
-        grant_number: number.trim() || null,
-      })
+      request = axios.patch(`/api/stocks/${stockId}/grants/${grantId}`, changes)
       pendingWrites.set(stockId, request)
       const saved = fromApi((await request).data)
-      entry.grants = entry.grants.map((grant) => (grant.id === saved.id ? saved : grant))
+      entry.grants = entry.grants
+        .map((grant) => (grant.id === saved.id ? saved : grant))
+        .sort(byDate)
       return saved
     } catch (error) {
-      entry.saveError = errorMessage(error, 'Could not update the grant number. Please try again.')
+      entry.saveError = errorMessage(error, 'Could not update the grant. Please try again.')
       return null
     } finally {
       entry.saving = false
       if (pendingWrites.get(stockId) === request) pendingWrites.delete(stockId)
     }
   }
+
+  const updateGrantNumber = (stockId, grantId, number) =>
+    updateGrant(stockId, grantId, { grant_number: number.trim() || null })
 
   async function createSale(stockId, draft) {
     const entry = forStock(stockId)
@@ -210,10 +222,16 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
           transaction_date: draft.transactionDate,
           quantity: draft.quantity,
           proceeds_per_share: draft.proceedsPerShare,
-          allocations: draft.allocations.map(({ vestingId, purchaseId, quantity }) => ({
-            ...(purchaseId !== undefined ? { purchase_id: purchaseId } : { vesting_id: vestingId }),
-            quantity,
-          })),
+          ...(draft.fees !== undefined ? { fees: draft.fees || '0' } : {}),
+          allocations: draft.allocations.map(
+            ({ vestingId, purchaseId, quantity, acquisitionFmv }) => ({
+              ...(purchaseId !== undefined
+                ? { purchase_id: purchaseId }
+                : { vesting_id: vestingId }),
+              quantity,
+              ...(acquisitionFmv ? { acquisition_fmv: acquisitionFmv } : {}),
+            }),
+          ),
         },
         { headers: { 'Idempotency-Key': draft.creationToken } },
       )
@@ -221,6 +239,18 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
       const response = await request
       const saved = saleFromApi(response.data)
       entry.sales = [...entry.sales.filter((sale) => sale.id !== saved.id), saved].sort(saleOrder)
+      for (const allocation of draft.allocations) {
+        if (!allocation.acquisitionFmv) continue
+        if (allocation.purchaseId !== undefined) {
+          const lot = entry.purchases.find((p) => p.id === allocation.purchaseId)
+          if (lot) lot.acquisition_fmv = allocation.acquisitionFmv
+        } else {
+          const lot = entry.grants
+            .flatMap((g) => g.vestings)
+            .find((v) => v.id === allocation.vestingId)
+          if (lot) lot.acquisition_fmv = allocation.acquisitionFmv
+        }
+      }
       return saved
     } catch (error) {
       entry.saleSaveError = errorMessage(
@@ -251,6 +281,27 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
       return false
     } finally {
       entry.deletingSaleId = null
+      if (pendingWrites.get(stockId) === request) pendingWrites.delete(stockId)
+    }
+  }
+
+  async function deleteAllSales(stockId) {
+    const entry = forStock(stockId)
+    if (!entry.loaded || entry.loading || busy(entry)) return false
+    entry.deletingAllSales = true
+    entry.saleDeleteError = ''
+    let request
+    try {
+      request = axios.delete(`/api/stocks/${stockId}/sales`)
+      pendingWrites.set(stockId, request)
+      await request
+      entry.sales = []
+      return true
+    } catch (error) {
+      entry.saleDeleteError = errorMessage(error, 'Could not delete all sales. Please try again.')
+      return false
+    } finally {
+      entry.deletingAllSales = false
       if (pendingWrites.get(stockId) === request) pendingWrites.delete(stockId)
     }
   }
@@ -320,10 +371,12 @@ export const useStockGrantsStore = defineStore('stockGrants', () => {
     forStock,
     load,
     createGrant,
+    updateGrant,
     updateGrantNumber,
     deleteGrant,
     createSale,
     deleteSale,
+    deleteAllSales,
     createPurchase,
     deletePurchase,
   }

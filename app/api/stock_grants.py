@@ -10,7 +10,12 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app import db
 from app.stocks.models import GrantVesting, Stock, StockGrant, StockSaleAllocation
-from app.stocks.validation import grant_number_value, grant_payload
+from app.stocks.validation import (
+    calendar_date,
+    grant_number_value,
+    grant_payload,
+    grant_tax_details,
+)
 
 from . import api
 from .stock_transactions import stock_write
@@ -88,6 +93,11 @@ def create_stock_grant(stock):
         **{
             **data,
             "grant_date": date.fromisoformat(data["grant_date"]),
+            **(
+                {"approval_date": date.fromisoformat(data["approval_date"])}
+                if data.get("approval_date")
+                else {}
+            ),
             "vesting_start_date": date.fromisoformat(data["vesting_start_date"]),
         },
         creation_token=token,
@@ -149,26 +159,53 @@ def delete_stock_grant(stock_id, grant_id):
 
 
 @api.route("/api/stocks/<int:stock_id>/grants/<int:grant_id>", methods=["PATCH"])
-def edit_grant_number(stock_id, grant_id):
+def edit_stock_grant(stock_id, grant_id):
     try:
         with stock_write(stock_id):
-            _, error = active_stock(stock_id)
+            stock, error = active_stock(stock_id)
             if error:
                 return error
             grant = StockGrant.query.filter_by(id=grant_id, stock_id=stock_id).first()
             if grant is None:
                 return jsonify({"error": "Grant not found for this stock"}), 404
             data = request.get_json(silent=True)
-            if not isinstance(data, dict) or set(data) != {"grant_number"}:
-                return jsonify({"error": "Provide only grant_number"}), 400
+            allowed = {"title", "grant_number", "grant_date", "approval_date", "taxpayer_role"}
+            if not isinstance(data, dict) or not data or set(data) - allowed:
+                return (
+                    jsonify({"error": "Provide grant title, number, dates and/or taxpayer only"}),
+                    400,
+                )
             try:
-                grant.grant_number = grant_number_value(data["grant_number"])
+                updates = {}
+                if "grant_date" in data:
+                    updates["grant_date"] = calendar_date(data["grant_date"], "Grant date")
+                if "title" in data:
+                    title = data["title"]
+                    if not isinstance(title, str) or len(title.strip()) > 256:
+                        raise ValueError("Grant title must be a string of at most 256 characters")
+                    effective_date = updates.get("grant_date", grant.grant_date)
+                    updates["title"] = (
+                        title.strip() or f"{stock.symbol}-{effective_date.isoformat()}"
+                    )
+                if "grant_number" in data:
+                    updates["grant_number"] = grant_number_value(data["grant_number"])
+                tax_details = grant_tax_details(data, stock)
+                if "approval_date" in data:
+                    updates["approval_date"] = (
+                        date.fromisoformat(tax_details["approval_date"])
+                        if tax_details.get("approval_date")
+                        else None
+                    )
+                if "taxpayer_role" in data:
+                    updates["taxpayer_role"] = tax_details.get("taxpayer_role")
             except ValueError as error:
                 return jsonify({"error": str(error)}), 400
+            for field, value in updates.items():
+                setattr(grant, field, value)
             db.session.commit()
             return jsonify(grant.to_dict())
     except IntegrityError:
         return jsonify({"error": "This grant number already exists for this stock"}), 409
     except SQLAlchemyError:
-        current_app.logger.exception("Could not update grant number")
-        return jsonify({"error": "Could not update the grant number. Please try again."}), 500
+        current_app.logger.exception("Could not update grant")
+        return jsonify({"error": "Could not update the grant. Please try again."}), 500

@@ -18,6 +18,7 @@ from app.stocks.models import (
     StockSale,
     StockSaleAllocation,
 )
+from app.stocks.tax_inputs import apply_fmv
 from app.stocks.validation import allocation_error, sale_payload
 
 from . import api
@@ -99,6 +100,10 @@ def stock_sales(stock_id):
                 message, status = error
                 return jsonify({"error": message}), status
             allocations = data.pop("allocations")
+            try:
+                apply_fmv(stock_id, allocations)
+            except ValueError as validation_error:
+                return jsonify({"error": str(validation_error)}), 400
             sale = StockSale(
                 stock_id=stock_id,
                 **{
@@ -134,3 +139,19 @@ def delete_stock_sale(stock_id, sale_id):
     except SQLAlchemyError:
         current_app.logger.exception("Could not delete sale")
         return jsonify({"error": "Could not delete the sale. Please try again."}), 500
+
+
+@api.route("/api/stocks/<int:stock_id>/sales", methods=["DELETE"])
+def delete_all_stock_sales(stock_id):
+    try:
+        with stock_write(stock_id):
+            _, error = active_stock(stock_id)
+            if error:
+                return error
+            for sale in StockSale.query.filter_by(stock_id=stock_id).all():
+                db.session.delete(sale)
+            db.session.commit()
+            return "", 204
+    except SQLAlchemyError:
+        current_app.logger.exception("Could not delete all stock sales")
+        return jsonify({"error": "Could not delete all sales. Please try again."}), 500

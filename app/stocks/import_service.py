@@ -10,6 +10,7 @@ from app import db
 
 from .import_parsers import fingerprint
 from .models import GrantVesting, StockGrant, StockPurchase, StockSale, StockSaleAllocation
+from .tax_inputs import amount, apply_fmv, split_cents
 from .validation import allocation_error, sale_payload
 
 
@@ -42,6 +43,7 @@ def acquisition_lots(snapshot):
                     "grant_number": grant.get("grant_number"),
                     "grant_date": grant["grant_date"],
                     "label": f"{grant['title']} · {vesting['date']} · {vesting['quantity']} shares",
+                    "acquisition_fmv": vesting.get("acquisition_fmv", "0.000000"),
                     "available": vesting["quantity"] - used[("vesting_id", vesting["id"])],
                 }
             )
@@ -55,6 +57,7 @@ def acquisition_lots(snapshot):
                 "plan_type": "ESPP",
                 "plan_name": purchase["plan_name"],
                 "label": f"{purchase['plan_name']} · {purchase['purchase_date']} · {purchase['quantity']} shares",
+                "acquisition_fmv": purchase.get("acquisition_fmv", "0.000000"),
                 "available": purchase["quantity"] - used[("purchase_id", purchase["id"])],
             }
         )
@@ -122,7 +125,12 @@ def validate_decisions(parsed, decisions):
     if set(decisions) - known or (parsed["format"] == "eftweb" and decisions):
         raise ValueError("Import decisions do not match this workbook")
     for decision in decisions.values():
-        if not isinstance(decision, dict) or set(decision) - {"skip", "allocations", "reviewed"}:
+        if not isinstance(decision, dict) or set(decision) - {
+            "skip",
+            "allocations",
+            "reviewed",
+            "order_fee",
+        }:
             raise ValueError("Invalid sale decision")
         for field in ("skip", "reviewed"):
             if field in decision and type(decision[field]) is not bool:
@@ -168,12 +176,36 @@ def prepare_import(parsed, snapshot, decisions=None, confirming=False):
         for lot in lots
     }
     used = {(lot["source"], lot["id"]): lot["quantity"] - lot["available"] for lot in lots}
+    order_fees = {}
+    for original in parsed["sales"]:
+        if original.get("source_order_number") and "order_fee" in decisions.get(
+            original["key"], {}
+        ):
+            order = original["source_order_number"]
+            fee = amount(decisions[original["key"]]["order_fee"], "Order fee", places=2)
+            if order in order_fees and fee != order_fees[order]:
+                raise ValueError("Provide one consistent fee per broker order")
+            order_fees[order] = fee
+    allocated_fees = {}
+    for order, fee in order_fees.items():
+        executions = [
+            s
+            for s in parsed["sales"]
+            if s.get("source_order_number") == order and s.get("quantity")
+        ]
+        weights = [Decimal(s["proceeds_per_share"]) * s["quantity"] for s in executions]
+        allocated_fees.update(
+            (s["key"], format(v, ".2f"))
+            for s, v in zip(executions, split_cents(fee, weights), strict=True)
+        )
+    proposed_fmvs = {}
     existing_groups = {
         source_group(sale): sale for sale in snapshot["sales"] if sale.get("import_source")
     }
     for original in parsed["sales"]:
         sale = deepcopy(original)
         decision = decisions.get(sale["key"], {})
+        sale["fees"] = allocated_fees.get(sale["key"], "0.00")
         sale.update(
             skip=decision.get("skip", False),
             reviewed=decision.get("reviewed", False),
@@ -197,8 +229,43 @@ def prepare_import(parsed, snapshot, decisions=None, confirming=False):
                 )
             view["sales"].append(sale)
             continue
+        if sale["skip"]:
+            view["sales"].append(sale)
+            continue
         auto, matching_issues = automatic_allocations(sale, lots)
         sale["allocations"] = decision.get("allocations", auto)
+        try:
+            sale["allocations"] = sale_payload(sale)["allocations"]
+        except ValueError as error:
+            sale.update(status="needs_review", matching_issues=matching_issues)
+            sale["errors"].append(str(error))
+            view["sales"].append(sale)
+            continue
+        # Source FMV follows its exact automatic lot mapping; manual splits must supply their FMVs.
+        source_values = {}
+        for source in sale["sources"]:
+            matched, _ = automatic_allocations({"sources": [source]}, lots)
+            for row in matched:
+                column = "vesting_id" if "vesting_id" in row else "purchase_id"
+                source_values[(column, row[column])] = source.get("acquisition_fmv")
+        enriched = []
+        for row in sale["allocations"]:
+            row = dict(row)
+            column = "vesting_id" if "vesting_id" in row else "purchase_id"
+            value = row.get("acquisition_fmv") or source_values.get((column, row.get(column)))
+            if not value:
+                value = next(
+                    (
+                        lot.get("acquisition_fmv")
+                        for lot in lots
+                        if lot["source"] == column and lot["id"] == row.get(column)
+                    ),
+                    None,
+                )
+            if value and Decimal(value) > 0:
+                row["acquisition_fmv"] = value
+            enriched.append(row)
+        sale["allocations"] = enriched
         sale["matching_issues"] = matching_issues
         possible = [
             saved["id"]
@@ -252,6 +319,22 @@ def prepare_import(parsed, snapshot, decisions=None, confirming=False):
                 error = allocation_error(normalized, pockets, used)
                 if error:
                     raise ValueError(error[0])
+                for row in normalized["allocations"]:
+                    value = amount(row.get("acquisition_fmv"), "Acquisition FMV", allow_zero=False)
+                    column = "vesting_id" if "vesting_id" in row else "purchase_id"
+                    identity = (column, row[column])
+                    recorded = next(
+                        Decimal(lot["acquisition_fmv"])
+                        for lot in lots
+                        if lot["source"] == column and lot["id"] == row[column]
+                    )
+                    if recorded and value != recorded:
+                        raise ValueError("Acquisition FMV conflicts with the recorded lot value")
+                    if identity in proposed_fmvs and proposed_fmvs[identity] != value:
+                        raise ValueError(
+                            "Conflicting acquisition FMVs for the same lot in this import"
+                        )
+                    proposed_fmvs[identity] = value
                 sale["allocations"] = normalized["allocations"]
                 if confirming or not needs_review:
                     for allocation in sale["allocations"]:
@@ -294,15 +377,24 @@ def persist_import(stock, parsed, preview):
                 grant_date=date.fromisoformat(fields["grant_date"]),
                 vesting_start_date=date.fromisoformat(fields["vesting_start_date"]),
             )
+            role = data.get("taxpayer_role")
+            if role and not getattr(stock.family, role, None):
+                raise ValueError(f"Imported grant {role} is not present in this family")
             grant = StockGrant(
                 stock_id=stock.id,
                 **fields,
                 grant_number=data.get("grant_number"),
+                approval_date=(
+                    date.fromisoformat(data["approval_date"]) if data.get("approval_date") else None
+                ),
+                taxpayer_role=data.get("taxpayer_role"),
                 **bookkeeping(data),
             )
             for vesting in data["vestings"]:
                 row = GrantVesting(
-                    date=date.fromisoformat(vesting["date"]), quantity=vesting["quantity"]
+                    date=date.fromisoformat(vesting["date"]),
+                    quantity=vesting["quantity"],
+                    acquisition_fmv=Decimal(vesting.get("acquisition_fmv", "0")),
                 )
                 grant.vestings.append(row)
                 lots[vesting["key"]] = ("vesting_id", row)
@@ -313,6 +405,7 @@ def persist_import(stock, parsed, preview):
             purchase = StockPurchase(
                 stock_id=stock.id,
                 plan_name=data["plan_name"],
+                acquisition_fmv=Decimal(data.get("acquisition_fmv", "0")),
                 quantity=data["quantity"],
                 purchase_date=date.fromisoformat(data["purchase_date"]),
                 **bookkeeping(data),
@@ -334,12 +427,15 @@ def persist_import(stock, parsed, preview):
                 }
                 for row in allocations
             ]
+        if parsed["format"] == "etrade":
+            apply_fmv(stock.id, allocations)
         sale = StockSale(
             stock_id=stock.id,
             transaction_date=date.fromisoformat(data["transaction_date"]),
             quantity=data["quantity"],
             proceeds_per_share=Decimal(data["proceeds_per_share"]),
             currency=data["currency"],
+            fees=Decimal(data.get("fees", "0")),
             **{
                 key: data.get(key)
                 for key in ("import_source", "source_order_number", "source_fingerprint")

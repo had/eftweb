@@ -92,6 +92,8 @@ def broker_row(**overrides):
         "Grant Number": "20207560",
         "Vest Date": "03/01/2025",
         "Order Number": 99766164,
+        "Vest Date FMV": 100,
+        "Purchase Date Fair Mkt. Value": 100,
         **overrides,
     }
 
@@ -106,9 +108,10 @@ def broker_file(rows=None):
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "G&L_Expanded"
-    sheet.append(BROKER_HEADERS)
+    headers = (*BROKER_HEADERS, "Vest Date FMV", "Purchase Date Fair Mkt. Value")
+    sheet.append(headers)
     for row in rows if rows is not None else [broker_row()]:
-        sheet.append([row.get(header) for header in BROKER_HEADERS])
+        sheet.append([row.get(header) for header in headers])
     return workbook_bytes(workbook)
 
 
@@ -119,6 +122,10 @@ def preview(client, stock_id, content):
 
 
 def confirm(client, stock_id, content, review, decisions=None, token=None):
+    decisions = decisions or {}
+    for choice in decisions.values():
+        if "allocations" in choice:
+            choice["allocations"] = [{**row, "acquisition_fmv": row.get("acquisition_fmv", "100.000000")} for row in choice["allocations"]]
     return client.post(
         f"/api/stocks/{stock_id}/import",
         data={
@@ -138,7 +145,7 @@ def test_broker_preview_commit_duplicates_receipt_and_provenance(app, stock):
     assert review["format"] == "etrade"
     assert review["can_import"]
     sale = review["sales"][0]
-    assert sale["allocations"] == [{"vesting_id": grant.vestings[0].id, "quantity": 286}]
+    assert sale["allocations"] == [{"vesting_id": grant.vestings[0].id, "quantity": 286, "acquisition_fmv": "100.000000"}]
     assert StockSale.query.count() == StockImportReceipt.query.count() == 0
     key = str(uuid4())
     saved = confirm(client, stock.id, content, review, token=key)
@@ -376,6 +383,21 @@ def test_concurrent_confirmations_serialize_and_same_token_replays(app, stock):
     assert StockSale.query.count() == StockImportReceipt.query.count() == 1
 
 
+def test_reimport_after_deleting_all_sales_restores_sales_once(app, stock):
+    grant, _ = add_lots(stock)
+    client = app.test_client()
+    content = broker_file()
+    view = preview(client, stock.id, content).get_json()
+    assert confirm(client, stock.id, content, view).status_code == 201
+    assert client.delete(f"/api/stocks/{stock.id}/sales").status_code == 204
+    view = preview(client, stock.id, content).get_json()
+    assert view["can_import"]
+    assert view["sales"][0]["status"] == "ready"
+    assert confirm(client, stock.id, content, view).status_code == 201
+    assert StockSale.query.count() == 1
+    assert grant.vestings[0].quantity == 286
+
+
 def test_grant_number_creation_edit_validation_uniqueness_and_old_retry(app, stock):
     grant, _ = add_lots(stock, number="000123")
     client = app.test_client()
@@ -385,7 +407,7 @@ def test_grant_number_creation_edit_validation_uniqueness_and_old_retry(app, sto
         == "001234"
     )
     assert client.patch(endpoint, json={"grant_number": 123}).status_code == 400
-    assert client.patch(endpoint, json={"grant_number": "1", "title": "wrong"}).status_code == 400
+    assert client.patch(endpoint, json={"grant_number": "1", "quantity": 100}).status_code == 400
     assert client.patch(endpoint, json={"grant_number": None}).status_code == 200
     payload = {
         "title": "New",
@@ -434,7 +456,7 @@ def test_grant_number_creation_edit_validation_uniqueness_and_old_retry(app, sto
     )
 
 
-def test_native_v2_roundtrip_restores_provenance_and_rejects_nonempty_targets(app, stock):
+def test_native_v3_roundtrip_restores_provenance_and_rejects_nonempty_targets(app, stock):
     grant, _ = add_lots(stock)
     client = app.test_client()
     content = broker_file()
@@ -446,7 +468,7 @@ def test_native_v2_roundtrip_restores_provenance_and_rejects_nonempty_targets(ap
     )
     native = client.get(f"/api/stocks/{stock.id}/export").data
     parsed = parse_workbook(native)
-    assert parsed["version"] == 2
+    assert parsed["version"] == 3
     assert parsed["grants"][0]["grant_number"] == "20207560"
     target = Stock(family=Family(), name="Different name", symbol="AAPL")
     db.session.add(target)

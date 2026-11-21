@@ -76,7 +76,7 @@ def test_purchases_migration_preserves_rsu_sales_retries_and_can_be_reapplied(
         ).get_json()
         sale = client.post(
             "/api/stocks/1/sales",
-            json={**data, "allocations": [{"purchase_id": purchase["id"], "quantity": 5}]},
+            json={**data, "allocations": [{"purchase_id": purchase["id"], "quantity": 5, "acquisition_fmv": "100.000000"}]},
             headers={"Idempotency-Key": str(uuid4())},
         )
         assert sale.status_code == 201

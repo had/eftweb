@@ -25,6 +25,7 @@ const configuration = ref({
   has_income_statements: false,
   has_donation_statements: false,
   has_investment_statements: false,
+  has_stock_statements: false,
 })
 const error = ref('')
 const loading = ref(false)
@@ -38,6 +39,7 @@ watch(
         has_income_statements: props.taxReturn?.has_income_statements ?? false,
         has_donation_statements: props.taxReturn?.has_donation_statements ?? false,
         has_investment_statements: props.taxReturn?.has_investment_statements ?? false,
+        has_stock_statements: props.taxReturn?.has_stock_statements ?? false,
       }
       error.value = ''
     }
@@ -63,12 +65,16 @@ const submit = async () => {
     if (props.taxReturn) {
       await axios.put(`/api/tax-returns/${props.taxReturn.id}`, configuration.value)
     } else {
-      await axios.post(`/api/families/${props.familyId}/tax-returns`, { year: year.value, ...configuration.value })
+      await axios.post(`/api/families/${props.familyId}/tax-returns`, {
+        year: year.value,
+        ...configuration.value,
+      })
     }
     emit('saved')
     emit('update:open', false)
   } catch (requestError) {
-    error.value = requestError.response?.data?.error || 'Failed to add the tax return. Please try again.'
+    error.value =
+      requestError.response?.data?.error || 'Failed to add the tax return. Please try again.'
   } finally {
     loading.value = false
   }
@@ -85,13 +91,32 @@ const submit = async () => {
       <form class="space-y-4 py-4" @submit.prevent="submit">
         <div class="space-y-2">
           <Label for="tax-return-year">Tax-return year *</Label>
-          <Input id="tax-return-year" v-model.number="year" type="number" :disabled="Boolean(taxReturn)" required />
+          <Input
+            id="tax-return-year"
+            v-model.number="year"
+            type="number"
+            :disabled="Boolean(taxReturn)"
+            required
+          />
         </div>
         <div class="space-y-3">
           <p class="font-medium">Information groups</p>
-          <label class="flex items-center gap-2"><input v-model="configuration.has_income_statements" type="checkbox" /> Income statements</label>
-          <label class="flex items-center gap-2"><input v-model="configuration.has_donation_statements" type="checkbox" /> Donation statements</label>
-          <label class="flex items-center gap-2"><input v-model="configuration.has_investment_statements" type="checkbox" /> Investment statements (GFI forests and life insurance)</label>
+          <label class="flex items-center gap-2"
+            ><input v-model="configuration.has_income_statements" type="checkbox" /> Income
+            statements</label
+          >
+          <label class="flex items-center gap-2"
+            ><input v-model="configuration.has_donation_statements" type="checkbox" /> Donation
+            statements</label
+          >
+          <label class="flex items-center gap-2"
+            ><input v-model="configuration.has_investment_statements" type="checkbox" /> Investment
+            statements (GFI forests and life insurance)</label
+          >
+          <label class="flex items-center gap-2"
+            ><input v-model="configuration.has_stock_statements" type="checkbox" /> Stock
+            gains/losses</label
+          >
         </div>
         <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
       </form>

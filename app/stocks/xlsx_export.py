@@ -7,7 +7,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 EXPORT_FORMAT = "eftweb.stock"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 PLANS_HEADERS = (
     "record_type",
     "grant_key",
@@ -24,6 +24,9 @@ PLANS_HEADERS = (
     "purchase_date",
     "purchase_quantity",
     "grant_number",
+    "approval_date",
+    "taxpayer_role",
+    "acquisition_fmv",
 )
 SALES_HEADERS = (
     "sale_key",
@@ -37,6 +40,7 @@ SALES_HEADERS = (
     "import_source",
     "source_order_number",
     "source_fingerprint",
+    "fees",
 )
 
 
@@ -112,6 +116,9 @@ def build_stock_export(stock):
                     None,
                     None,
                     grant.get("grant_number"),
+                    grant.get("approval_date"),
+                    grant.get("taxpayer_role"),
+                    vesting.get("acquisition_fmv", "0.000000") if vesting else None,
                 ),
             )
     for purchase in stock["purchases"]:
@@ -132,6 +139,10 @@ def build_stock_export(stock):
                 f"purchase:{purchase['id']}",
                 purchase["purchase_date"],
                 purchase["quantity"],
+                None,
+                None,
+                None,
+                purchase.get("acquisition_fmv", "0.000000"),
             ),
         )
     format_table(plans, PLANS_HEADERS, 6)
@@ -166,6 +177,7 @@ def build_stock_export(stock):
                     sale.get("import_source"),
                     sale.get("source_order_number"),
                     sale.get("source_fingerprint"),
+                    sale.get("fees", "0.00"),
                 ),
             )
     format_table(sales, SALES_HEADERS, 1)

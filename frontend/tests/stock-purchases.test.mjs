@@ -216,8 +216,11 @@ test('sale modal emits purchase and vesting allocations and clears choices befor
   const props = Vue.reactive({
     open: true,
     today,
-    grants: grants(),
-    purchases: purchases(),
+    grants: grants().map((g) => ({
+      ...g,
+      vestings: g.vestings.map((v) => ({ ...v, acquisition_fmv: '100.000000' })),
+    })),
+    purchases: purchases().map((p) => ({ ...p, acquisition_fmv: '100.000000' })),
     sales: [],
     saving: false,
     saveError: '',
@@ -231,7 +234,10 @@ test('sale modal emits purchase and vesting allocations and clears choices befor
   view.details.value = { transactionDate: today, quantity: 15, proceedsPerShare: '100' }
   view.quantities.value = { 'purchase:1': 5, 'vesting:1': 10 }
   view.confirm()
-  assert.deepEqual(events[0][1].allocations, mixedSale().allocations)
+  assert.deepEqual(
+    events[0][1].allocations,
+    mixedSale().allocations.map((a) => ({ ...a, acquisitionFmv: '100.000000' })),
+  )
   view.details.value.transactionDate = '2026-06-01'
   await flush()
   assert.deepEqual(view.quantities.value, { 'purchase:1': 5 })

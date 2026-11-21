@@ -22,7 +22,7 @@ import AddGrantWizardModal from '@/components/stock-detail/AddGrantWizardModal.v
 import AddPurchaseModal from '@/components/stock-detail/AddPurchaseModal.vue'
 import RecordSaleModal from '@/components/stock-detail/RecordSaleModal.vue'
 import ImportStockModal from '@/components/stock-detail/ImportStockModal.vue'
-import EditGrantNumberModal from '@/components/stock-detail/EditGrantNumberModal.vue'
+import EditGrantModal from '@/components/stock-detail/EditGrantModal.vue'
 import DeleteConfirmModal from '@/components/DeleteConfirmModal.vue'
 import { useStockGrantsStore } from '@/stores/stockGrants'
 import { useStockQuotesStore } from '@/stores/stockQuotes'
@@ -47,15 +47,17 @@ const showAddPurchase = ref(false)
 const purchaseToDelete = ref(null)
 const showRecordSale = ref(false)
 const saleToDelete = ref(null)
+const showDeleteAllSales = ref(false)
 const showImport = ref(false)
 const importBusy = ref(false)
-const grantNumberToEdit = ref(null)
+const grantToEdit = ref(null)
 const busy = computed(
   () =>
     importBusy.value ||
     entry.value.saving ||
     entry.value.deletingId !== null ||
     entry.value.savingSale ||
+    entry.value.deletingAllSales ||
     entry.value.deletingSaleId !== null ||
     entry.value.savingPurchase ||
     entry.value.deletingPurchaseId !== null,
@@ -111,8 +113,9 @@ watch(
     purchaseToDelete.value = null
     showRecordSale.value = false
     saleToDelete.value = null
+    showDeleteAllSales.value = false
     grantToDelete.value = null
-    grantNumberToEdit.value = null
+    grantToEdit.value = null
     showImport.value = false
     importBusy.value = false
     activeTab.value = 'vesting'
@@ -137,20 +140,16 @@ const addPurchase = async (draft) => {
     activeTab.value = 'vesting'
   }
 }
-const editGrantNumber = (grant) => {
+const editGrant = (grant) => {
   if (!ready.value || busy.value) return
   entry.value.saveError = ''
-  grantNumberToEdit.value = grant
+  grantToEdit.value = grant
 }
-const saveGrantNumber = async (number) => {
-  if (!grantNumberToEdit.value) return
+const saveGrant = async (changes) => {
+  if (!grantToEdit.value) return
   const generation = viewGeneration
-  const saved = await grantsStore.updateGrantNumber(
-    stockId.value,
-    grantNumberToEdit.value.id,
-    number,
-  )
-  if (saved && generation === viewGeneration) grantNumberToEdit.value = null
+  const saved = await grantsStore.updateGrant(stockId.value, grantToEdit.value.id, changes)
+  if (saved && generation === viewGeneration) grantToEdit.value = null
 }
 const imported = () => {
   void grantsStore.load(stockId.value)
@@ -181,6 +180,17 @@ const deleteSale = async () => {
   const generation = viewGeneration
   const deleted = await grantsStore.deleteSale(stockId.value, saleToDelete.value.id)
   if (deleted && generation === viewGeneration) saleToDelete.value = null
+}
+const requestDeleteAllSales = () => {
+  if (!ready.value || busy.value || !entry.value.sales.length) return
+  entry.value.saleDeleteError = ''
+  showDeleteAllSales.value = true
+}
+const deleteAllSales = async () => {
+  if (!showDeleteAllSales.value) return
+  const generation = viewGeneration
+  const deleted = await grantsStore.deleteAllSales(stockId.value)
+  if (deleted && generation === viewGeneration) showDeleteAllSales.value = false
 }
 const addGrant = async (grant) => {
   const id = stockId.value
@@ -386,6 +396,7 @@ const summaries = computed(() => [
               :today="today"
               :busy="busy"
               @delete-sale="requestDeleteSale"
+              @delete-all-sales="requestDeleteAllSales"
             >
               <template #actions>
                 <Button :disabled="busy" @click="showRecordSale = true"
@@ -405,11 +416,12 @@ const summaries = computed(() => [
               :busy="busy"
               @delete="requestDeleteGrant"
               @delete-purchase="requestDeletePurchase"
-              @edit-grant-number="editGrantNumber"
+              @edit-grant="editGrant"
             />
           </TabsContent>
         </TabsRoot>
         <AddGrantWizardModal
+          :family-id="entry.stock?.family_id"
           :key="route.params.stockId"
           v-model:open="showAddGrant"
           :ticker="stockSymbol"
@@ -458,6 +470,21 @@ const summaries = computed(() => [
           @confirm="deletePurchase"
         />
         <DeleteConfirmModal
+          :open="showDeleteAllSales"
+          title="Delete all sales"
+          :description="`Delete all ${entry.sales.length} sales for ${stockName} (${stockSymbol}) across all years? The shares will become available in their original acquisition lots. Your grants and purchases are kept. This cannot be undone.`"
+          confirm-label="Delete all sales"
+          :busy="entry.deletingAllSales"
+          :error="entry.saleDeleteError"
+          @update:open="
+            (open) => {
+              if (!entry.deletingAllSales) showDeleteAllSales = open
+            }
+          "
+          @cancel="showDeleteAllSales = false"
+          @confirm="deleteAllSales"
+        />
+        <DeleteConfirmModal
           :open="Boolean(saleToDelete)"
           title="Delete sale"
           :description="
@@ -503,12 +530,13 @@ const summaries = computed(() => [
         @busy="importBusy = $event"
         @imported="imported"
       />
-      <EditGrantNumberModal
-        :grant="grantNumberToEdit"
+      <EditGrantModal
+        :family-id="entry.stock?.family_id"
+        :grant="grantToEdit"
         :saving="entry.saving"
         :error="entry.saveError"
-        @close="grantNumberToEdit = null"
-        @save="saveGrantNumber"
+        @close="grantToEdit = null"
+        @save="saveGrant"
       />
     </div>
   </main>

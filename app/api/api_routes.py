@@ -80,6 +80,7 @@ TAX_RETURN_CONFIGURATION_FIELDS = (
     "has_income_statements",
     "has_donation_statements",
     "has_investment_statements",
+    "has_stock_statements",
 )
 
 INCOME_STATEMENT_AMOUNT_FIELDS = (

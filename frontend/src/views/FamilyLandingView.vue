@@ -52,6 +52,7 @@ const configurationLabels = (taxReturn) => [
   taxReturn.has_income_statements && 'Income',
   taxReturn.has_donation_statements && 'Donations',
   taxReturn.has_investment_statements && 'Investments',
+  taxReturn.has_stock_statements && 'Stock gains/losses',
 ].filter(Boolean)
 </script>
 

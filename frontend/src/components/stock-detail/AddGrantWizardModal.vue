@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import axios from 'axios'
 import { Info, Plus, Trash2 } from 'lucide-vue-next'
 import {
   TooltipContent,
@@ -36,11 +37,39 @@ import {
 
 const props = defineProps({
   open: Boolean,
+  familyId: Number,
   ticker: { type: String, default: 'STOCK' },
   saving: Boolean,
   saveError: { type: String, default: '' },
 })
 const emit = defineEmits(['update:open', 'confirmed'])
+const taxpayers = ref([{ role: 'taxpayer1', label: 'Taxpayer 1' }])
+watch(
+  () => props.open,
+  async (open) => {
+    if (!open || !props.familyId) return
+    taxpayers.value = []
+    try {
+      const { data } = await axios.get(`/api/families/${props.familyId}`)
+      taxpayers.value = ['taxpayer1', 'taxpayer2']
+        .filter((role) => data[role])
+        .map((role) => ({
+          role,
+          label: `${data[role].first_name} ${data[role].last_name} (${role === 'taxpayer1' ? 'taxpayer 1' : 'taxpayer 2'})`,
+        }))
+    } catch {
+      error.value = 'Could not load family taxpayers. Close and reopen the form to retry.'
+    }
+  },
+)
+const validateTaxGrantDetails = (draft) => {
+  const result = validateGrantDetails(draft)
+  if (!isCalendarDate(draft.approvalDate) || draft.approvalDate < '2015-08-08')
+    result.approvalDate = 'Enter a shareholder approval date on or after 8 August 2015.'
+  if (!taxpayers.value.some((t) => t.role === draft.taxpayerRole))
+    result.taxpayerRole = 'Select a taxpayer in this family.'
+  return result
+}
 const step = ref(1)
 const details = ref({})
 const vestings = ref([])
@@ -81,6 +110,8 @@ const reset = () => {
   const today = localDate()
   details.value = {
     grantDate: today,
+    approvalDate: '',
+    taxpayerRole: 'taxpayer1',
     title: '',
     grantNumber: '',
     quantity: '',
@@ -153,7 +184,7 @@ const generate = () => {
 const next = () => {
   error.value = ''
   if (step.value === 1) {
-    fieldErrors.value = validateGrantDetails(details.value)
+    fieldErrors.value = validateTaxGrantDetails(details.value)
     if (Object.keys(fieldErrors.value).length) return
     if (generatedParameters.value && generatedParameters.value === parameters()) {
       regenerationNeeded.value = false
@@ -170,7 +201,7 @@ const next = () => {
 }
 
 const regenerate = () => {
-  fieldErrors.value = validateGrantDetails(details.value)
+  fieldErrors.value = validateTaxGrantDetails(details.value)
   if (!Object.keys(fieldErrors.value).length) generate()
 }
 const back = () => {
@@ -186,7 +217,7 @@ const insertAfter = async (index) => {
 }
 const confirm = () => {
   if (!props.open || props.saving || submitted.value || step.value !== 3) return
-  fieldErrors.value = validateGrantDetails(details.value)
+  fieldErrors.value = validateTaxGrantDetails(details.value)
   error.value = validateVestings(vestings.value, details.value.quantity)
   if (Object.keys(fieldErrors.value).length || error.value) return
   submitted.value = true
@@ -195,6 +226,8 @@ const confirm = () => {
     title: effectiveTitle.value,
     ...(details.value.grantNumber?.trim() ? { grantNumber: details.value.grantNumber.trim() } : {}),
     grantDate: details.value.grantDate,
+    approvalDate: details.value.approvalDate,
+    taxpayerRole: details.value.taxpayerRole,
     quantity: Number(details.value.quantity),
     startDate: details.value.startDate,
     scheduleType: details.value.scheduleType,
@@ -260,6 +293,39 @@ const preventDismiss = (event) => {
           <p v-if="saveError" role="alert" class="mb-4 text-sm text-destructive">{{ saveError }}</p>
           <p v-if="error" role="alert" class="mb-4 text-sm text-destructive">{{ error }}</p>
           <div v-if="step === 1" class="space-y-5">
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div class="space-y-2">
+                <Label for="approval-date">Shareholder approval date *</Label>
+                <Input
+                  id="approval-date"
+                  v-model="details.approvalDate"
+                  type="date"
+                  min="2015-08-08"
+                  required
+                />
+                <p class="text-xs text-muted-foreground">
+                  The plan approval date, separate from your individual grant date.
+                </p>
+                <p v-if="fieldErrors.approvalDate" role="alert" class="text-xs text-destructive">
+                  {{ fieldErrors.approvalDate }}
+                </p>
+              </div>
+              <div class="space-y-2">
+                <Label for="grant-taxpayer">Taxpayer *</Label>
+                <select
+                  id="grant-taxpayer"
+                  v-model="details.taxpayerRole"
+                  class="w-full rounded-md border bg-background p-2 text-sm"
+                >
+                  <option v-for="person in taxpayers" :key="person.role" :value="person.role">
+                    {{ person.label }}
+                  </option>
+                </select>
+                <p v-if="fieldErrors.taxpayerRole" role="alert" class="text-xs text-destructive">
+                  {{ fieldErrors.taxpayerRole }}
+                </p>
+              </div>
+            </div>
             <div class="grid gap-4 sm:grid-cols-2">
               <div class="space-y-2">
                 <Label for="grant-date">Grant date *</Label>
@@ -506,6 +572,14 @@ const preventDismiss = (event) => {
             <div class="rounded-lg border bg-muted/30 p-4">
               <h4 class="break-words text-lg font-semibold">{{ effectiveTitle }}</h4>
               <dl class="mt-4 grid gap-4 text-sm sm:grid-cols-2">
+                <div>
+                  <dt class="text-xs text-muted-foreground">Shareholder approval date</dt>
+                  <dd>{{ formatDate(details.approvalDate) }}</dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-muted-foreground">Taxpayer</dt>
+                  <dd>{{ taxpayers.find((t) => t.role === details.taxpayerRole)?.label }}</dd>
+                </div>
                 <div>
                   <dt class="text-xs text-muted-foreground">Grant date</dt>
                   <dd class="mt-1">{{ formatDate(details.grantDate) }}</dd>

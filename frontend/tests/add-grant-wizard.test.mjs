@@ -60,6 +60,8 @@ function mountWizard(t) {
 
 function fillDetails(wizard, quantity = 1000) {
   wizard.setGrantDate('2026-01-31')
+  wizard.details.value.approvalDate = '2020-01-01'
+  wizard.details.value.taxpayerRole = 'taxpayer1'
   wizard.details.value.quantity = quantity
   wizard.details.value.scheduleType = 'cliff-quarterly'
 }

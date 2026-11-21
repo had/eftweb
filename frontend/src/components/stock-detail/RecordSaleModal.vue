@@ -27,6 +27,7 @@ const props = defineProps({
 const emit = defineEmits(['update:open', 'confirmed'])
 const details = ref({ transactionDate: '', quantity: '', proceedsPerShare: '' })
 const quantities = ref({})
+const fmvs = ref({})
 const errors = ref({})
 const creationToken = ref('')
 const submitted = ref(false)
@@ -41,6 +42,8 @@ const allocations = computed(() =>
       return {
         [type === 'purchase' ? 'purchaseId' : 'vestingId']: Number(id),
         quantity: Number(quantity),
+        acquisitionFmv:
+          fmvs.value[key] || pockets.value.find((p) => p.key === key)?.acquisition_fmv || '',
       }
     }),
 )
@@ -54,7 +57,8 @@ watch(
   () => props.open,
   (open) => {
     if (!open) return
-    details.value = { transactionDate: props.today, quantity: '', proceedsPerShare: '' }
+    details.value = { transactionDate: props.today, quantity: '', proceedsPerShare: '', fees: '0' }
+    fmvs.value = {}
     quantities.value = {}
     errors.value = {}
     creationToken.value = createId()
@@ -94,6 +98,15 @@ const confirm = () => {
   if (!props.open || busy.value) return
   const draft = { ...details.value, allocations: allocations.value }
   errors.value = validateSale(draft, pockets.value, props.today)
+  if (
+    draft.allocations.some(
+      (a) =>
+        !/^\d{1,8}(\.\d{1,6})?$/.test(String(a.acquisitionFmv)) || Number(a.acquisitionFmv) <= 0,
+    )
+  )
+    errors.value.allocations = 'Enter a positive USD acquisition FMV for every selected lot.'
+  if (!/^\d{1,8}(\.\d{1,2})?$/.test(String(draft.fees || '0')))
+    errors.value.fees = 'Enter non-negative USD fees with at most two decimals.'
   if (Object.keys(errors.value).length) return
   submitted.value = true
   emit('confirmed', {
@@ -195,6 +208,20 @@ const confirm = () => {
               </p>
             </div>
           </fieldset>
+          <div class="max-w-xs space-y-2">
+            <Label for="sale-fees">Selling fees (USD, optional)</Label>
+            <Input
+              id="sale-fees"
+              v-model="details.fees"
+              type="text"
+              inputmode="decimal"
+              placeholder="0.00"
+              :disabled="busy"
+            />
+            <p v-if="errors.fees" role="alert" class="text-sm text-destructive">
+              {{ errors.fees }}
+            </p>
+          </div>
           <section aria-labelledby="sale-pockets-heading" class="space-y-3">
             <div>
               <h3 id="sale-pockets-heading" class="font-medium">Shares sold by acquisition lot</h3>
@@ -225,6 +252,23 @@ const confirm = () => {
                   <p class="mt-1 text-xs text-muted-foreground">
                     {{ formatShares(pocket.remaining) }} available ·
                     {{ formatShares(pocket.quantity) }} originally acquired
+                  </p>
+                </div>
+                <div class="space-y-1">
+                  <Label :for="`fmv-${pocket.key}`">Acquisition FMV per share (USD)</Label>
+                  <Input
+                    :id="`fmv-${pocket.key}`"
+                    v-model="fmvs[pocket.key]"
+                    :placeholder="pocket.acquisition_fmv || 'Required when selling'"
+                    :disabled="busy || Number(pocket.acquisition_fmv) > 0"
+                    inputmode="decimal"
+                    class="w-44"
+                  />
+                  <p
+                    v-if="Number(pocket.acquisition_fmv) > 0"
+                    class="text-xs text-muted-foreground"
+                  >
+                    Recorded FMV: {{ pocket.acquisition_fmv }} USD
                   </p>
                 </div>
                 <div class="flex items-center gap-2">

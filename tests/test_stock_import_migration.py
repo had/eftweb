@@ -69,6 +69,7 @@ def test_import_migration_preserves_records_constraints_and_reapplies(tmp_path, 
                 sa.text("SELECT quantity, request_hash FROM stock_sales")
             ).one() == (2, "sale-hash")
         upgrade(directory=MIGRATIONS, revision=REVISION)
+        upgrade(directory=MIGRATIONS, revision="head")
         assert app.test_client().get("/api/stocks/1/grants").get_json()[0]["grant_number"] is None
         assert app.test_client().get("/api/stocks/1/sales").get_json()[0]["allocations"] == [
             {"vesting_id": 1, "quantity": 2}

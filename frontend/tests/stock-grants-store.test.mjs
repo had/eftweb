@@ -77,6 +77,51 @@ test('loads canonical metadata, maps fields, and retains stable colors across re
   assert.equal(entry.loaded, true)
 })
 
+test('grant metadata edits persist dates and taxpayer, reorder by grant date and preserve state on failure', async (t) => {
+  const original = { ...apiGrant(1), approval_date: '2019-01-01', taxpayer_role: 'taxpayer1' }
+  const store = mockHttp(t, {
+    get: async (url) => ({
+      data: url.endsWith('/grants')
+        ? [original, apiGrant(2)]
+        : url.endsWith('/sales') || url.endsWith('/purchases')
+          ? []
+          : { id: 1 },
+    }),
+  })
+  await store.load(1)
+  const changes = {
+    title: 'Corrected',
+    grant_date: '2027-01-01',
+    approval_date: '2016-12-31',
+    taxpayer_role: 'taxpayer2',
+  }
+  const pending = deferred()
+  let fail = true
+  const requests = []
+  t.mock.method(axios, 'patch', async (...args) => {
+    requests.push(args)
+    if (fail) throw { response: { data: { error: 'Select a taxpayer present in this family' } } }
+    return pending.promise
+  })
+  assert.equal(await store.updateGrant(1, 1, changes), null)
+  assert.equal(store.forStock(1).grants[0].taxpayerRole, 'taxpayer1')
+  assert.match(store.forStock(1).saveError, /taxpayer/)
+  fail = false
+  const write = store.updateGrant(1, 1, changes)
+  assert.equal(await store.updateGrant(1, 1, changes), null)
+  pending.resolve({ data: { ...original, ...changes } })
+  await write
+  const grants = store.forStock(1).grants
+  assert.deepEqual(
+    grants.map((g) => g.id),
+    [2, 1],
+  )
+  assert.equal(grants[1].approvalDate, '2016-12-31')
+  assert.equal(grants[1].taxpayerRole, 'taxpayer2')
+  assert.deepEqual(grants[1].vestings, original.vestings)
+  assert.deepEqual(requests.at(-1), ['/api/stocks/1/grants/1', changes])
+})
+
 test('failed loads are errors rather than empty portfolios, and retry can recover', async (t) => {
   const store = mockHttp(t, {
     get: async () => {

@@ -73,7 +73,7 @@ def sell(client, stock_id, allocations, transaction_date="2023-01-01", token=Non
             "transaction_date": transaction_date,
             "quantity": sum(row["quantity"] for row in allocations),
             "proceeds_per_share": "123.456789",
-            "allocations": allocations,
+            "allocations": [{**row, "acquisition_fmv": "100.000000"} for row in allocations],
         },
         headers={"Idempotency-Key": token or str(uuid4())},
     )
@@ -94,6 +94,7 @@ def test_purchase_roundtrip_retry_generic_plan_and_delete(app, stock):
         "purchase_date": "2022-06-01",
         "quantity": 20,
         "plan_name": "ESPP",
+        "acquisition_fmv": "0.000000",
     }
     assert purchase(client, stock_id, token=key).get_json() == saved
     assert (

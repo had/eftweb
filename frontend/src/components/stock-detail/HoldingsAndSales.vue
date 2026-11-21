@@ -13,7 +13,7 @@ const props = defineProps({
   today: { type: String, default: () => localDate() },
   busy: Boolean,
 })
-defineEmits(['delete-sale'])
+defineEmits(['delete-sale', 'delete-all-sales'])
 const portfolio = computed(() =>
   buildHoldings(props.grants, props.sales, props.today, props.purchases),
 )
@@ -200,16 +200,25 @@ const firstDate = computed(() => new Date(start.value).toISOString().slice(0, 10
             Newest first · Gross sale proceeds in USD
           </p>
         </div>
-        <label class="flex items-center gap-2 text-sm">
-          Year
-          <select
-            v-model="selectedYear"
-            class="rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        <div class="flex flex-wrap items-center gap-3">
+          <Button
+            variant="outline"
+            class="text-destructive hover:text-destructive"
+            :disabled="busy || !sales.length"
+            @click="$emit('delete-all-sales')"
+            ><Trash2 class="h-4 w-4" /> Delete all sales</Button
           >
-            <option v-for="year in years" :key="year" :value="year">{{ year }}</option>
-            <option value="all">All years</option>
-          </select>
-        </label>
+          <label class="flex items-center gap-2 text-sm">
+            Year
+            <select
+              v-model="selectedYear"
+              class="rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option v-for="year in years" :key="year" :value="year">{{ year }}</option>
+              <option value="all">All years</option>
+            </select>
+          </label>
+        </div>
       </CardHeader>
       <CardContent class="overflow-x-auto px-0">
         <table class="w-full min-w-[860px] text-sm">

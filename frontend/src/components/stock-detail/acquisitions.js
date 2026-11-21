@@ -28,6 +28,7 @@ export function acquisitionLots(grants = [], purchases = []) {
       title: purchase.planName,
       date: purchase.purchaseDate,
       quantity: purchase.quantity,
+      acquisition_fmv: purchase.acquisition_fmv,
       color: purchaseColor,
     })),
   ].sort(

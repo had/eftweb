@@ -221,3 +221,123 @@ def test_failed_delete_preserves_the_grant_and_releases(app, stock):
     assert StockGrant.query.count() == 1
     assert GrantVesting.query.count() == 3
     assert client.get(f"/api/stocks/{stock.id}/grants").get_json() == [saved]
+
+
+def test_edit_grant_metadata_preserves_acquisitions_and_creation_retry(app, stock):
+    from datetime import date
+
+    from app.family.models import FamilyMember
+    from app.stocks.models import StockGrant
+
+    stock.family.members.append(
+        FamilyMember(
+            role="taxpayer1",
+            position=1,
+            first_name="Ada",
+            last_name="Example",
+            date_of_birth=date(1980, 1, 1),
+        )
+    )
+    db.session.commit()
+    client = app.test_client()
+    token = str(uuid4())
+    saved = post(client, stock, token=token).get_json()
+    endpoint = f"/api/stocks/{stock.id}/grants/{saved['id']}"
+    changes = {
+        "title": "  Updated award  ",
+        "grant_number": "  000234  ",
+        "grant_date": "2020-01-02",
+        "approval_date": "2016-12-31",
+        "taxpayer_role": "taxpayer1",
+    }
+    response = client.patch(endpoint, json=changes)
+    assert response.status_code == 200
+    updated = response.get_json()
+    assert updated["title"] == "Updated award"
+    assert updated["grant_number"] == "000234"
+    for field in ("grant_date", "approval_date", "taxpayer_role"):
+        assert updated[field] == changes[field]
+    for field in ("vestings", "quantity", "vesting_start_date", "schedule_type", "customized"):
+        assert updated[field] == saved[field]
+    # Correcting metadata does not change the identity of an already-created grant.
+    assert post(client, stock, token=token).get_json() == updated
+    assert StockGrant.query.count() == 1
+    cleared = client.patch(
+        endpoint, json={"approval_date": None, "taxpayer_role": None, "grant_number": None}
+    ).get_json()
+    assert all(
+        cleared[field] is None for field in ("approval_date", "taxpayer_role", "grant_number")
+    )
+    default_title = client.patch(
+        endpoint, json={"title": " ", "grant_date": "2021-01-02"}
+    ).get_json()
+    assert default_title["title"] == "AAPL-2021-01-02"
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {},
+        [],
+        {"quantity": 1},
+        {"vestings": []},
+        {"grant_date": "2026-02-30"},
+        {"grant_date": None},
+        {"approval_date": "2015-08-07"},
+        {"approval_date": "2026-02-30"},
+        {"approval_date": ""},
+        {"taxpayer_role": "taxpayer2"},
+        {"taxpayer_role": ["taxpayer1"]},
+        {"title": None},
+        {"title": "x" * 257},
+    ],
+)
+def test_invalid_metadata_edit_is_atomic(app, stock, changes):
+    client = app.test_client()
+    saved = post(client, stock).get_json()
+    endpoint = f"/api/stocks/{stock.id}/grants/{saved['id']}"
+    body = (
+        {"grant_number": "CHANGED", **changes} if isinstance(changes, dict) and changes else changes
+    )
+    assert client.patch(endpoint, json=body).status_code == 400
+    assert client.get(f"/api/stocks/{stock.id}/grants").get_json() == [saved]
+
+
+def test_metadata_edit_scope_archives_uniqueness_and_commit_failure(app, stock):
+    from app.stocks.models import Stock, StockGrant
+
+    client = app.test_client()
+    saved = post(client, stock, payload(grant_number="001")).get_json()
+    other_grant = post(client, stock, payload(grant_number="002")).get_json()
+    endpoint = f"/api/stocks/{stock.id}/grants/{saved['id']}"
+    assert (
+        client.patch(
+            endpoint, json={"title": "Changed", "grant_number": other_grant["grant_number"]}
+        ).status_code
+        == 409
+    )
+    assert client.get(f"/api/stocks/{stock.id}/grants").get_json()[0] == saved
+    other = Stock(family_id=stock.family_id, name="Other", symbol="OTHER")
+    db.session.add(other)
+    db.session.commit()
+    assert (
+        client.patch(
+            f"/api/stocks/{other.id}/grants/{saved['id']}", json={"grant_date": "2020-01-01"}
+        ).status_code
+        == 404
+    )
+
+    def fail_update(*_):
+        raise SQLAlchemyError("Simulated update failure")
+
+    event.listen(StockGrant, "before_update", fail_update)
+    try:
+        assert client.patch(endpoint, json={"grant_date": "2020-01-01"}).status_code == 500
+    finally:
+        event.remove(StockGrant, "before_update", fail_update)
+    assert client.get(f"/api/stocks/{stock.id}/grants").get_json()[0] == saved
+    for archive_family in (False, True):
+        stock.is_archived = not archive_family
+        stock.family.is_archived = archive_family
+        db.session.commit()
+        assert client.patch(endpoint, json={"grant_date": "2020-01-01"}).status_code == 410

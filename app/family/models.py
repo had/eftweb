@@ -32,14 +32,22 @@ class Family(db.Model):
     @property
     def taxpayer1(self):
         return next(
-            (member for member in self.members if member.role == "taxpayer1" and member.position == 1),
+            (
+                member
+                for member in self.members
+                if member.role == "taxpayer1" and member.position == 1
+            ),
             None,
         )
 
     @property
     def taxpayer2(self):
         return next(
-            (member for member in self.members if member.role == "taxpayer2" and member.position == 1),
+            (
+                member
+                for member in self.members
+                if member.role == "taxpayer2" and member.position == 1
+            ),
             None,
         )
 
@@ -68,7 +76,9 @@ class FamilyMember(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
-    family_id = db.Column(db.Integer, db.ForeignKey("families.id", ondelete="CASCADE"), nullable=False)
+    family_id = db.Column(
+        db.Integer, db.ForeignKey("families.id", ondelete="CASCADE"), nullable=False
+    )
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
     date_of_birth = db.Column(db.Date, nullable=False)
@@ -91,11 +101,14 @@ class TaxReturn(db.Model):
     __table_args__ = (db.UniqueConstraint("family_id", "year", name="uq_tax_return_family_year"),)
 
     id = db.Column(db.Integer, primary_key=True)
-    family_id = db.Column(db.Integer, db.ForeignKey("families.id", ondelete="CASCADE"), nullable=False)
+    family_id = db.Column(
+        db.Integer, db.ForeignKey("families.id", ondelete="CASCADE"), nullable=False
+    )
     year = db.Column(db.Integer, nullable=False)
     has_income_statements = db.Column(db.Boolean, nullable=False, default=False)
     has_donation_statements = db.Column(db.Boolean, nullable=False, default=False)
     has_investment_statements = db.Column(db.Boolean, nullable=False, default=False)
+    has_stock_statements = db.Column(db.Boolean, nullable=False, default=False)
     is_archived = db.Column(db.Boolean, nullable=False, default=False)
 
     family = db.relationship("Family", back_populates="tax_returns")
@@ -118,6 +131,14 @@ class TaxReturn(db.Model):
         order_by="IfuStatement.id",
     )
 
+    stock_tax_receipts = db.relationship("StockTaxReceipt", cascade="all, delete-orphan")
+    capital_gain_statements = db.relationship(
+        "CapitalGainStatement",
+        back_populates="tax_return",
+        cascade="all, delete-orphan",
+        order_by="CapitalGainStatement.id",
+    )
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -126,6 +147,7 @@ class TaxReturn(db.Model):
             "has_income_statements": self.has_income_statements,
             "has_donation_statements": self.has_donation_statements,
             "has_investment_statements": self.has_investment_statements,
+            "has_stock_statements": self.has_stock_statements,
             "is_archived": self.is_archived,
         }
 
@@ -237,3 +259,77 @@ class IfuStatement(db.Model):
                 for field in IFU_FIELD_KEYS
             },
         }
+
+
+class CapitalGainStatement(db.Model):
+    __tablename__ = "capital_gain_statements"
+    __table_args__ = (db.UniqueConstraint("tax_return_id", "source_key", name="uq_capital_source"),)
+    id = db.Column(db.Integer, primary_key=True)
+    tax_return_id = db.Column(
+        db.Integer, db.ForeignKey("tax_returns.id", ondelete="CASCADE"), nullable=False
+    )
+    source_key = db.Column(db.String(80), nullable=True)
+    title = db.Column(db.String(256), nullable=False)
+    stock_id = db.Column(
+        db.Integer, nullable=True
+    )  # Snapshot identity, independent of the live ledger.
+    computed = db.Column(db.JSON, nullable=False, default=dict)
+    reported = db.Column(db.JSON, nullable=False, default=dict)
+    metadata_snapshot = db.Column(db.JSON, nullable=False, default=dict)
+    tax_return = db.relationship("TaxReturn", back_populates="capital_gain_statements")
+    lines = db.relationship(
+        "CapitalGainHelperLine",
+        cascade="all, delete-orphan",
+        order_by="CapitalGainHelperLine.position",
+    )
+
+    def to_dict(self, details=False):
+        result = {
+            "id": self.id,
+            "tax_return_id": self.tax_return_id,
+            "title": self.title,
+            "stock_id": self.stock_id,
+            "source_key": self.source_key,
+            "computed": self.computed,
+            "reported": self.reported,
+            "metadata": self.metadata_snapshot,
+        }
+        if details:
+            result["lines"] = [line.data for line in self.lines]
+        return result
+
+
+class CapitalGainHelperLine(db.Model):
+    __tablename__ = "capital_gain_helper_lines"
+    id = db.Column(db.Integer, primary_key=True)
+    statement_id = db.Column(
+        db.Integer, db.ForeignKey("capital_gain_statements.id", ondelete="CASCADE"), nullable=False
+    )
+    position = db.Column(db.Integer, nullable=False)
+    data = db.Column(db.JSON, nullable=False)
+
+
+class StockTaxReceipt(db.Model):
+    __tablename__ = "stock_tax_receipts"
+    __table_args__ = (db.UniqueConstraint("tax_return_id", "token", name="uq_stock_tax_receipt"),)
+    id = db.Column(db.Integer, primary_key=True)
+    tax_return_id = db.Column(
+        db.Integer, db.ForeignKey("tax_returns.id", ondelete="CASCADE"), nullable=False
+    )
+    token = db.Column(db.String(36), nullable=False)
+    request_hash = db.Column(db.String(64), nullable=False)
+    result = db.Column(db.JSON, nullable=False)
+
+
+class UsdEurRate(db.Model):
+    __tablename__ = "usd_eur_rates"
+    date = db.Column(db.Date, primary_key=True)
+    usd_per_eur = db.Column(db.Numeric(20, 12), nullable=False)
+    source = db.Column(db.String(256), nullable=False, default="ECB")
+
+
+class FxCoverage(db.Model):
+    __tablename__ = "fx_coverage"
+    id = db.Column(db.Integer, primary_key=True)
+    first_date = db.Column(db.Date, nullable=False)
+    last_date = db.Column(db.Date, nullable=False)

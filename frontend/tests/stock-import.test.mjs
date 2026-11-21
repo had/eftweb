@@ -36,7 +36,7 @@ const sale = (overrides = {}) => ({
   matching_issues: [],
   possible_duplicate_ids: [],
   sources: [{ plan_type: 'RS', date: '2025-03-01', grant_number: '00123', quantity: 20 }],
-  allocations: [{ vesting_id: 1, quantity: 20 }],
+  allocations: [{ vesting_id: 1, quantity: 20, acquisition_fmv: '100.000000' }],
   ...overrides,
 })
 const review = (overrides = {}) => ({
@@ -70,7 +70,11 @@ const draftsFor = (preview) =>
       {
         skip: sale.skip,
         reviewed: false,
-        allocations: sale.allocations.map((row) => ({ lot: lotKey(row), quantity: row.quantity })),
+        allocations: sale.allocations.map((row) => ({
+          lot: lotKey(row),
+          quantity: row.quantity,
+          acquisitionFmv: row.acquisition_fmv,
+        })),
       },
     ]),
   )
@@ -197,7 +201,7 @@ test('modal previews, confirms multipart data, blocks double clicks and reports 
   assert.equal(form.get('file').name, 'sample.xlsx')
   assert.equal(form.get('stock_revision'), 'revision-1')
   assert.deepEqual(JSON.parse(form.get('decisions')), {
-    'order-1': { skip: false, reviewed: false },
+    'order-1': { skip: false, reviewed: false, order_fee: '0' },
   })
   assert.match(options.headers['Idempotency-Key'], /^[0-9a-f-]{36}$/)
   pending.resolve({

@@ -64,11 +64,133 @@ def payload(stock, **overrides):
 
 
 def post(client, stock, data=None, token=None):
+    data = payload(stock) if data is None else data
+    if isinstance(data, dict) and isinstance(data.get("allocations"), list):
+        data = {
+            **data,
+            "allocations": [
+                {**row, "acquisition_fmv": "100.000000"} if isinstance(row, dict) else row
+                for row in data["allocations"]
+            ],
+        }
     return client.post(
         f"/api/stocks/{stock.id}/sales",
-        json=payload(stock) if data is None else data,
+        json=data,
         headers={"Idempotency-Key": token or str(uuid4())},
     )
+
+
+def test_delete_all_sales_restores_lots_across_years_and_keeps_other_stocks(app, stock):
+    from app.stocks.models import Stock, StockPurchase, StockSaleAllocation
+
+    client = app.test_client()
+    post(client, stock)
+    post(client, stock, payload(stock, transaction_date="2024-01-01"))
+    purchase = StockPurchase(
+        stock_id=stock.id,
+        purchase_date=date(2021, 1, 1),
+        quantity=10,
+        plan_name="ESPP",
+        acquisition_fmv=100,
+        creation_token=str(uuid4()),
+        request_hash="purchase",
+    )
+    other = Stock(family=stock.family, name="Other holding", symbol=stock.symbol)
+    other_purchase = StockPurchase(
+        stock=other,
+        purchase_date=date(2021, 1, 1),
+        quantity=10,
+        plan_name="ESPP",
+        acquisition_fmv=100,
+        creation_token=str(uuid4()),
+        request_hash="other",
+    )
+    db.session.add_all([purchase, other_purchase])
+    db.session.commit()
+    assert (
+        post(
+            client,
+            stock,
+            payload(stock, quantity=5, allocations=[{"purchase_id": purchase.id, "quantity": 5}]),
+        ).status_code
+        == 201
+    )
+    assert (
+        post(
+            client,
+            other,
+            {
+                "transaction_date": "2024-01-01",
+                "quantity": 5,
+                "proceeds_per_share": "110",
+                "allocations": [{"purchase_id": other_purchase.id, "quantity": 5}],
+            },
+        ).status_code
+        == 201
+    )
+    grants = client.get(f"/api/stocks/{stock.id}/grants").get_json()
+    purchases = client.get(f"/api/stocks/{stock.id}/purchases").get_json()
+    other_sales = client.get(f"/api/stocks/{other.id}/sales").get_json()
+    endpoint = f"/api/stocks/{stock.id}/sales"
+    assert len(client.get(endpoint).get_json()) == 3
+    assert client.delete(endpoint).status_code == 204
+    assert client.get(endpoint).get_json() == []
+    assert client.get(f"/api/stocks/{stock.id}/grants").get_json() == grants
+    assert client.get(f"/api/stocks/{stock.id}/purchases").get_json() == purchases
+    assert client.get(f"/api/stocks/{other.id}/sales").get_json() == other_sales
+    assert StockSaleAllocation.query.count() == 1
+    assert client.delete(endpoint).status_code == 204
+    # The original lot's full balance is available again.
+    assert (
+        post(
+            client,
+            stock,
+            payload(
+                stock,
+                quantity=100,
+                allocations=[{"vesting_id": stock.grants[0].vestings[0].id, "quantity": 100}],
+            ),
+        ).status_code
+        == 201
+    )
+
+
+def test_delete_all_sales_is_atomic_and_retryable(app, stock):
+    from app.stocks.models import StockSale, StockSaleAllocation
+
+    client = app.test_client()
+    post(client, stock)
+    post(client, stock, payload(stock, transaction_date="2024-01-01"))
+    endpoint = f"/api/stocks/{stock.id}/sales"
+    original = client.get(endpoint).get_json()
+    deleted = []
+
+    def fail_second_delete(mapper, connection, target):
+        deleted.append(target.id)
+        if len(deleted) == 2:
+            raise SQLAlchemyError("Simulated later deletion failure")
+
+    event.listen(StockSale, "before_delete", fail_second_delete)
+    try:
+        assert client.delete(endpoint).status_code == 500
+    finally:
+        event.remove(StockSale, "before_delete", fail_second_delete)
+    assert client.get(endpoint).get_json() == original
+    assert StockSaleAllocation.query.count() == 2
+    assert client.delete(endpoint).status_code == 204
+    assert StockSaleAllocation.query.count() == 0
+
+
+def test_delete_all_sales_respects_missing_and_archive_rules(app, stock):
+    client = app.test_client()
+    endpoint = f"/api/stocks/{stock.id}/sales"
+    post(client, stock)
+    assert client.delete("/api/stocks/999999/sales").status_code == 404
+    for archived_family in (False, True):
+        stock.is_archived = not archived_family
+        stock.family.is_archived = archived_family
+        db.session.commit()
+        assert client.delete(endpoint).status_code == 410
 
 
 def test_round_trip_multiple_pockets_idempotent_retry_and_grant_protection(app, stock):
@@ -299,7 +421,13 @@ def test_concurrent_sales_cannot_oversell_a_pocket(app, stock, same_token):
     data = payload(
         stock,
         quantity=70,
-        allocations=[{"vesting_id": stock.grants[0].vestings[0].id, "quantity": 70}],
+        allocations=[
+            {
+                "vesting_id": stock.grants[0].vestings[0].id,
+                "quantity": 70,
+                "acquisition_fmv": "100.000000",
+            }
+        ],
     )
     endpoint = f"/api/stocks/{stock.id}/sales"
     db.session.remove()

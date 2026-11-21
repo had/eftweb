@@ -95,7 +95,10 @@ function setupComponent(t, path, dependencies, exposed) {
 function mountModal(t) {
   const props = Vue.reactive({
     open: true,
-    grants: grants(),
+    grants: grants().map((g) => ({
+      ...g,
+      vestings: g.vestings.map((v) => ({ ...v, acquisition_fmv: '100.000000' })),
+    })),
     sales: [],
     today: '2026-10-29',
     saving: false,
@@ -210,7 +213,10 @@ test('modal validates allocations and emits one independent draft only on confir
   assert.equal(events.length, 1)
   assert.equal(events[0][0], 'confirmed')
   assert.equal(events[0][1].quantity, 40)
-  assert.deepEqual(events[0][1].allocations, draft().allocations)
+  assert.deepEqual(
+    events[0][1].allocations,
+    draft().allocations.map((a) => ({ ...a, acquisitionFmv: '100.000000' })),
+  )
   props.saving = true
   await Vue.nextTick()
   modal.close()
@@ -439,4 +445,58 @@ test('detail keeps failed sale dialogs open and ignores completion after navigat
   assert.equal(view.showRecordSale.value, true)
   assert.equal(view.entry.value.sales.length, 0)
   assert.equal(store.forStock(1).sales.length, 1)
+})
+
+test('bulk deletion requires confirmation, preserves failures and stays scoped during navigation', async (t) => {
+  const store = mockStore(t)
+  const route = Vue.reactive({ params: { stockId: '1' } })
+  const view = setupComponent(
+    t,
+    '../src/views/StockDetailView.vue',
+    {
+      useRoute: () => route,
+      useStockGrantsStore: () => store,
+      useStockQuotesStore: () => useStockQuotesStore(createPinia()),
+      formatStockValue,
+      onMounted: () => {},
+      onBeforeUnmount: () => {},
+    },
+    'showDeleteAllSales, requestDeleteAllSales, deleteAllSales, entry',
+  )
+  await flush()
+  view.requestDeleteAllSales()
+  assert.equal(view.showDeleteAllSales.value, false)
+  await store.createSale(1, draft())
+  await store.createSale(1, { ...draft(), creationToken: 'another' })
+  let requests = 0
+  axios.delete = async () => {
+    requests++
+    throw new Error('Offline')
+  }
+  view.requestDeleteAllSales()
+  assert.equal(view.showDeleteAllSales.value, true)
+  assert.equal(requests, 0)
+  await view.deleteAllSales()
+  assert.equal(view.showDeleteAllSales.value, true)
+  assert.equal(view.entry.value.sales.length, 1)
+  const pending = deferred()
+  const urls = []
+  axios.delete = (url) => {
+    urls.push(url)
+    return pending.promise
+  }
+  const deleting = view.deleteAllSales()
+  assert.equal(store.forStock(1).deletingAllSales, true)
+  assert.equal(await store.createSale(1, draft()), null)
+  assert.equal(await store.deleteAllSales(1), false)
+  assert.equal(await store.deleteSale(1, 1), false)
+  route.params.stockId = '2'
+  await flush()
+  view.showDeleteAllSales.value = true
+  pending.resolve({})
+  await deleting
+  assert.deepEqual(urls, ['/api/stocks/1/sales'])
+  assert.equal(store.forStock(1).sales.length, 0)
+  assert.equal(view.showDeleteAllSales.value, true)
+  assert.equal(store.forStock(1).deletingAllSales, false)
 })

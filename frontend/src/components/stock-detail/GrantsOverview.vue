@@ -20,7 +20,7 @@ const props = defineProps({
   busy: Boolean,
   today: { type: String, default: () => localDate() },
 })
-defineEmits(['delete', 'delete-purchase', 'edit-grant-number'])
+defineEmits(['delete', 'delete-purchase', 'edit-grant'])
 const portfolio = computed(() => summarizePortfolio(props.grants, props.purchases, props.today))
 const rows = computed(() =>
   props.grants.map((grant) => {
@@ -95,6 +95,20 @@ const rows = computed(() =>
                   Grant number: {{ grant.grantNumber || 'Not entered' }}
                 </p>
                 <p class="mt-1 text-xs text-muted-foreground">
+                  Shareholder approval:
+                  {{ grant.approvalDate ? formatDate(grant.approvalDate) : 'Not entered' }}
+                </p>
+                <p class="mt-1 text-xs text-muted-foreground">
+                  Taxpayer:
+                  {{
+                    grant.taxpayerRole === 'taxpayer1'
+                      ? 'Taxpayer 1'
+                      : grant.taxpayerRole === 'taxpayer2'
+                        ? 'Taxpayer 2'
+                        : 'Not assigned'
+                  }}
+                </p>
+                <p class="mt-1 text-xs text-muted-foreground">
                   {{ grant.scheduleLabel }}{{ grant.customized ? ' · Customized' : '' }}
                 </p>
                 <div
@@ -135,10 +149,10 @@ const rows = computed(() =>
                 <Button
                   variant="ghost"
                   :disabled="busy"
-                  :aria-label="`Edit grant number for ${grant.title}`"
-                  @click="$emit('edit-grant-number', grant)"
+                  :aria-label="`Edit ${grant.title}`"
+                  @click="$emit('edit-grant', grant)"
                 >
-                  <Pencil class="h-4 w-4" /> Grant number
+                  <Pencil class="h-4 w-4" /> Edit
                 </Button>
                 <Button
                   variant="ghost"

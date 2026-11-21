@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo
 
 from app.constants import JAVASCRIPT_MAX_SAFE_INTEGER
 
+from .tax_inputs import amount
+
 
 def calendar_date(value, label):
     try:
@@ -70,6 +72,15 @@ def sale_payload(data, allow_empty=False):
         seen.add(key)
         allocations.append(
             {
+                **(
+                    {
+                        "acquisition_fmv": format(
+                            amount(row["acquisition_fmv"], "Acquisition FMV"), ".6f"
+                        )
+                    }
+                    if "acquisition_fmv" in row
+                    else {}
+                ),
                 source: source_id,
                 "quantity": positive_quantity(row.get("quantity"), "Allocated quantity"),
             }
@@ -81,6 +92,11 @@ def sale_payload(data, allow_empty=False):
         "quantity": quantity,
         "proceeds_per_share": format(price, ".6f"),
         "currency": "USD",
+        **(
+            {"fees": format(amount(data["fees"], "Fees", places=2), ".2f")}
+            if "fees" in data
+            else {}
+        ),
         # Preserve legacy RSU canonicalization so existing retry hashes remain valid.
         "allocations": sorted(
             allocations,
@@ -113,6 +129,27 @@ def allocation_error(data, pockets, used):
                 409,
             )
     return None
+
+
+def grant_tax_details(data, stock):
+    """Validate supplied grant tax metadata for both creation and correction."""
+    result = {}
+    if data.get("approval_date") is not None:
+        approval = calendar_date(data["approval_date"], "Shareholder approval date")
+        if approval < date(2015, 8, 8):
+            raise ValueError("Unsupported RSU regime: approval must be on or after 2015-08-08")
+        result["approval_date"] = approval.isoformat()
+    role = data.get("taxpayer_role")
+    if role is not None:
+        allowed = {
+            candidate
+            for candidate in ("taxpayer1", "taxpayer2")
+            if getattr(getattr(stock, "family", None), candidate, None)
+        }
+        if not isinstance(role, str) or role not in allowed:
+            raise ValueError("Select a taxpayer present in this family")
+        result["taxpayer_role"] = role
+    return result
 
 
 def grant_payload(data, stock, allow_empty=False):
@@ -148,6 +185,7 @@ def grant_payload(data, stock, allow_empty=False):
         raise ValueError("Scheduled shares must exactly match the granted quantity")
     number = grant_number_value(data.get("grant_number"))
     return {
+        **grant_tax_details(data, stock),
         **({"grant_number": number} if number is not None else {}),
         "title": title,
         "grant_date": grant_date.isoformat(),
