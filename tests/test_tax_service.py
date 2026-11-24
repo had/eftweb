@@ -2,7 +2,8 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from easyfrenchtax import TaxField
+from easyfrenchtax import TaxField, TaxSimulator
+from easyfrenchtax.tax_simulator import TaxParameters
 
 from app import create_app, db
 from app.family.models import (
@@ -14,7 +15,8 @@ from app.family.models import (
     TaxReturn,
 )
 from app.service import tax_service
-from app.service.tax_service import _prepare_tax_input, estimate_tax
+from app.service.tax_service import _calculation_details, _prepare_tax_input, estimate_tax
+from app.stocks import models as stock_models  # noqa: F401 — register Family's stock relationship
 
 
 @pytest.fixture()
@@ -114,19 +116,115 @@ def tax_return(app):
 def test_estimation_endpoint_returns_real_numeric_totals(app, tax_return):
     response = app.test_client().get(f"/api/tax-returns/{tax_return.id}/estimation")
     assert response.status_code == 200
-    assert response.get_json() == {"net_taxes": 9377.0, "net_social_taxes": 155.0}
-    assert all(isinstance(value, (int, float)) for value in response.get_json().values())
-    assert estimate_tax(tax_return.id) == response.get_json()
+    result = response.get_json()
+    assert result["net_taxes"] == 9377.0
+    assert result["net_social_taxes"] == 155.0
+    assert result["reference_fiscal_income"] == 55000
+    assert result["household_shares"] == 1
+    assert result["marginal_tax_rate"] == 0.3
+    assert sum(band["income"] for band in result["progressive_tax"]["brackets"]) == 54000
+    assert result["progressive_tax"]["scale_tax"] == 9365
+    assert result["fiscal_advantages"] == {"limit": 10000, "used": 0, "excess": 0}
+    assert estimate_tax(tax_return.id) == result
 
 
-def test_estimation_supports_2026_filing_year_with_provisional_2025_values(app, tax_return):
-    expected = estimate_tax(tax_return.id)
+def test_estimation_uses_configured_filing_year_rates(app, tax_return):
+    previous = estimate_tax(tax_return.id)
     tax_return.year = 2026  # Filing in 2026 for income earned in 2025.
     db.session.commit()
 
     response = app.test_client().get(f"/api/tax-returns/{tax_return.id}/estimation")
     assert response.status_code == 200
-    assert response.get_json() == expected
+    result = response.get_json()
+    assert result["net_taxes"] == 9316
+    assert result["net_social_taxes"] == previous["net_social_taxes"]
+    assert result["reference_fiscal_income"] == previous["reference_fiscal_income"]
+    assert result["progressive_tax"]["brackets"][0]["upper_bound"] == 11600
+
+
+@pytest.mark.parametrize("income", [0, 10000, 20000, 50000, 200000, 1000000])
+def test_progressive_bands_partition_income_and_contribute_tax(income):
+    simulator = TaxSimulator(2025, {})
+    simulator.state[TaxField.TAXABLE_INCOME] = income
+    simulator.compute_tax_before_reductions()
+    progressive = _calculation_details(simulator)["progressive_tax"]
+    assert sum(band["income"] for band in progressive["brackets"]) == income
+    assert sum(band["tax"] for band in progressive["brackets"]) == pytest.approx(progressive["scale_tax"], abs=0.5)
+    assert progressive["brackets"][0]["tax"] == 0
+    assert progressive["brackets"][-1]["upper_bound"] is None
+    for band in progressive["brackets"]:
+        assert band["tax"] == pytest.approx(band["income"] * band["rate"], abs=0.01)
+
+
+def test_progressive_details_follow_custom_parameters_and_household_shares(monkeypatch):
+    monkeypatch.setitem(tax_service.year_tax_parameters, 2098, TaxParameters(
+        family_quotient_benefices_capping=1800,
+        slices_thresholds=[100, 200], slices_rates=[0.1, 0.2],
+        fees_10p_deduction_ceiling=100, fees_10p_deduction_floor=0,
+    ))
+    simulator = TaxSimulator(2098, {
+        TaxField.MARRIED: True, TaxField.NB_CHILDREN: 1, TaxField.SALARY_1_1AJ: 500,
+    })
+    result = _calculation_details(simulator)["progressive_tax"]
+    assert simulator.state[TaxField.HOUSEHOLD_SHARES] == 2.5
+    assert [band["upper_bound"] for band in result["brackets"]] == [250, 500, None]
+    assert [band["income"] for band in result["brackets"]] == [250, 200, 0]
+    assert result["scale_tax"] == 20
+
+
+def test_empty_income_has_no_negative_chart_values():
+    details = _calculation_details(TaxSimulator(2025, {}))
+    assert details["progressive_tax"]["taxable_income"] == 0
+    assert all(band["income"] == 0 for band in details["progressive_tax"]["brackets"])
+    assert details["donation_buckets"][1]["limit"] == 0
+    assert details["fiscal_advantages"]["used"] == 0
+
+
+def test_donations_without_taxable_income_have_no_66_percent_capacity():
+    simulator = TaxSimulator(2025, {
+        TaxField.CHARITY_DONATION_7UD: 1500, TaxField.CHARITY_DONATION_7UF: 100,
+    })
+    details = _calculation_details(simulator)
+    second = details["donation_buckets"][1]
+    assert second["donated"] == 600
+    assert second["eligible"] == second["limit"] == second["reduction"] == 0
+    assert second["overflow"] == 600
+    assert details["fiscal_advantages"]["used"] == 0
+
+
+def test_donation_overflow_and_limits_match_simulator_without_using_global_ceiling():
+    simulator = TaxSimulator(2025, {
+        TaxField.SALARY_1_1AJ: 20000,
+        TaxField.CHARITY_DONATION_7UD: 2000,
+        TaxField.CHARITY_DONATION_7UF: 20000,
+    })
+    details = _calculation_details(simulator)
+    first, second = details["donation_buckets"]
+    assert first == {"rate": 0.75, "donated": 2000, "eligible": 1000, "limit": 1000, "reduction": 750, "overflow": 1000}
+    assert second == {"rate": 0.66, "donated": 21000, "eligible": 3600, "limit": 3600, "reduction": 2376, "overflow": 17400}
+    assert first["reduction"] + second["reduction"] == simulator.state[TaxField.CHARITY_REDUCTION]
+    assert details["fiscal_advantages"] == {"limit": 10000, "used": 0, "excess": 0}
+
+
+def test_donation_details_preserve_simulator_rounding():
+    simulator = TaxSimulator(2025, {
+        TaxField.SALARY_1_1AJ: 60000, TaxField.CHARITY_DONATION_7UF: 100.5,
+    })
+    second = _calculation_details(simulator)["donation_buckets"][1]
+    assert second["eligible"] == 101
+    assert second["reduction"] == pytest.approx(simulator.state[TaxField.CHARITY_REDUCTION])
+
+
+def test_global_advantage_usage_is_capped_and_excludes_donations():
+    simulator = TaxSimulator(2025, {
+        TaxField.SALARY_1_1AJ: 200000,
+        TaxField.CHARITY_DONATION_7UF: 1000,
+        TaxField.SME_CAPITAL_SUBSCRIPTION_7CF: 50000,
+        TaxField.HOME_SERVICES_7DB: 10000,
+    })
+    assert _calculation_details(simulator)["fiscal_advantages"] == {
+        "limit": 10000, "used": 10000, "excess": 4000,
+    }
 
 
 @pytest.mark.parametrize("group", ["income", "donation", "investment"])

@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import { setImmediate } from 'node:timers/promises'
 import test from 'node:test'
 import * as Vue from 'vue'
+import * as icons from 'lucide-vue-next'
+import * as reka from 'reka-ui'
 import { compileScript, parse } from 'vue/compiler-sfc'
 import { renderToString } from 'vue/server-renderer'
 
@@ -147,18 +149,27 @@ test('older statement responses cannot overwrite the current return', async (t) 
   assert.equal(view.loading.value, false)
 })
 
-const summary = readComponent('../src/components/tax-return-detail/TaxReturnSummary.vue')
-const compiled = compileScript(summary, { id: 'summary-test', inlineTemplate: true }).content
-const summaryCode = compiled
+const card = Vue.defineComponent({ setup: (_, { slots }) => () => Vue.h('div', slots.default?.()) })
+const cards = { Card: card, CardContent: card, CardHeader: card, CardTitle: card }
+function compileComponent(descriptor, InfoTooltip, ProgressiveTaxRuler, tooltipComponents = reka) {
+  const compiled = compileScript(descriptor, { id: 'summary-test', inlineTemplate: true }).content
+  const code = compiled
   .replace(/^import \{([^}]+)\} from ["']vue["']$/gm,
     (_, names) => `const {${names.replace(/ as /g, ': ')}} = Vue`)
   .replace(/^import \{([^}]+)\} from ["']@\/components\/ui\/card["']$/gm,
     (_, names) => `const {${names}} = cards`)
+  .replace(/^import \{([^}]+)\} from ["']lucide-vue-next["']$/gm,
+    (_, names) => `const {${names}} = icons`)
+  .replace(/^import \{([^}]+)\} from ["']reka-ui["']$/gm,
+    (_, names) => `const {${names}} = reka`)
+  .replace(/^import InfoTooltip from ["']@\/components\/InfoTooltip.vue["']$/gm, '')
+  .replace(/^import ProgressiveTaxRuler from ["']@\/components\/tax-return-detail\/ProgressiveTaxRuler.vue["']$/gm, '')
   .replace('export default', 'return')
-const card = Vue.defineComponent({ setup: (_, { slots }) => () => Vue.h('div', slots.default?.()) })
-const Summary = new Function('Vue', 'cards', summaryCode)(Vue, {
-  Card: card, CardContent: card, CardHeader: card, CardTitle: card,
-})
+  return new Function('Vue', 'cards', 'icons', 'reka', 'InfoTooltip', 'ProgressiveTaxRuler', code)(Vue, cards, icons, tooltipComponents, InfoTooltip, ProgressiveTaxRuler)
+}
+const InfoTooltip = compileComponent(readComponent('../src/components/InfoTooltip.vue'))
+const ProgressiveTaxRuler = compileComponent(readComponent('../src/components/tax-return-detail/ProgressiveTaxRuler.vue'))
+const Summary = compileComponent(readComponent('../src/components/tax-return-detail/TaxReturnSummary.vue'), InfoTooltip, ProgressiveTaxRuler)
 
 test('summary renders currency values including zero and the partial-estimate note', async () => {
   const html = await renderToString(Vue.createSSRApp(Summary, {
@@ -176,8 +187,137 @@ test('summary renders loading placeholders and unavailable estimates', async () 
   const loading = await renderToString(Vue.createSSRApp(Summary, { estimationLoading: true }))
   assert.match(loading, /Loading net taxes/)
   assert.match(loading, /Loading net social taxes/)
+  assert.match(loading, /Loading estimated rfr/)
+  assert.match(loading, /Loading parts fiscales/)
+  assert.match(loading, /Loading marginal tax rate/)
   const error = await renderToString(Vue.createSSRApp(Summary, { estimationError: 'Unavailable for 2026' }))
   assert.match(error, /Unavailable for 2026/)
   assert.match(error, /—/)
   assert.doesNotMatch(error, /€0\.00/)
+})
+
+const detailedEstimate = {
+  net_taxes: 9316,
+  net_social_taxes: 155,
+  reference_fiscal_income: 55000,
+  household_shares: 1,
+  marginal_tax_rate: 0.3,
+  progressive_tax: {
+    taxable_income: 54000,
+    scale_tax: 9304,
+    brackets: [
+      { lower_bound: 0, upper_bound: 11600, rate: 0, income: 11600, tax: 0 },
+      { lower_bound: 11600, upper_bound: 29579, rate: 0.11, income: 17979, tax: 1977.69 },
+      { lower_bound: 29579, upper_bound: 84577, rate: 0.3, income: 24421, tax: 7326.3 },
+      { lower_bound: 84577, upper_bound: 181917, rate: 0.41, income: 0, tax: 0 },
+      { lower_bound: 181917, upper_bound: null, rate: 0.45, income: 0, tax: 0 },
+    ],
+  },
+  donation_buckets: [
+    { rate: 0.75, donated: 1500, eligible: 1000, limit: 1000, reduction: 750, overflow: 500 },
+    { rate: 0.66, donated: 1500, eligible: 1500, limit: 10800, reduction: 990, overflow: 0 },
+  ],
+  fiscal_advantages: { limit: 10000, used: 0, excess: 0 },
+}
+
+test('summary keeps RFR, shares and marginal rate outside expandable details', async () => {
+  const html = await renderToString(Vue.createSSRApp(Summary, { estimate: detailedEstimate }))
+  const visible = html.split('aria-controls=')[0]
+  assert.match(visible, /Estimated RFR/)
+  assert.match(visible, /€55,000\.00/)
+  assert.match(visible, /Parts fiscales/)
+  assert.match(visible, /Marginal tax rate/)
+  assert.match(visible, /30%/)
+  assert.match(visible, /Partial estimate/)
+  assert.ok(html.indexOf('Partial estimate') < html.indexOf('class="border-t'))
+  assert.match(html, /aria-expanded="false"/)
+  assert.match(html, /aria-label="Show calculation details"/)
+  assert.match(html, /aria-hidden="true" inert/)
+})
+
+test('expanded view shows bucket fill and tax contributions with accessible donation meters', async () => {
+  const html = await renderToString(Vue.createSSRApp(Summary, { estimate: detailedEstimate }))
+  assert.match(html, /Scale tax €9,304\.00/)
+  assert.match(html, /€24,421\.00/)
+  assert.match(html, /€7,326\.30/)
+  assert.match(html, /44\.4%/)
+  assert.match(html, /Current band/)
+  assert.doesNotMatch(html, /<table/)
+  assert.match(html, /aria-label="11% band, €11,600\.00 – €29,579\.00\. Income in band €17,979\.00\. Filled 100%\. Tax contribution €1,977\.69\."/)
+  assert.match(html, /aria-label="75% donation bucket" aria-valuenow="100"/)
+  assert.match(html, /aria-label="Annual tax advantage ceiling" aria-valuenow="0"/)
+  assert.match(html, /aria-label="About progressive income tax"/)
+  assert.match(html, /aria-label="About donation buckets"/)
+  assert.match(html, /aria-label="About the annual tax advantage ceiling"/)
+  assert.doesNotMatch(html, /Only supported donations|Filled colours|Partial coverage|transferred to the 66% bucket/)
+})
+
+test('empty chart values and zero donation limits render without invalid widths', async () => {
+  const estimate = structuredClone(detailedEstimate)
+  estimate.progressive_tax.taxable_income = 0
+  estimate.progressive_tax.scale_tax = 0
+  estimate.progressive_tax.brackets.forEach((band) => { band.income = 0; band.tax = 0 })
+  estimate.donation_buckets.forEach((bucket) => {
+    bucket.donated = 0; bucket.eligible = 0; bucket.reduction = 0; bucket.overflow = 0
+  })
+  estimate.donation_buckets[1].limit = 0
+  const html = await renderToString(Vue.createSSRApp(Summary, { estimate }))
+  assert.doesNotMatch(html, /NaN|Infinity|width:-/)
+  assert.match(html, /aria-label="66% donation bucket" aria-valuenow="0"/)
+})
+
+test('top band is open ended and stale details stay hidden during loading or error', async () => {
+  const estimate = structuredClone(detailedEstimate)
+  estimate.progressive_tax.taxable_income = 200000
+  estimate.progressive_tax.brackets.at(-1).income = 18083
+  const html = await renderToString(Vue.createSSRApp(Summary, { estimate }))
+  assert.match(html, /45% band has no upper limit/)
+  assert.doesNotMatch(html, /NaN|Infinity/)
+  for (const state of [{ estimationLoading: true }, { estimationError: 'Unavailable' }]) {
+    const hidden = await renderToString(Vue.createSSRApp(Summary, { estimate, ...state }))
+    assert.doesNotMatch(hidden, /aria-label="Show calculation details"/)
+  }
+})
+
+test('an exact threshold keeps the fully filled preceding band current', async () => {
+  const estimate = structuredClone(detailedEstimate)
+  estimate.progressive_tax.taxable_income = 29579
+  estimate.progressive_tax.brackets[2].income = 0
+  estimate.progressive_tax.brackets[2].tax = 0
+  const html = await renderToString(Vue.createSSRApp(Summary, { estimate }))
+  const current = html.match(/aria-label="([^"]*Current band\.)"/)?.[1]
+  assert.match(current, /11%/)
+  assert.match(current, /100%/)
+})
+
+test('ruler tooltips preserve the former table details, including the open-ended band', async () => {
+  // Open the real tooltip content for SSR, with its portal rendered inline.
+  const Ruler = compileComponent(
+    readComponent('../src/components/tax-return-detail/ProgressiveTaxRuler.vue'),
+    undefined, undefined, {
+      ...reka,
+      TooltipRoot: Vue.defineComponent({
+        setup: (_, { slots }) => () => Vue.h(reka.TooltipRoot, { defaultOpen: true }, slots),
+      }),
+      TooltipPortal: Vue.defineComponent({ setup: (_, { slots }) => () => slots.default?.() }),
+    },
+  )
+  const renderRuler = (bands, taxableIncome) => renderToString(Vue.createSSRApp({
+    setup: () => () => Vue.h(reka.TooltipProvider, null, {
+      default: () => Vue.h(Ruler, { bands, taxableIncome, colors: ['red', 'blue', 'green', 'purple', 'teal'] }),
+    }),
+  }))
+  const html = await renderRuler(detailedEstimate.progressive_tax.brackets, 54000)
+  assert.match(html, /Income in band<\/dt><dd[^>]*>€17,979\.00/)
+  assert.match(html, /Filled<\/dt><dd[^>]*>100%/)
+  assert.match(html, /Tax contribution<\/dt><dd[^>]*>€1,977\.69/)
+  assert.match(html, /€11,600\.00 – €29,579\.00/)
+
+  const highest = structuredClone(detailedEstimate.progressive_tax.brackets)
+  highest.at(-1).income = 18083
+  highest.at(-1).tax = 8137.35
+  const top = await renderRuler(highest, 200000)
+  assert.match(top, /Over €181,917\.00/)
+  assert.match(top, /Filled<\/dt><dd[^>]*>No upper limit/)
+  assert.match(top, /Tax contribution<\/dt><dd[^>]*>€8,137\.35/)
 })

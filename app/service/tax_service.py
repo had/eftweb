@@ -1,8 +1,8 @@
 from collections import defaultdict
 from decimal import Decimal
 
-from easyfrenchtax import TaxField, TaxSimulator
-from easyfrenchtax.tax_simulator import year_tax_parameters
+from easyfrenchtax import TaxField, TaxInfoFlag, TaxSimulator
+from easyfrenchtax.tax_simulator import tax_round, year_tax_parameters
 
 from app import db
 from app.family.donation_types import DONATION_TYPES_BY_CODE
@@ -52,6 +52,86 @@ def _prepare_tax_input(family, income_statements, donation_statements, ifu_state
     return tax_input
 
 
+def _calculation_details(simulator):
+    """Describe the simulator's scale and caps using its active year parameters."""
+    state = simulator.state
+    shares = state[TaxField.HOUSEHOLD_SHARES]
+    taxable_income = max(float(state[TaxField.TAXABLE_INCOME]), 0)
+    thresholds = [float(value * shares) for value in simulator.parameters.slices_thresholds]
+    rates = [0, *simulator.parameters.slices_rates]
+    brackets = []
+    lower = 0
+    scale_tax = 0
+    for upper, rate in zip([*thresholds, None], rates, strict=True):
+        income = (
+            max(min(taxable_income, upper) - lower, 0)
+            if upper is not None
+            else max(taxable_income - lower, 0)
+        )
+        tax = income * rate
+        scale_tax += tax
+        brackets.append(
+            {
+                "lower_bound": lower,
+                "upper_bound": upper,
+                "rate": rate,
+                "income": tax_round(income, 2),
+                "tax": tax_round(tax, 2),
+            }
+        )
+        lower = upper
+
+    donation_75 = float(state[TaxField.CHARITY_DONATION_7UD])
+    donation_75_eligible = min(donation_75, 1000)
+    transferred = max(donation_75 - 1000, 0)
+    donation_66 = float(state[TaxField.CHARITY_DONATION_7UF]) + transferred
+    donation_66_limit = taxable_income * 0.2
+    # Match the library's whole-euro rounding of the 66% donation base.
+    donation_66_eligible = tax_round(min(donation_66, donation_66_limit))
+
+    # The library's textual flag can be negative when donations exceed tax.
+    # Use a nonnegative base so this meter never reports negative usage.
+    tax_after_donations = max(
+        state[TaxField.TAX_BEFORE_REDUCTIONS] - state[TaxField.CHARITY_REDUCTION], 0
+    )
+    advantages = (
+        min(state[TaxField.SME_SUBSCRIPTION_REDUCTION], tax_after_donations)
+        + state[TaxField.CHILDREN_DAYCARE_TAXCREDIT]
+        + state[TaxField.HOME_SERVICES_TAXCREDIT]
+    )
+
+    return {
+        "progressive_tax": {
+            "taxable_income": taxable_income,
+            "brackets": brackets,
+            "scale_tax": tax_round(scale_tax),
+        },
+        "donation_buckets": [
+            {
+                "rate": 0.75,
+                "donated": donation_75,
+                "eligible": donation_75_eligible,
+                "limit": 1000,
+                "reduction": tax_round(donation_75_eligible * 0.75, 2),
+                "overflow": transferred,
+            },
+            {
+                "rate": 0.66,
+                "donated": donation_66,
+                "eligible": donation_66_eligible,
+                "limit": tax_round(donation_66_limit, 2),
+                "reduction": tax_round(donation_66_eligible * 0.66, 2),
+                "overflow": tax_round(max(donation_66 - donation_66_limit, 0), 2),
+            },
+        ],
+        "fiscal_advantages": {
+            "limit": 10000,
+            "used": tax_round(min(advantages, 10000), 2),
+            "excess": tax_round(max(advantages - 10000, 0), 2),
+        },
+    }
+
+
 def estimate_tax(tax_return_id):
     """Estimate an active return using supported fields and filing-year rates."""
     tax_return = db.session.get(TaxReturn, tax_return_id)
@@ -70,8 +150,14 @@ def estimate_tax(tax_return_id):
         tax_return.donation_statements if tax_return.has_donation_statements else [],
         tax_return.ifu_statements if tax_return.has_investment_statements else [],
     )
-    tax_result = TaxSimulator(tax_return.year, tax_input, debug=False).state
+    simulator = TaxSimulator(tax_return.year, tax_input, debug=False)
+    tax_result = simulator.state
     return {
         "net_taxes": float(tax_result[TaxField.NET_TAXES]),
         "net_social_taxes": float(tax_result[TaxField.NET_SOCIAL_TAXES]),
+        "reference_fiscal_income": float(tax_result[TaxField.REFERENCE_FISCAL_INCOME]),
+        "household_shares": float(tax_result[TaxField.HOUSEHOLD_SHARES]),
+        "marginal_tax_rate": float(simulator.flags[TaxInfoFlag.MARGINAL_TAX_RATE].rstrip("%"))
+        / 100,
+        **_calculation_details(simulator),
     }
