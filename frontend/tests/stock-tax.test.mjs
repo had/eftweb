@@ -77,7 +77,7 @@ function setup(t, handler) {
 
 test('preview is temporary, preserves edits, requires all-stock acceptance and sends explicit replacement', async (t) => {
   const calls = []
-  const { view } = setup(t, async (method, url, body, options) => {
+  const { view, emitted } = setup(t, async (method, url, body, options) => {
     calls.push({ method, url, body, options })
     if (url.endsWith('/preview')) return { data: preparation() }
     return { data: { statements: [detail()], aggregate: { '3VG': '100' } } }
@@ -85,6 +85,7 @@ test('preview is temporary, preserves edits, requires all-stock acceptance and s
   await flush()
   await view.prepare()
   assert.equal(calls.filter((c) => c.method === 'post' && c.url.endsWith('/accept')).length, 0)
+  assert.equal(emitted.filter(([event]) => event === 'changed').length, 0)
   view.drafts.value['1'].capital_result = '123'
   view.rates.value = [{ date: '2024-01-10', rate: '0.9' }]
   await view.prepare()
@@ -98,6 +99,7 @@ test('preview is temporary, preserves edits, requires all-stock acceptance and s
   assert.match(request.options.headers['Idempotency-Key'], /^[0-9a-f-]{36}$/)
   assert.equal(view.preview.value, null)
   assert.equal(view.saved.value.statements.length, 1)
+  assert.equal(emitted.filter(([event]) => event === 'changed').length, 1)
 })
 
 test('recalculation updates untouched suggestions and retains only user overrides', async (t) => {
@@ -121,7 +123,7 @@ test('recalculation updates untouched suggestions and retains only user override
 
 test('acceptance errors preserve the draft and retry with the same key', async (t) => {
   const tokens = []
-  const { view } = setup(t, async (method, url, body, options) => {
+  const { view, emitted } = setup(t, async (method, url, body, options) => {
     if (url.endsWith('/preview')) return { data: preparation() }
     if (url.endsWith('/accept')) {
       tokens.push(options.headers['Idempotency-Key'])
@@ -137,11 +139,12 @@ test('acceptance errors preserve the draft and retry with the same key', async (
   assert.equal(tokens[0], tokens[1])
   assert.match(view.error.value, /source changed/)
   assert.ok(view.preview.value)
+  assert.equal(emitted.filter(([event]) => event === 'changed').length, 0)
 })
 
 test('saved helper details are reopened, contribution edits and manual sources use independent endpoints', async (t) => {
   const requests = []
-  const { view } = setup(t, async (method, url, body) => {
+  const { view, emitted } = setup(t, async (method, url, body) => {
     requests.push({ method, url, body })
     if (url.endsWith('/4')) return { data: { ...detail(), reported: body?.reported || fields() } }
     return { data: { statements: [detail()], aggregate: { '3VG': '100' } } }
@@ -159,6 +162,10 @@ test('saved helper details are reopened, contribution edits and manual sources u
     title: 'Other broker',
     capital_result: '-30',
   })
+  view.deleting.value = detail()
+  await view.remove()
+  assert.ok(requests.some((r) => r.method === 'delete' && r.url.endsWith('/4')))
+  assert.equal(emitted.filter(([event]) => event === 'changed').length, 3)
 })
 
 test('helper template renders every 2074 line and copy controls without hiding conversions', () => {

@@ -55,7 +55,8 @@ function mountDetail(t, getOverride = () => undefined) {
     `${script}
     return { estimate, estimationLoading, estimationError, loading, unavailable, taxReturn,
       incomeStatements, incomeStatementSaved, donationStatementSaved, ifuStatementSaved,
-      deleteIncomeStatement, deleteDonationStatement, deleteIfuStatement, settingsSaved }`,
+      deleteIncomeStatement, deleteDonationStatement, deleteIfuStatement, settingsSaved,
+      stockStatementsSaved }`,
   )
   const view = scope.run(() => setup(
     Vue.computed, (callback) => { unmount = callback }, Vue.ref, Vue.watch,
@@ -75,6 +76,7 @@ test('initial load and every saved/deleted statement refresh the estimate', asyn
     view.incomeStatementSaved, view.incomeStatementSaved,
     view.donationStatementSaved, view.donationStatementSaved,
     view.ifuStatementSaved, view.ifuStatementSaved,
+    view.stockStatementsSaved,
     () => view.deleteIncomeStatement({ id: 11 }),
     () => view.deleteDonationStatement({ id: 12 }),
     () => view.deleteIfuStatement({ id: 13 }),
@@ -89,6 +91,32 @@ test('initial load and every saved/deleted statement refresh the estimate', asyn
   assert.ok(requests.includes('/api/donation-statements/12'))
   assert.ok(requests.includes('/api/ifu-statements/13'))
 })
+
+for (const outcome of ['success', 'failure']) {
+  test(`stock changes refresh the estimate and ignore an older ${outcome} for the same return`, async (t) => {
+    const old = deferred()
+    const current = deferred()
+    const { view, requests } = mountDetail(t, (url, count) => {
+      if (url.endsWith('/estimation') && count === 1) return old.promise
+      if (url.endsWith('/estimation') && count === 2) return current.promise
+    })
+    await flush()
+    view.stockStatementsSaved()
+    assert.equal(requests.filter((url) => url.endsWith('/estimation')).length, 2)
+    if (outcome === 'success') old.resolve({ data: { net_taxes: 100 } })
+    else old.reject({ response: { data: { error: 'Old failure' } } })
+    await flush()
+    assert.equal(view.estimate.value, null)
+    assert.equal(view.estimationError.value, '')
+    assert.equal(view.estimationLoading.value, true)
+    current.resolve({ data: { net_taxes: 200, net_social_taxes: 30 } })
+    await flush()
+    assert.deepEqual(view.estimate.value, { net_taxes: 200, net_social_taxes: 30 })
+    assert.equal(view.estimationLoading.value, false)
+    // Refreshing stock estimates keeps the statement editor mounted.
+    assert.equal(requests.filter((url) => url.endsWith('/tax-returns')).length, 1)
+  })
+}
 
 test('estimation errors leave the return and its statements available', async (t) => {
   const { view } = mountDetail(t, (url) => {

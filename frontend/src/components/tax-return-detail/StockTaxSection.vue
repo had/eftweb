@@ -11,7 +11,7 @@ const props = defineProps({
   taxReturnId: { type: Number, required: true },
   filingYear: { type: Number, required: true },
 })
-const emit = defineEmits(['count'])
+const emit = defineEmits(['count', 'changed'])
 const saved = ref({ statements: [], aggregate: {} })
 const preview = ref(null)
 const drafts = ref({})
@@ -141,6 +141,7 @@ const accept = async () => {
     if (current !== generation) return
     saved.value = data
     emit('count', data.statements.length)
+    emit('changed')
     preview.value = null
     drafts.value = {}
     opened.value = null
@@ -180,6 +181,7 @@ const saveEdit = async () => {
         : { capital_result: editing.value.capital_result },
     })
     if (current !== generation) return
+    emit('changed')
     opened.value = data
     await refresh()
     if (current !== generation) return
@@ -198,6 +200,7 @@ const saveManual = async () => {
   try {
     await axios.post(`${base.value}/capital-gain-statements`, manual.value)
     if (current !== generation) return
+    emit('changed')
     manual.value = null
     await refresh()
     if (current !== generation) return
@@ -216,6 +219,7 @@ const remove = async () => {
   try {
     await axios.delete(`${base.value}/capital-gain-statements/${deleting.value.id}`)
     if (current !== generation) return
+    emit('changed')
     deleting.value = null
     opened.value = null
     editing.value = null
@@ -260,8 +264,8 @@ const remove = async () => {
           </div>
         </dl>
         <p class="text-xs text-muted-foreground">
-          Declaration boxes aggregate reported contributions from every source. Stock statements are
-          excluded from the partial tax estimate.
+          Declaration boxes aggregate reported contributions from every source. Saved stock statements
+          are included in the tax estimate.
         </p>
         <form v-if="manual" class="space-y-3 rounded border p-4" @submit.prevent="saveManual">
           <Label for="capital-source-name">Source name</Label

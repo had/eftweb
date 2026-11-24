@@ -7,6 +7,7 @@ from easyfrenchtax.tax_simulator import TaxParameters
 
 from app import create_app, db
 from app.family.models import (
+    CapitalGainStatement,
     DonationStatement,
     Family,
     FamilyMember,
@@ -122,6 +123,9 @@ def test_estimation_endpoint_returns_real_numeric_totals(app, tax_return):
     assert result["reference_fiscal_income"] == 55000
     assert result["household_shares"] == 1
     assert result["marginal_tax_rate"] == 0.3
+    assert result["tax_result"]["net_taxes"] == result["net_taxes"]
+    assert result["tax_result"]["salary_1_1AJ"] == 60000
+    assert result["flags"]["Marginal tax rate"] == "30%"
     assert sum(band["income"] for band in result["progressive_tax"]["brackets"]) == 54000
     assert result["progressive_tax"]["scale_tax"] == 9365
     assert result["fiscal_advantages"] == {"limit": 10000, "used": 0, "excess": 0}
@@ -140,6 +144,71 @@ def test_estimation_uses_configured_filing_year_rates(app, tax_return):
     assert result["net_social_taxes"] == previous["net_social_taxes"]
     assert result["reference_fiscal_income"] == previous["reference_fiscal_income"]
     assert result["progressive_tax"]["brackets"][0]["upper_bound"] == 11600
+
+
+@pytest.mark.parametrize("loss, gain, remaining_loss", [("-400", 600, 0), ("-1000", 0, 0), ("-1400", 0, 400)])
+def test_estimation_includes_reported_stock_boxes_and_nets_sources(
+    app, tax_return, loss, gain, remaining_loss
+):
+    baseline = estimate_tax(tax_return.id)
+    tax_return.has_stock_statements = True
+    tax_return.capital_gain_statements = [
+        CapitalGainStatement(
+            title="Saved stock", computed={"capital_result": "999999"},
+            reported={
+                "capital_result": "1000", "1TZ": "1200", "1UZ": "200",
+                "1WZ": "400", "1TT": "600", "1UT": "800",
+            },
+        ),
+        CapitalGainStatement(
+            title="Other source", reported={
+                "capital_result": loss, "1TZ": "300", "1UZ": "100",
+                "1WZ": "50", "1TT": "100", "1UT": "200",
+            },
+        ),
+    ]
+    # Statements from a different filing year must not enter this estimate.
+    db.session.add(TaxReturn(
+        family=tax_return.family, year=2024, has_stock_statements=True,
+        capital_gain_statements=[CapitalGainStatement(
+            title="Other year", reported={"capital_result": "500000"},
+        )],
+    ))
+    db.session.commit()
+
+    response = app.test_client().get(f"/api/tax-returns/{tax_return.id}/estimation")
+    assert response.status_code == 200
+    result = response.get_json()
+    raw = result["tax_result"]
+    expected = {
+        TaxField.CAPITAL_GAIN_3VG: gain,
+        TaxField.CAPITAL_LOSS_3VH: remaining_loss,
+        TaxField.TAXABLE_ACQUISITION_GAIN_1TZ: 1500,
+        TaxField.ACQUISITION_GAIN_REBATES_1UZ: 300,
+        TaxField.ACQUISITION_GAIN_50P_REBATES_1WZ: 450,
+        TaxField.EXERCISE_GAIN_1_1TT: 700,
+        TaxField.EXERCISE_GAIN_2_1UT: 1000,
+    }
+    for field, value in expected.items():
+        assert raw[field.value] == value
+    assert raw[TaxField.CAPITAL_GAIN_TAX.value] == pytest.approx(gain * 0.128)
+    simulator = TaxSimulator(2025, {
+        TaxField.MARRIED: False, TaxField.NB_CHILDREN: 0,
+        TaxField.SALARY_1_1AJ: 60000, TaxField.CHARITY_DONATION_7UF: 100,
+        TaxField.FIXED_INCOME_INTERESTS_2TR: 1000,
+        TaxField.FIXED_INCOME_INTERESTS_ALREADY_TAXED_2BH: 100,
+        TaxField.INTEREST_TAX_ALREADY_PAID_2CK: 50,
+        **expected,
+    })
+    assert result["net_taxes"] == simulator.state[TaxField.NET_TAXES]
+    assert result["net_social_taxes"] == simulator.state[TaxField.NET_SOCIAL_TAXES]
+    assert result["net_taxes"] > baseline["net_taxes"]
+    assert result["net_social_taxes"] > baseline["net_social_taxes"]
+
+    tax_return.has_stock_statements = False
+    db.session.commit()
+    assert estimate_tax(tax_return.id) == baseline
+    assert len(tax_return.capital_gain_statements) == 2
 
 
 @pytest.mark.parametrize("income", [0, 10000, 20000, 50000, 200000, 1000000])

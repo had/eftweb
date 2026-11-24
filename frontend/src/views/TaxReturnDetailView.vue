@@ -39,24 +39,36 @@ const estimate = ref(null)
 const estimationLoading = ref(false)
 const estimationError = ref('')
 let loadGeneration = 0
+let estimationGeneration = 0
 
 onBeforeUnmount(() => {
   loadGeneration += 1
 })
 
 const loadTaxEstimation = async (taxReturnId, generation) => {
+  const requestGeneration = ++estimationGeneration
+  const isCurrent = () => generation === loadGeneration && requestGeneration === estimationGeneration
   estimationLoading.value = true
+  estimationError.value = ''
   try {
     const response = await axios.get(`/api/tax-returns/${taxReturnId}/estimation`)
-    if (generation === loadGeneration) estimate.value = response.data
+    console.log('Raw tax result:', response.data.tax_result)
+    console.log('Tax flags:', response.data.flags)
+    if (isCurrent()) estimate.value = response.data
   } catch (error) {
-    if (generation === loadGeneration) {
+    if (isCurrent()) {
       estimationError.value =
         error.response?.data?.error || 'Tax estimation is unavailable. Please try again.'
     }
   } finally {
-    if (generation === loadGeneration) estimationLoading.value = false
+    if (isCurrent()) estimationLoading.value = false
   }
+}
+
+const stockStatementsSaved = () => {
+  if (!taxReturn.value) return
+  estimate.value = null
+  void loadTaxEstimation(taxReturn.value.id, loadGeneration)
 }
 
 const loadTaxReturn = async () => {
@@ -295,6 +307,7 @@ const deleteIfuStatement = async (statement) => {
             :tax-return-id="taxReturn.id"
             :filing-year="taxReturn.year"
             @count="stockStatementCount = $event"
+            @changed="stockStatementsSaved"
           />
         </TabsContent>
         <TabsContent value="income" class="mt-0 focus-visible:outline-none">

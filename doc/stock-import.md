@@ -133,3 +133,8 @@ Missing approval date, taxpayer assignment, FMV or historical conversion rates b
 acceptance. Accepted statements retain their original 2074 helper inputs and conversions
 independently of the live portfolio. See the [stock-tax discussion](plans/stock-tax-preparation-discussion.md)
 for the persisted workflow and API. Re-uploading existing sales for enrichment is not supported.
+
+When Stock gains/losses is enabled, the tax estimate includes the saved reported
+contributions for 3VG/3VH, 1TZ, 1UZ, 1WZ, 1TT and 1UT. Capital gains and losses are
+netted across sources before simulation. Preparing a preview does not change the estimate;
+accepting, editing, adding or deleting saved sources refreshes it.

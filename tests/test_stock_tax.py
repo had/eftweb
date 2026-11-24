@@ -182,9 +182,15 @@ def test_full_workflow_snapshots_edits_aggregation_replacement_and_removal(app, 
     assert CapitalGainStatement.query.count() == 1
     assert CapitalGainHelperLine.query.count() == 0
     assert view["aggregate"]["3VG"] == "70"
+    # A preview has no effect on the estimate until its statements are accepted.
+    assert client.get(base + "/estimation").get_json()["tax_result"]["capital_gain_3VG"] == 0
     response = accept(client, context, view)
     assert response.status_code == 201, response.get_json()
     assert response.get_json()["aggregate"]["3VG"] == "70"
+    estimated = client.get(base + "/estimation").get_json()["tax_result"]
+    assert estimated["capital_gain_3VG"] == 70
+    assert estimated["taxable_acquisition_gain_1TZ"] == 500
+    assert estimated["acquisition_gain_50p_rebates_1WZ"] == 500
     stock_statement = next(s for s in response.get_json()["statements"] if s["stock_id"])
     detail_url = base + f"/capital-gain-statements/{stock_statement['id']}"
     detail = client.get(detail_url).get_json()
@@ -198,6 +204,7 @@ def test_full_workflow_snapshots_edits_aggregation_replacement_and_removal(app, 
     assert edited.status_code == 200
     assert edited.get_json()["computed"]["capital_result"] == "100"
     assert client.get(base + "/capital-gain-statements").get_json()["aggregate"]["3VG"] == "50"
+    assert client.get(base + "/estimation").get_json()["tax_result"]["capital_gain_3VG"] == 50
     view = preview(client, context).get_json()
     assert accept(client, context, view).status_code == 409
     assert accept(client, context, view, replace_existing=True).status_code == 201

@@ -8,6 +8,8 @@ from app import db
 from app.family.donation_types import DONATION_TYPES_BY_CODE
 from app.family.models import TaxReturn
 
+from .stock_tax import aggregate
+
 
 class TaxEstimationError(Exception):
     def __init__(self, message, status_code):
@@ -15,7 +17,9 @@ class TaxEstimationError(Exception):
         self.status_code = status_code
 
 
-def _prepare_tax_input(family, income_statements, donation_statements, ifu_statements):
+def _prepare_tax_input(
+    family, income_statements, donation_statements, ifu_statements, capital_gain_statements=()
+):
     """Aggregate supported statement amounts without querying or creating forms."""
     amounts = defaultdict(Decimal)
     salary_fields = {
@@ -45,6 +49,18 @@ def _prepare_tax_input(family, income_statements, donation_statements, ifu_state
             amounts[field] += getattr(statement, attribute) or Decimal(0)
 
     tax_input = {field: float(amount) for field, amount in amounts.items()}
+    if capital_gain_statements:
+        stock_fields = {
+            "3VG": TaxField.CAPITAL_GAIN_3VG,
+            "3VH": TaxField.CAPITAL_LOSS_3VH,
+            "1TZ": TaxField.TAXABLE_ACQUISITION_GAIN_1TZ,
+            "1UZ": TaxField.ACQUISITION_GAIN_REBATES_1UZ,
+            "1WZ": TaxField.ACQUISITION_GAIN_50P_REBATES_1WZ,
+            "1TT": TaxField.EXERCISE_GAIN_1_1TT,
+            "1UT": TaxField.EXERCISE_GAIN_2_1UT,
+        }
+        stock_totals = aggregate(capital_gain_statements)
+        tax_input.update({field: int(stock_totals[box]) for box, field in stock_fields.items()})
     tax_input[TaxField.MARRIED] = family.taxpayer2 is not None
     tax_input[TaxField.NB_CHILDREN] = len(family.children)
     for index, child in enumerate(family.children, start=1):
@@ -149,10 +165,13 @@ def estimate_tax(tax_return_id):
         tax_return.income_statements if tax_return.has_income_statements else [],
         tax_return.donation_statements if tax_return.has_donation_statements else [],
         tax_return.ifu_statements if tax_return.has_investment_statements else [],
+        tax_return.capital_gain_statements if tax_return.has_stock_statements else [],
     )
     simulator = TaxSimulator(tax_return.year, tax_input, debug=False)
     tax_result = simulator.state
     return {
+        "tax_result": {field.value: value for field, value in tax_result.items()},
+        "flags": {flag.value: value for flag, value in simulator.flags.items()},
         "net_taxes": float(tax_result[TaxField.NET_TAXES]),
         "net_social_taxes": float(tax_result[TaxField.NET_SOCIAL_TAXES]),
         "reference_fiscal_income": float(tax_result[TaxField.REFERENCE_FISCAL_INCOME]),
