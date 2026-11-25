@@ -3,6 +3,7 @@ import HomeView from '@/views/HomeView.vue'
 import FamilyListView from '@/views/FamilyListView.vue'
 import FamilyLandingView from '@/views/FamilyLandingView.vue'
 import StocksView from '@/views/StocksView.vue'
+import RealEstateView from '@/views/RealEstateView.vue'
 import StockDetailView from '@/views/StockDetailView.vue'
 import TaxReturnsView from '@/views/TaxReturnsView.vue'
 import TaxReturnDetailView from '@/views/TaxReturnDetailView.vue'
@@ -30,6 +31,11 @@ const router = createRouter({
       path: '/stocks',
       name: 'stocks',
       component: StocksView,
+    },
+    {
+      path: '/real-estate',
+      name: 'real-estate',
+      component: RealEstateView,
     },
     {
       path: '/stocks/:stockId',

@@ -141,6 +141,18 @@ watch(
         >
           Stocks
         </RouterLink>
+        <RouterLink
+          to="/real-estate"
+          :class="[
+            'item',
+            isCurrentPath('/real-estate') ? 'nav-item-active' : '',
+            !isFamilySelected ? 'opacity-50 cursor-not-allowed pointer-events-none' : '',
+          ]"
+          :aria-current="isCurrentPath('/real-estate') ? 'page' : undefined"
+          @click.prevent="isFamilySelected && router.push('/real-estate')"
+        >
+          Real Estate
+        </RouterLink>
       </div>
     </div>
     <div class="navsection pb-4">

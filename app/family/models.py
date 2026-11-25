@@ -28,6 +28,12 @@ class Family(db.Model):
         cascade="all, delete-orphan",
         order_by="Stock.name, Stock.id",
     )
+    properties = db.relationship(
+        "RealEstateProperty",
+        back_populates="family",
+        cascade="all, delete-orphan",
+        order_by="RealEstateProperty.name, RealEstateProperty.id",
+    )
 
     @property
     def taxpayer1(self):
@@ -61,6 +67,43 @@ class Family(db.Model):
             "taxpayer1": self.taxpayer1.to_dict() if self.taxpayer1 else None,
             "taxpayer2": self.taxpayer2.to_dict() if self.taxpayer2 else None,
             "children": [child.to_dict() for child in self.children],
+        }
+
+
+class RealEstateProperty(db.Model):
+    __tablename__ = "real_estate_properties"
+    __table_args__ = (
+        db.CheckConstraint(
+            "estimated_value >= 0 AND estimated_value <= 999999999999.99",
+            name="ck_property_estimated_value",
+        ),
+        db.Index(
+            "uq_property_family_principal_home",
+            "family_id",
+            unique=True,
+            sqlite_where=db.text("is_principal_home = 1"),
+            postgresql_where=db.text("is_principal_home = true"),
+        ),
+        {"sqlite_autoincrement": True},
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(
+        db.Integer, db.ForeignKey("families.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name = db.Column(db.String(256), nullable=False)
+    is_principal_home = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    estimated_value = db.Column(db.Numeric(14, 2), nullable=False)
+
+    family = db.relationship("Family", back_populates="properties")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "family_id": self.family_id,
+            "name": self.name,
+            "is_principal_home": self.is_principal_home,
+            "estimated_value": format(self.estimated_value, ".2f"),
         }
 
 
