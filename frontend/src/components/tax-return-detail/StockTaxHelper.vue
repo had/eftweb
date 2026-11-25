@@ -1,4 +1,5 @@
 <script setup>
+import { formatDecimal } from '@/lib/numberFormat.js'
 import { ref } from 'vue'
 import { Button } from '@/components/ui/button'
 
@@ -47,13 +48,15 @@ const copy = async (value, key) => {
       class="rounded-lg border p-3"
     >
       <summary class="cursor-pointer text-sm font-medium">
-        {{ line.fields['511'] }} · {{ line.fields['512'] }} · {{ line.fields['515'] }} shares ·
-        gain/loss €{{ line.fields['524'] }}
+        {{ line.fields['511'] }} · {{ line.fields['512'] }} ·
+        {{ formatDecimal(line.fields['515']) }} shares · gain/loss €{{
+          formatDecimal(line.fields['524'])
+        }}
       </summary>
       <p v-if="line.regime && Number(line.absorbed_loss) > 0" class="mt-3 text-sm">
-        Loss adjustment: €{{ line.absorbed_loss }} of this disposal loss reduces the matching RSU
-        acquisition gain. This allocation's ordinary capital contribution is €{{
-          line.contributions.capital_result
+        Loss adjustment: €{{ formatDecimal(line.absorbed_loss) }} of this disposal loss reduces the
+        matching RSU acquisition gain. This allocation's ordinary capital contribution is €{{
+          formatDecimal(line.contributions.capital_result)
         }}
         after that adjustment. The absorbed loss is counted once.
       </p>
@@ -72,7 +75,7 @@ const copy = async (value, key) => {
               <td class="p-2">{{ code }}</td>
               <td class="p-2">{{ labels[code] }}</td>
               <td class="max-w-xs break-all p-2 text-right font-mono tabular-nums select-text">
-                {{ value }}
+                {{ ['511', '512'].includes(code) ? value : formatDecimal(value) }}
               </td>
               <td class="p-2">
                 <Button
@@ -98,8 +101,10 @@ const copy = async (value, key) => {
         <div>
           <dt class="text-muted-foreground">Original unit values</dt>
           <dd>
-            Acquisition ${{ line.acquisition_fmv_usd }} · sale ${{ line.selling_price_usd }} · fees
-            ${{ line.fees_usd }}
+            Acquisition ${{ formatDecimal(line.acquisition_fmv_usd) }} · sale ${{
+              formatDecimal(line.selling_price_usd)
+            }}
+            · fees ${{ formatDecimal(line.fees_usd) }}
           </dd>
         </div>
         <div
@@ -108,23 +113,25 @@ const copy = async (value, key) => {
         >
           <dt class="text-muted-foreground">{{ kind }} conversion</dt>
           <dd>
-            {{ fx.event_date }} → {{ fx.rate_date }} · {{ fx.source }} · {{ fx.rate }}
+            {{ fx.event_date }} → {{ fx.rate_date }} · {{ fx.source }} ·
+            {{ formatDecimal(fx.rate) }}
             {{ fx.direction }}
           </dd>
         </div>
         <div v-if="line.acquisition_value_usd !== undefined">
           <dt class="text-muted-foreground">Acquisition conversion result</dt>
           <dd>
-            ${{ line.acquisition_value_usd }} → €{{ line.acquisition_value_eur }} before
-            reporting-line rounding
+            ${{ formatDecimal(line.acquisition_value_usd) }} → €{{
+              formatDecimal(line.acquisition_value_eur)
+            }}
+            before reporting-line rounding
           </dd>
         </div>
         <div v-if="line.proceeds_usd !== undefined">
           <dt class="text-muted-foreground">Sale conversion result</dt>
           <dd>
-            ${{ line.proceeds_usd }} → €{{ line.proceeds_eur }} · fees ${{ line.fees_usd }} → €{{
-              line.fees_eur
-            }}
+            ${{ formatDecimal(line.proceeds_usd) }} → €{{ formatDecimal(line.proceeds_eur) }} · fees
+            ${{ formatDecimal(line.fees_usd) }} → €{{ formatDecimal(line.fees_eur) }}
             before reporting-line rounding
           </dd>
         </div>
@@ -137,15 +144,25 @@ const copy = async (value, key) => {
           </div>
           <div>
             <dt class="text-muted-foreground">Acquisition gain after loss adjustment</dt>
-            <dd>€{{ line.acquisition_gain }} · absorbed loss €{{ line.absorbed_loss }}</dd>
+            <dd>
+              €{{ formatDecimal(line.acquisition_gain) }} · absorbed loss €{{
+                formatDecimal(line.absorbed_loss)
+              }}
+            </dd>
           </div>
           <div>
             <dt class="text-muted-foreground">Threshold allocation</dt>
-            <dd>Eligible €{{ line.threshold_eligible }} · excess €{{ line.threshold_excess }}</dd>
+            <dd>
+              Eligible €{{ formatDecimal(line.threshold_eligible) }} · excess €{{
+                formatDecimal(line.threshold_excess)
+              }}
+            </dd>
           </div>
           <div>
             <dt class="text-muted-foreground">Computed declaration contributions (EUR)</dt>
-            <dd v-for="(value, code) in line.contributions" :key="code">{{ code }}: {{ value }}</dd>
+            <dd v-for="(value, code) in line.contributions" :key="code">
+              {{ code }}: {{ formatDecimal(value) }}
+            </dd>
           </div>
         </template>
       </dl>

@@ -1,4 +1,5 @@
 <script setup>
+import { formatNumber } from '@/lib/numberFormat.js'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import axios from 'axios'
 import { Plus, Trash2 } from 'lucide-vue-next'
@@ -280,18 +281,18 @@ const preventDismiss = (event) => {
             </ul>
             <div v-if="preview.format === 'eftweb'" class="space-y-2 text-sm">
               <p v-for="grant in preview.grants" :key="grant.key">
-                {{ grant.title }} · {{ grant.quantity }} shares ·
+                {{ grant.title }} · {{ formatNumber(grant.quantity) }} shares ·
                 {{ grant.vestings.length }} releases<span v-if="grant.grant_number">
                   · Grant {{ grant.grant_number }}</span
                 >
               </p>
               <p v-for="purchase in preview.purchases" :key="purchase.key">
                 {{ purchase.plan_name }} · {{ purchase.purchase_date }} ·
-                {{ purchase.quantity }} shares
+                {{ formatNumber(purchase.quantity) }} shares
               </p>
               <p v-for="sale in preview.sales" :key="sale.key">
-                Sale {{ sale.transaction_date }} · {{ sale.quantity }} shares at ${{
-                  sale.proceeds_per_share
+                Sale {{ sale.transaction_date }} · {{ formatNumber(sale.quantity) }} shares at ${{
+                  formatNumber(sale.proceeds_per_share, { maximumFractionDigits: 6 })
                 }}
                 · {{ sale.allocations.length }} allocations
               </p>
@@ -327,7 +328,11 @@ const preventDismiss = (event) => {
                   <div>
                     <p class="font-medium">
                       {{ sale.transaction_date || 'Invalid sale' }} ·
-                      {{ sale.quantity ?? '?' }} shares at ${{ sale.proceeds_per_share ?? '?' }}
+                      {{ sale.quantity == null ? '?' : formatNumber(sale.quantity) }} shares at ${{
+                        sale.proceeds_per_share == null
+                          ? '?'
+                          : formatNumber(sale.proceeds_per_share, { maximumFractionDigits: 6 })
+                      }}
                     </p>
                     <p class="text-xs text-muted-foreground">
                       Order {{ sale.source_order_number || 'unavailable' }} · Broker rows
@@ -355,7 +360,7 @@ const preventDismiss = (event) => {
                   {{
                     source.plan_type === 'RS' ? `Grant ${source.grant_number}, vesting` : 'Purchase'
                   }}
-                  {{ source.date }} · {{ source.quantity }} shares · Acquired
+                  {{ source.date }} · {{ formatNumber(source.quantity) }} shares · Acquired
                   {{ source.acquired_date }} · Grant date {{ source.grant_date }}
                 </p>
                 <ul
@@ -381,7 +386,7 @@ const preventDismiss = (event) => {
                 >
                   <fieldset class="space-y-2" :disabled="saving">
                     <legend class="mb-2 text-sm font-medium">
-                      Allocate {{ sale.quantity }} shares to existing lots
+                      Allocate {{ formatNumber(sale.quantity) }} shares to existing lots
                     </legend>
                     <div
                       v-for="(allocation, index) in drafts[sale.key].allocations"
@@ -400,7 +405,7 @@ const preventDismiss = (event) => {
                           :key="`${lot.source}:${lot.id}`"
                           :value="`${lot.source}:${lot.id}`"
                         >
-                          {{ lot.label }} · {{ lot.available }} available
+                          {{ lot.label }} · {{ formatNumber(lot.available) }} available
                         </option>
                       </select>
                       <Input

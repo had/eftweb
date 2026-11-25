@@ -1,3 +1,4 @@
+import { formatUSDCents } from '../../lib/numberFormat.js'
 import { isCalendarDate, isWholeQuantity } from './vesting.js'
 import { acquisitionLots, allocationKey } from './acquisitions.js'
 
@@ -14,8 +15,7 @@ export function saleProceeds(quantity, price) {
   const micros = priceMicros(price)
   if (!isWholeQuantity(quantity) || micros === null) return null
   const cents = (BigInt(quantity) * micros + 5000n) / 10000n
-  const dollars = cents / 100n
-  return `$${new Intl.NumberFormat('en-US').format(dollars)}.${String(cents % 100n).padStart(2, '0')}`
+  return formatUSDCents(cents)
 }
 
 export function availablePockets(grants, sales, transactionDate, purchases = []) {

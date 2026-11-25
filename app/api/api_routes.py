@@ -16,7 +16,7 @@ from ..family.models import (
 )
 from ..main.models import Project, db
 from ..service.tax_service import TaxEstimationError, estimate_tax
-from ..settings import VALID_THEMES, read_settings, write_settings
+from ..settings import VALID_NUMBER_LOCALES, VALID_THEMES, read_settings, write_settings
 from ..stocks.models import Stock
 from ..tax.models import (
     CharitySegment,
@@ -40,18 +40,22 @@ def settings():
     data = request.get_json(silent=True)
     if (
         not isinstance(data, dict)
-        or set(data) != {"theme"}
-        or not isinstance(data["theme"], str)
-        or data["theme"] not in VALID_THEMES
+        or not data
+        or set(data) - {"theme", "number_locale"}
     ):
-        return jsonify({"error": "Invalid theme"}), 400
+        return jsonify({"error": "Invalid settings"}), 400
+
+    for key, valid_values in (("theme", VALID_THEMES), ("number_locale", VALID_NUMBER_LOCALES)):
+        if key in data and (not isinstance(data[key], str) or data[key] not in valid_values):
+            return jsonify({"error": f"Invalid {key}"}), 400
 
     try:
-        write_settings(data["theme"])
+        saved = {**read_settings(), **data}
+        write_settings(saved)
     except OSError:
         current_app.logger.exception("Failed to save settings")
         return jsonify({"error": "Failed to save settings"}), 500
-    return jsonify({"theme": data["theme"]})
+    return jsonify(saved)
 
 
 @api.after_request

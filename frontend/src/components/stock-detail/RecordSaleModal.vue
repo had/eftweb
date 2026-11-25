@@ -1,4 +1,5 @@
 <script setup>
+import { formatDecimal } from '@/lib/numberFormat.js'
 import { computed, ref, watch } from 'vue'
 import {
   Dialog,
@@ -268,7 +269,7 @@ const confirm = () => {
                     v-if="Number(pocket.acquisition_fmv) > 0"
                     class="text-xs text-muted-foreground"
                   >
-                    Recorded FMV: {{ pocket.acquisition_fmv }} USD
+                    Recorded FMV: {{ formatDecimal(pocket.acquisition_fmv) }} USD
                   </p>
                 </div>
                 <div class="flex items-center gap-2">
@@ -307,7 +308,8 @@ const confirm = () => {
           <p>
             <span class="text-muted-foreground">Allocated</span>
             <strong class="ml-2 tabular-nums"
-              >{{ formatShares(allocated) }} / {{ details.quantity || 0 }} shares</strong
+              >{{ formatShares(allocated) }} /
+              {{ formatShares(details.quantity || 0) }} shares</strong
             >
           </p>
           <p>

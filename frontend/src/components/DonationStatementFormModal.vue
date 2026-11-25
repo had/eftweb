@@ -1,4 +1,5 @@
 <script setup>
+import { formatCurrency } from '@/lib/numberFormat.js'
 import { computed, ref, watch } from 'vue'
 import axios from 'axios'
 import {
@@ -101,7 +102,7 @@ const submit = async () => {
             <option v-for="type in donationTypes" :key="type.code" :value="type.code">{{ type.label }}</option>
           </select>
         </div>
-        <div v-if="selectedType" class="rounded-md bg-muted p-3 text-sm"><p><span class="font-medium">Tax reduction:</span> {{ selectedType.tax_reduction }}</p><p class="mt-1"><span class="font-medium">Tax return box:</span> {{ selectedType.tax_return_box }}</p><p class="mt-1"><span class="font-medium">Ceiling:</span> {{ selectedType.ceiling ? `€${selectedType.ceiling.toLocaleString('en-GB')}` : 'No ceiling' }}</p></div>
+        <div v-if="selectedType" class="rounded-md bg-muted p-3 text-sm"><p><span class="font-medium">Tax reduction:</span> {{ selectedType.tax_reduction }}</p><p class="mt-1"><span class="font-medium">Tax return box:</span> {{ selectedType.tax_return_box }}</p><p class="mt-1"><span class="font-medium">Ceiling:</span> {{ selectedType.ceiling ? formatCurrency(selectedType.ceiling) : 'No ceiling' }}</p></div>
         <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
       </form>
       <DialogFooter><Button type="button" variant="outline" :disabled="loading" @click="close">Cancel</Button><Button :disabled="loading" @click="submit">{{ loading ? 'Saving...' : donationStatement ? 'Save changes' : 'Add donation statement' }}</Button></DialogFooter>

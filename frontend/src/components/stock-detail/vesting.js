@@ -1,3 +1,5 @@
+import { formatNumber } from '../../lib/numberFormat.js'
+
 import { acquisitionLots, acquisitionPlans } from './acquisitions.js'
 
 export const SCHEDULES = [
@@ -212,7 +214,7 @@ export function buildQuarters(grants, today, purchases = []) {
   return buckets
 }
 
-export const formatShares = (value) => new Intl.NumberFormat('en-GB').format(value)
+export const formatShares = formatNumber
 export const formatDate = (value) =>
   new Intl.DateTimeFormat('en-GB', {
     day: 'numeric',

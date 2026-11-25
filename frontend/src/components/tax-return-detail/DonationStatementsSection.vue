@@ -1,4 +1,5 @@
 <script setup>
+import { formatCurrency } from '@/lib/numberFormat.js'
 import { Pencil, Trash2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,7 +20,7 @@ defineEmits(['add', 'edit', 'delete'])
 const donationTypeFor = (statement) =>
   props.donationTypes.find((type) => type.code === statement.donation_type)
 const formatAmount = (amount) =>
-  new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' }).format(Number(amount))
+  formatCurrency(amount)
 </script>
 
 <template>

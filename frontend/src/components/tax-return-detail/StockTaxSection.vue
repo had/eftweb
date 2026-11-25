@@ -1,4 +1,5 @@
 <script setup>
+import { formatDecimal } from '@/lib/numberFormat.js'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import axios from 'axios'
 import { Button } from '@/components/ui/button'
@@ -260,12 +261,12 @@ const remove = async () => {
         <dl class="grid gap-3 sm:grid-cols-3">
           <div v-for="(value, box) in saved.aggregate" :key="box" class="rounded border p-3">
             <dt class="text-sm text-muted-foreground">{{ box }}</dt>
-            <dd class="font-mono">€{{ value }}</dd>
+            <dd class="font-mono">€{{ formatDecimal(value) }}</dd>
           </div>
         </dl>
         <p class="text-xs text-muted-foreground">
-          Declaration boxes aggregate reported contributions from every source. Saved stock statements
-          are included in the tax estimate.
+          Declaration boxes aggregate reported contributions from every source. Saved stock
+          statements are included in the tax estimate.
         </p>
         <form v-if="manual" class="space-y-3 rounded border p-4" @submit.prevent="saveManual">
           <Label for="capital-source-name">Source name</Label
@@ -301,7 +302,7 @@ const remove = async () => {
             <p class="font-medium">{{ statement.title }}</p>
             <p class="text-sm text-muted-foreground">
               {{ statement.source_key ? 'Stock statement' : 'Manual source' }} · capital gain/loss
-              €{{ statement.reported.capital_result }}
+              €{{ formatDecimal(statement.reported.capital_result) }}
             </p>
           </div>
           <div class="flex gap-2">
@@ -376,8 +377,8 @@ const remove = async () => {
             :key="taxpayer"
             class="rounded border p-3 text-sm"
           >
-            {{ taxpayer }} · annual threshold used €{{ usage.used }} · remaining €{{
-              usage.remaining
+            {{ taxpayer }} · annual threshold used €{{ formatDecimal(usage.used) }} · remaining €{{
+              formatDecimal(usage.remaining)
             }}
           </p>
         </div>
@@ -396,7 +397,7 @@ const remove = async () => {
                 :disabled="loading"
               />
               <p class="text-xs text-muted-foreground">
-                Computed: €{{ statement.computed[field] }}
+                Computed: €{{ formatDecimal(statement.computed[field]) }}
               </p>
             </div>
           </div>
@@ -414,7 +415,10 @@ const remove = async () => {
           </p>
           <ul class="list-inside list-disc text-sm">
             <li v-for="old in preview.replacements" :key="old.id">
-              {{ old.title }} · reported capital gain/loss €{{ old.reported.capital_result }} ·
+              {{ old.title }} · reported capital gain/loss €{{
+                formatDecimal(old.reported.capital_result)
+              }}
+              ·
               {{
                 preview.statements.some((s) => s.stock_id === old.stock_id)
                   ? 'replace'
@@ -472,7 +476,7 @@ const remove = async () => {
                   v-if="opened.computed[field] !== undefined"
                   class="text-xs text-muted-foreground"
                 >
-                  Computed: €{{ opened.computed[field] }}
+                  Computed: €{{ formatDecimal(opened.computed[field]) }}
                 </p>
               </div></template
             >

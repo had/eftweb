@@ -1,4 +1,5 @@
 <script setup>
+import { formatNumber } from '@/lib/numberFormat.js'
 import { computed, ref } from 'vue'
 import { Trash2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
@@ -275,7 +276,10 @@ const firstDate = computed(() => new Date(start.value).toISOString().slice(0, 10
                 <template v-else>
                   <p class="mt-1 text-xs text-muted-foreground">
                     {{ formatShares(-event.change) }} shares ×
-                    {{ event.sale.proceedsPerShare.replace(/0+$/, '').replace(/\.$/, '') }} USD
+                    {{
+                      formatNumber(event.sale.proceedsPerShare, { maximumFractionDigits: 6 })
+                    }}
+                    USD
                   </p>
                   <details class="mt-2 text-xs text-muted-foreground">
                     <summary class="cursor-pointer">

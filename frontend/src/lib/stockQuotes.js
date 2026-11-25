@@ -1,3 +1,5 @@
+import { formatUSDCents } from './numberFormat.js'
+
 export const isUSDPrice = (price) =>
   typeof price === 'string' && /^\d+\.\d{2}$/.test(price) && BigInt(price.replace('.', '')) > 0n
 
@@ -5,8 +7,7 @@ export const isUSDPrice = (price) =>
 export function formatStockValue(quantity, price) {
   if (!Number.isSafeInteger(quantity) || quantity < 0 || !isUSDPrice(price)) return '—'
   const cents = BigInt(quantity) * BigInt(price.replace('.', ''))
-  const dollars = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(cents / 100n)
-  return `$${dollars}.${String(cents % 100n).padStart(2, '0')}`
+  return formatUSDCents(cents)
 }
 
 export function formatQuoteTimestamp(value) {

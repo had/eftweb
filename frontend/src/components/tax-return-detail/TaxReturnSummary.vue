@@ -1,4 +1,5 @@
 <script setup>
+import { formatCurrency, formatNumber, formatPercent } from '@/lib/numberFormat.js'
 import { computed, ref, useId } from 'vue'
 import { ChevronDown } from 'lucide-vue-next'
 import { TooltipProvider } from 'reka-ui'
@@ -14,15 +15,8 @@ const props = defineProps({
 const detailsOpen = ref(false)
 const detailsId = useId()
 
-const currency = new Intl.NumberFormat('en-GB', {
-  style: 'currency',
-  currency: 'EUR',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-const formatAmount = (amount) => (amount == null ? '—' : currency.format(amount))
-const percent = new Intl.NumberFormat('en-GB', { style: 'percent', maximumFractionDigits: 1 })
-const formatRate = (rate) => (rate == null ? '—' : percent.format(rate))
+const formatAmount = formatCurrency
+const formatRate = formatPercent
 const fill = (amount, limit) => (limit > 0 ? Math.min(100, Math.max(0, (amount / limit) * 100)) : 0)
 const colors = [
   'var(--chart-1)',
@@ -40,7 +34,7 @@ const metrics = computed(() => [
     value:
       props.estimate?.household_shares == null
         ? '—'
-        : new Intl.NumberFormat('en-GB').format(props.estimate.household_shares),
+        : formatNumber(props.estimate.household_shares),
   },
   { label: 'Marginal tax rate', value: formatRate(props.estimate?.marginal_tax_rate) },
 ])
@@ -130,7 +124,17 @@ const progressive = computed(() => props.estimate?.progressive_tax)
                         Only supported donations in boxes 7UD and 7UF are included. Calculated
                         reductions may be limited by the tax due.
                       </p>
-                      <p>75% bucket: 7UD · people in need · €1,000 ceiling.</p>
+                      <p>
+                        75% bucket: 7UD · people in need ·
+                        {{
+                          formatNumber(1000, {
+                            style: 'currency',
+                            currency: 'EUR',
+                            maximumFractionDigits: 0,
+                          })
+                        }}
+                        ceiling.
+                      </p>
                       <p>66% bucket: 7UF + overflow from 7UD · ceiling of 20% of taxable income.</p>
                       <p
                         v-for="bucket in estimate.donation_buckets.filter(

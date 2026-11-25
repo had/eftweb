@@ -1,4 +1,5 @@
 <script setup>
+import { formatCurrency, formatPercent } from '@/lib/numberFormat.js'
 import { computed } from 'vue'
 import { TooltipContent, TooltipPortal, TooltipRoot, TooltipTrigger } from 'reka-ui'
 
@@ -8,15 +9,8 @@ const props = defineProps({
   colors: { type: Array, required: true },
 })
 
-const currency = new Intl.NumberFormat('en-GB', {
-  style: 'currency',
-  currency: 'EUR',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-const percent = new Intl.NumberFormat('en-GB', { style: 'percent', maximumFractionDigits: 1 })
-const formatAmount = (amount) => (amount == null ? '—' : currency.format(amount))
-const formatRate = (rate) => (rate == null ? '—' : percent.format(rate))
+const formatAmount = formatCurrency
+const formatRate = formatPercent
 const fill = (amount, limit) => (limit > 0 ? Math.min(100, Math.max(0, (amount / limit) * 100)) : 0)
 const chartBands = computed(() => {
   // At an exact boundary the library still reports the preceding band's rate.

@@ -1,3 +1,5 @@
+import { formatNumber } from '../../lib/numberFormat.js'
+
 // Static design fixtures only. These are not the selected stock's real holdings.
 export const portfolio = {
   asOf: '2026-10-20',
@@ -235,7 +237,7 @@ export const activity = [
   },
 ]
 
-export const formatShares = (value) => new Intl.NumberFormat('en-GB').format(value)
+export const formatShares = formatNumber
 export const formatDate = (value) =>
   new Intl.DateTimeFormat('en-GB', {
     day: 'numeric',

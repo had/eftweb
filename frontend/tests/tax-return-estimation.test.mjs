@@ -1,3 +1,4 @@
+import * as numberFormat from '../src/lib/numberFormat.js'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { setImmediate } from 'node:timers/promises'
@@ -192,8 +193,10 @@ function compileComponent(descriptor, InfoTooltip, ProgressiveTaxRuler, tooltipC
     (_, names) => `const {${names}} = reka`)
   .replace(/^import InfoTooltip from ["']@\/components\/InfoTooltip.vue["']$/gm, '')
   .replace(/^import ProgressiveTaxRuler from ["']@\/components\/tax-return-detail\/ProgressiveTaxRuler.vue["']$/gm, '')
+  .replace(/^import \{([^}]+)\} from ["']@\/lib\/numberFormat.js["']$/gm,
+    (_, names) => `const {${names}} = numberFormat`)
   .replace('export default', 'return')
-  return new Function('Vue', 'cards', 'icons', 'reka', 'InfoTooltip', 'ProgressiveTaxRuler', code)(Vue, cards, icons, tooltipComponents, InfoTooltip, ProgressiveTaxRuler)
+  return new Function('Vue', 'cards', 'icons', 'reka', 'InfoTooltip', 'ProgressiveTaxRuler', 'numberFormat', code)(Vue, cards, icons, tooltipComponents, InfoTooltip, ProgressiveTaxRuler, numberFormat)
 }
 const InfoTooltip = compileComponent(readComponent('../src/components/InfoTooltip.vue'))
 const ProgressiveTaxRuler = compileComponent(readComponent('../src/components/tax-return-detail/ProgressiveTaxRuler.vue'))
@@ -348,4 +351,17 @@ test('ruler tooltips preserve the former table details, including the open-ended
   assert.match(top, /Over €181,917\.00/)
   assert.match(top, /Filled<\/dt><dd[^>]*>No upper limit/)
   assert.match(top, /Tax contribution<\/dt><dd[^>]*>€8,137\.35/)
+})
+
+
+test('summary and tax ruler render the selected French number format', async (t) => {
+  t.after(() => { numberFormat.numberLocale.value = numberFormat.DEFAULT_NUMBER_LOCALE })
+  numberFormat.numberLocale.value = 'fr-FR'
+  const estimate = structuredClone(detailedEstimate)
+  estimate.household_shares = 1.5
+  const html = await renderToString(Vue.createSSRApp(Summary, { estimate }))
+  assert.match(html, /55\u202f000,00\u00a0€/)
+  assert.match(html, /1,5/)
+  assert.match(html, /30\u00a0%/)
+  assert.match(html, /aria-label="11\u00a0% band, 11\u202f600,00\u00a0€ – 29\u202f579,00\u00a0€/)
 })

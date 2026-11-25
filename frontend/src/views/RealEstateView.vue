@@ -1,4 +1,5 @@
 <script setup>
+import { formatCurrency } from '@/lib/numberFormat.js'
 import { ref, watch } from 'vue'
 import axios from 'axios'
 import { House, Pencil, Plus, Trash2 } from 'lucide-vue-next'
@@ -27,7 +28,7 @@ const deletingProperty = ref(null)
 const deleting = ref(false)
 const deleteError = ref('')
 const formatValue = (value) =>
-  new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(Number(value))
+  formatCurrency(value)
 
 watch(
   () => familyStore.familyId,

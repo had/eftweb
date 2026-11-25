@@ -2,9 +2,10 @@
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settings'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { formatNumber, NUMBER_LOCALES } from '@/lib/numberFormat.js'
 
 const settingsStore = useSettingsStore()
-const { theme, loadError, saveError, saving } = storeToRefs(settingsStore)
+const { theme, numberLocale, loadError, saveError, saving } = storeToRefs(settingsStore)
 
 const themes = [
   {
@@ -37,11 +38,13 @@ const themes = [
 <template>
   <main class="p-8 w-full max-w-5xl">
     <h1 class="text-3xl font-bold mb-2">Settings</h1>
-    <p class="text-muted-foreground mb-8">Choose the look of this app.</p>
+    <p class="text-muted-foreground mb-8">Choose the look and number format of this app.</p>
 
     <section aria-labelledby="color-theme-heading">
       <h2 id="color-theme-heading" class="text-xl font-semibold mb-1">Color theme</h2>
-      <p class="text-sm text-muted-foreground mb-5">Your choice is saved for this app installation.</p>
+      <p class="text-sm text-muted-foreground mb-5">
+        Your choice is saved for this app installation.
+      </p>
 
       <RadioGroup
         :model-value="theme"
@@ -55,7 +58,9 @@ const themes = [
           :key="option.id"
           :class="[
             'flex gap-3 rounded-xl border-2 bg-card p-5 shadow-sm transition-colors',
-            theme === option.id ? 'border-primary ring-2 ring-primary/20' : 'border-border hover:border-primary/50',
+            theme === option.id
+              ? 'border-primary ring-2 ring-primary/20'
+              : 'border-border hover:border-primary/50',
           ]"
         >
           <RadioGroupItem :id="option.id" :value="option.id" :disabled="saving" class="mt-0.5" />
@@ -73,10 +78,35 @@ const themes = [
           </label>
         </div>
       </RadioGroup>
-
-      <p v-if="saving" class="mt-4 text-sm text-muted-foreground" role="status">Saving theme…</p>
-      <p v-if="loadError" class="mt-4 text-sm text-destructive" role="alert">{{ loadError }}</p>
-      <p v-if="saveError" class="mt-4 text-sm text-destructive" role="alert">{{ saveError }}</p>
     </section>
+
+    <section aria-labelledby="number-format-heading" class="mt-10">
+      <h2 id="number-format-heading" class="text-xl font-semibold mb-1">Number format</h2>
+      <p id="number-format-description" class="text-sm text-muted-foreground mb-5">
+        Choose how numbers, amounts, and percentages are displayed. Saved for this app installation.
+      </p>
+      <label for="number-locale" class="block text-sm font-medium mb-2">Locale</label>
+      <select
+        id="number-locale"
+        :value="numberLocale"
+        :disabled="saving"
+        aria-describedby="number-format-description"
+        class="w-full max-w-md rounded-md border border-input bg-background px-3 py-2 text-sm"
+        @change="settingsStore.selectNumberLocale($event.target.value)"
+      >
+        <option v-for="option in NUMBER_LOCALES" :key="option.id" :value="option.id">
+          {{ option.name }} · {{ formatNumber(1234567.89, {}, option.id) }}
+        </option>
+      </select>
+      <p class="mt-3 text-sm text-muted-foreground">
+        Preview: {{ formatNumber(1234567.89) }} ·
+        {{ formatNumber(1234.56, { style: 'currency', currency: 'EUR' }) }} ·
+        {{ formatNumber(0.125, { style: 'percent', maximumFractionDigits: 1 }) }}
+      </p>
+    </section>
+
+    <p v-if="saving" class="mt-4 text-sm text-muted-foreground" role="status">Saving settings…</p>
+    <p v-if="loadError" class="mt-4 text-sm text-destructive" role="alert">{{ loadError }}</p>
+    <p v-if="saveError" class="mt-4 text-sm text-destructive" role="alert">{{ saveError }}</p>
   </main>
 </template>
