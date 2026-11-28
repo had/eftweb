@@ -49,7 +49,7 @@ function mountForm(t, axios, properties = []) {
           events.push(args),
       axios,
     },
-    'name, estimatedValue, isPrincipalHome, replacementId, principalConflict, error, loading, togglePrincipalHome, cancelReplacement, confirmReplacement, submit, close',
+    'name, estimatedValue, acquisitionDate, sellDate, isSold, isPrincipalHome, replacementId, principalConflict, error, loading, togglePrincipalHome, cancelReplacement, confirmReplacement, submit, close',
   )
   props.open = true
   return { form, props, events }
@@ -64,6 +64,7 @@ test('principal-home toggle requires confirmation and cancellation leaves saved 
   await flush()
   form.name.value = ' Lyon house '
   form.estimatedValue.value = '400000.25'
+  form.acquisitionDate.value = '2020-02-29'
   form.togglePrincipalHome()
   assert.equal(form.principalConflict.value.name, 'Paris apartment')
   assert.equal(form.isPrincipalHome.value, false)
@@ -83,6 +84,8 @@ test('principal-home toggle requires confirmation and cancellation leaves saved 
       {
         name: 'Lyon house',
         estimated_value: '400000.25',
+        acquisition_date: '2020-02-29',
+        sell_date: null,
         is_principal_home: true,
         replace_principal_home_id: 3,
       },
@@ -103,12 +106,22 @@ test('editing prefills fields, validates values, and retries errors without losi
   await flush()
   props.open = false
   await flush()
-  props.property = { id: 9, name: 'House', estimated_value: '123.45', is_principal_home: true }
+  props.property = {
+    id: 9,
+    name: 'House',
+    estimated_value: '123.45',
+    is_principal_home: true,
+    acquisition_date: '2020-02-29',
+    sell_date: '2026-11-28',
+  }
   props.open = true
   await flush()
   assert.equal(form.name.value, 'House')
   assert.equal(form.estimatedValue.value, '123.45')
   assert.equal(form.isPrincipalHome.value, true)
+  assert.equal(form.acquisitionDate.value, '2020-02-29')
+  assert.equal(form.sellDate.value, '2026-11-28')
+  assert.equal(form.isSold.value, true)
   for (const value of ['', '-1', '1.234', 'Infinity', '1000000000000']) {
     form.estimatedValue.value = value
     await form.submit()
@@ -121,6 +134,9 @@ test('editing prefills fields, validates values, and retries errors without losi
   assert.equal(form.error.value, 'Database unavailable')
   assert.equal(form.name.value, 'House')
   assert.equal(form.loading.value, false)
+  assert.equal(form.sellDate.value, '2026-11-28')
+  form.acquisitionDate.value = '2021-01-01'
+  form.isSold.value = false
   fail = false
   await form.submit()
   assert.deepEqual(requests.at(-1), [
@@ -128,6 +144,8 @@ test('editing prefills fields, validates values, and retries errors without losi
     {
       name: 'House',
       estimated_value: '0',
+      acquisition_date: '2021-01-01',
+      sell_date: null,
       is_principal_home: false,
       replace_principal_home_id: null,
     },
@@ -147,6 +165,7 @@ test('a newer principal home from the API requires fresh confirmation before ret
   await flush()
   form.name.value = 'House'
   form.estimatedValue.value = '200'
+  form.acquisitionDate.value = '2020-02-29'
   form.togglePrincipalHome()
   await form.submit()
   assert.deepEqual(form.principalConflict.value, current)
@@ -156,6 +175,80 @@ test('a newer principal home from the API requires fresh confirmation before ret
   fail = false
   await form.submit()
   assert.equal(requests.at(-1)[1].replace_principal_home_id, 42)
+})
+
+test('property form requires a real acquisition date and rejects invalid or earlier sell dates', async (t) => {
+  const requests = []
+  const { form, props } = mountForm(t, { post: async (...args) => requests.push(args) })
+  await flush()
+  form.name.value = 'House'
+  form.estimatedValue.value = '100'
+  assert.equal(form.acquisitionDate.value, '')
+  assert.equal(form.sellDate.value, '')
+  assert.equal(form.isSold.value, false)
+  for (const invalid of ['', '2021-02-29', '20200229', '0000-01-01']) {
+    form.acquisitionDate.value = invalid
+    await form.submit()
+    assert.match(form.error.value, /valid acquisition date/)
+  }
+  form.acquisitionDate.value = '2020-02-29'
+  form.isSold.value = true
+  await form.submit()
+  assert.match(form.error.value, /valid sell date/)
+  form.sellDate.value = '2023-02-29'
+  await form.submit()
+  assert.match(form.error.value, /valid sell date/)
+  form.sellDate.value = '2020-02-28'
+  await form.submit()
+  assert.match(form.error.value, /on or after/)
+  assert.equal(requests.length, 0)
+  form.sellDate.value = '2020-02-29'
+  await form.submit()
+  assert.equal(requests[0][1].sell_date, '2020-02-29')
+  // Reopening a legacy property leaves unknown dates blank instead of guessing.
+  props.open = false
+  await flush()
+  props.property = { id: 3, name: 'Legacy home', estimated_value: '100' }
+  props.open = true
+  await flush()
+  assert.equal(form.acquisitionDate.value, '')
+  assert.equal(form.sellDate.value, '')
+  assert.equal(form.isSold.value, false)
+})
+
+test('unchecked Property sold ignores hidden dates and clears a previously saved sell date', async (t) => {
+  const requests = []
+  const { form, props } = mountForm(t, {
+    post: async (...args) => requests.push(args),
+    put: async (...args) => requests.push(args),
+  })
+  await flush()
+  form.name.value = 'House'
+  form.estimatedValue.value = '100'
+  form.acquisitionDate.value = '2020-02-29'
+  form.sellDate.value = '2020-02-28'
+  await form.submit()
+  assert.equal(requests[0][1].sell_date, null)
+
+  props.open = false
+  await flush()
+  props.property = {
+    id: 9,
+    name: 'House',
+    estimated_value: '100',
+    acquisition_date: '2020-02-29',
+    sell_date: '2026-11-28',
+  }
+  props.open = true
+  await flush()
+  assert.equal(form.isSold.value, true)
+  assert.equal(form.sellDate.value, '2026-11-28')
+  // Only unchecking is needed to remove a date entered by mistake.
+  form.isSold.value = false
+  await form.submit()
+  assert.equal(requests.at(-1)[0], '/api/families/7/properties/9')
+  assert.equal(requests.at(-1)[1].sell_date, null)
+  assert.equal(props.property.sell_date, '2026-11-28')
 })
 
 function mountView(t, axios) {

@@ -77,6 +77,10 @@ class RealEstateProperty(db.Model):
             "estimated_value >= 0 AND estimated_value <= 999999999999.99",
             name="ck_property_estimated_value",
         ),
+        db.CheckConstraint(
+            "sell_date IS NULL OR (acquisition_date IS NOT NULL AND sell_date >= acquisition_date)",
+            name="ck_property_dates",
+        ),
         db.Index(
             "uq_property_family_principal_home",
             "family_id",
@@ -94,6 +98,9 @@ class RealEstateProperty(db.Model):
     name = db.Column(db.String(256), nullable=False)
     is_principal_home = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     estimated_value = db.Column(db.Numeric(14, 2), nullable=False)
+    # Older properties have unknown acquisition dates; new/edited properties require one in the API.
+    acquisition_date = db.Column(db.Date, nullable=True)
+    sell_date = db.Column(db.Date, nullable=True)
 
     family = db.relationship("Family", back_populates="properties")
 
@@ -104,6 +111,8 @@ class RealEstateProperty(db.Model):
             "name": self.name,
             "is_principal_home": self.is_principal_home,
             "estimated_value": format(self.estimated_value, ".2f"),
+            "acquisition_date": self.acquisition_date.isoformat() if self.acquisition_date else None,
+            "sell_date": self.sell_date.isoformat() if self.sell_date else None,
         }
 
 

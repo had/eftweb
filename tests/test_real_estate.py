@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -35,6 +36,7 @@ def payload(**changes):
         "name": " Paris apartment ",
         "estimated_value": "350000.25",
         "is_principal_home": False,
+        "acquisition_date": "2020-02-29",
         **changes,
     }
 
@@ -49,9 +51,12 @@ def test_properties_persist_edit_and_delete_permanently(app):
     assert item["name"] == "Paris apartment"
     assert item["estimated_value"] == "350000.25"
     assert item["is_principal_home"] is True
+    assert item["acquisition_date"] == "2020-02-29"
+    assert item["sell_date"] is None
     db.session.expire_all()
     saved = db.session.get(RealEstateProperty, item["id"])
     assert saved.estimated_value == Decimal("350000.25")
+    assert saved.acquisition_date == date(2020, 2, 29)
     assert saved.family.properties == [saved]
     target = f"{endpoint}/{item['id']}"
     changed = client.put(target, json=payload(name="Renamed", estimated_value="0"))
@@ -108,6 +113,16 @@ def test_principal_home_replacement_requires_confirmation_of_current_property(ap
         {"is_principal_home": 1},
         {"replace_principal_home_id": True},
         {"replace_principal_home_id": "1"},
+        {"acquisition_date": None},
+        {"acquisition_date": ""},
+        {"acquisition_date": True},
+        {"acquisition_date": "2021-02-29"},
+        {"acquisition_date": "20200229"},
+        {"acquisition_date": "2020-02-29T00:00:00"},
+        {"sell_date": True},
+        {"sell_date": "2023-02-29"},
+        {"sell_date": "20260228"},
+        {"sell_date": "2020-02-28"},
     ],
 )
 def test_invalid_properties_cannot_change_saved_data(app, change):
@@ -122,6 +137,47 @@ def test_invalid_properties_cannot_change_saved_data(app, change):
 @pytest.mark.parametrize("data", [None, [], "property", {}, {"name": "House"}])
 def test_missing_or_invalid_payloads(app, data):
     assert app.test_client().post(family_endpoint(), json=data).status_code == 400
+
+
+def test_property_dates_can_be_created_edited_and_sell_date_cleared(app):
+    client = app.test_client()
+    endpoint = family_endpoint()
+    created = client.post(endpoint, json=payload(sell_date="2026-11-28"))
+    assert created.status_code == 201
+    item = created.get_json()
+    assert item["sell_date"] == "2026-11-28"
+    db.session.expire_all()
+    assert db.session.get(RealEstateProperty, item["id"]).sell_date == date(2026, 11, 28)
+    target = f"{endpoint}/{item['id']}"
+    # Acquisition and sale on the same day are valid.
+    changed = client.put(
+        target, json=payload(acquisition_date="2024-01-01", sell_date="2024-01-01")
+    )
+    assert changed.status_code == 200
+    assert changed.get_json()["acquisition_date"] == "2024-01-01"
+    assert changed.get_json()["sell_date"] == "2024-01-01"
+    for empty in (None, ""):
+        cleared = client.put(target, json=payload(sell_date=empty))
+        assert cleared.status_code == 200
+        assert cleared.get_json()["sell_date"] is None
+    assert client.get(endpoint).get_json() == [cleared.get_json()]
+    missing_acquisition = payload()
+    del missing_acquisition["acquisition_date"]
+    assert client.post(endpoint, json=missing_acquisition).status_code == 400
+    assert client.put(target, json=missing_acquisition).status_code == 400
+
+
+def test_legacy_property_without_dates_requires_acquisition_date_when_edited(app):
+    endpoint = family_endpoint()
+    family = Family.query.one()
+    legacy = RealEstateProperty(family=family, name="Legacy home", estimated_value=1)
+    db.session.add(legacy)
+    db.session.commit()
+    client = app.test_client()
+    item = client.get(endpoint).get_json()[0]
+    assert item["acquisition_date"] is None
+    assert item["sell_date"] is None
+    assert client.put(f"{endpoint}/{legacy.id}", json=payload()).status_code == 200
 
 
 def test_families_are_isolated_and_archived_or_missing_families_are_rejected(app):
@@ -219,5 +275,65 @@ def test_real_estate_migration_upgrades_and_downgrades(tmp_path, monkeypatch):
         with db.engine.connect() as connection:
             assert connection.execute(sa.text("SELECT id FROM families")).scalar_one() == 1
         upgrade(directory=directory, revision="a4d71b8e902c")
+        db.session.remove()
+        db.engine.dispose()
+
+
+def test_property_dates_migration_preserves_properties_and_validates_date_order(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        TestingConfig, "SQLALCHEMY_DATABASE_URI", f"sqlite:///{tmp_path / 'property-dates.sqlite'}"
+    )
+    app = create_app("testing")
+    directory = str(Path(__file__).resolve().parents[1] / "migrations")
+    monkeypatch.setattr(app.logger, "disabled", app.logger.disabled)
+    with app.app_context():
+        upgrade(directory=directory, revision="a4d71b8e902c")
+        with db.engine.begin() as connection:
+            connection.execute(sa.text("INSERT INTO families (id) VALUES (1)"))
+            connection.execute(
+                sa.text(
+                    "INSERT INTO real_estate_properties (id, family_id, name, estimated_value, is_principal_home) "
+                    "VALUES (1, 1, 'House', 123456.78, 1), (2, 1, 'Apartment', 100, 0)"
+                )
+            )
+        upgrade(directory=directory, revision="b6e92d41ac73")
+        with db.engine.connect() as connection:
+            assert connection.execute(
+                sa.text(
+                    "SELECT id, name, is_principal_home, acquisition_date, sell_date "
+                    "FROM real_estate_properties ORDER BY id"
+                )
+            ).all() == [(1, "House", 1, None, None), (2, "Apartment", 0, None, None)]
+        for invalid in (
+            "sell_date = '2026-11-28'",
+            "acquisition_date = '2026-11-28', sell_date = '2026-11-27'",
+            "is_principal_home = 1",
+        ):
+            with pytest.raises(IntegrityError), db.engine.begin() as connection:
+                connection.execute(
+                    sa.text(f"UPDATE real_estate_properties SET {invalid} WHERE id = 2")
+                )
+        with db.engine.begin() as connection:
+            connection.execute(
+                sa.text(
+                    "UPDATE real_estate_properties SET acquisition_date = '2020-02-29', "
+                    "sell_date = '2026-11-28' WHERE id = 2"
+                )
+            )
+        db.session.remove()
+        downgrade(directory=directory, revision="a4d71b8e902c")
+        columns = {
+            column["name"] for column in sa.inspect(db.engine).get_columns("real_estate_properties")
+        }
+        assert "acquisition_date" not in columns and "sell_date" not in columns
+        with db.engine.connect() as connection:
+            assert connection.execute(
+                sa.text(
+                    "SELECT name, estimated_value, is_principal_home FROM real_estate_properties WHERE id = 1"
+                )
+            ).one() == ("House", 123456.78, 1)
+        upgrade(directory=directory, revision="b6e92d41ac73")
         db.session.remove()
         db.engine.dispose()

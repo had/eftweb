@@ -22,6 +22,9 @@ const props = defineProps({
 const emit = defineEmits(['update:open', 'saved'])
 const name = ref('')
 const estimatedValue = ref('')
+const acquisitionDate = ref('')
+const sellDate = ref('')
+const isSold = ref(false)
 const isPrincipalHome = ref(false)
 const replacementId = ref(null)
 const principalConflict = ref(null)
@@ -34,6 +37,9 @@ watch(
     if (!isOpen) return
     name.value = props.property?.name ?? ''
     estimatedValue.value = props.property?.estimated_value ?? ''
+    acquisitionDate.value = props.property?.acquisition_date ?? ''
+    sellDate.value = props.property?.sell_date ?? ''
+    isSold.value = Boolean(props.property?.sell_date)
     isPrincipalHome.value = props.property?.is_principal_home ?? false
     replacementId.value = null
     principalConflict.value = null
@@ -68,6 +74,12 @@ const confirmReplacement = () => {
   error.value = ''
 }
 
+const validDate = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value < '0001-01-01') return false
+  const parsed = new Date(`${value}T00:00:00Z`)
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+}
+
 const submit = async () => {
   if (loading.value || principalConflict.value) return
   error.value = ''
@@ -81,9 +93,23 @@ const submit = async () => {
       'Enter a non-negative estimated value below 1 trillion, with at most two decimals.'
     return
   }
+  if (!validDate(acquisitionDate.value)) {
+    error.value = 'Enter a valid acquisition date.'
+    return
+  }
+  if (isSold.value && !validDate(sellDate.value)) {
+    error.value = 'Enter a valid sell date or uncheck Property sold.'
+    return
+  }
+  if (isSold.value && sellDate.value < acquisitionDate.value) {
+    error.value = 'Sell date must be on or after the acquisition date.'
+    return
+  }
   const payload = {
     name: name.value.trim(),
     estimated_value: amount,
+    acquisition_date: acquisitionDate.value,
+    sell_date: isSold.value ? sellDate.value : null,
     is_principal_home: isPrincipalHome.value,
     replace_principal_home_id: isPrincipalHome.value ? replacementId.value : null,
   }
@@ -111,11 +137,11 @@ const submit = async () => {
 
 <template>
   <Dialog :open="open" @update:open="close">
-    <DialogContent class="sm:max-w-[425px]">
+    <DialogContent class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[425px]">
       <DialogHeader>
         <DialogTitle>{{ property ? 'Edit Property' : 'Add a New Property' }}</DialogTitle>
         <DialogDescription
-          >Enter the property's name and estimated value in euros.</DialogDescription
+          >Enter the property's details and estimated value in euros.</DialogDescription
         >
       </DialogHeader>
       <form id="property-form" class="space-y-4 py-4" @submit.prevent="submit">
@@ -159,6 +185,40 @@ const submit = async () => {
             step="0.01"
             :disabled="loading"
             placeholder="e.g. 350000"
+            required
+          />
+        </div>
+        <div class="space-y-2">
+          <Label for="property-acquisition-date">Acquisition date *</Label>
+          <Input
+            id="property-acquisition-date"
+            v-model="acquisitionDate"
+            type="date"
+            min="0001-01-01"
+            max="9999-12-31"
+            :disabled="loading"
+            required
+          />
+        </div>
+        <div class="flex items-center gap-2">
+          <input
+            id="property-sold"
+            v-model="isSold"
+            type="checkbox"
+            :disabled="loading"
+            class="h-4 w-4 accent-primary"
+          />
+          <Label for="property-sold">Property sold</Label>
+        </div>
+        <div v-if="isSold" class="space-y-2">
+          <Label for="property-sell-date">Sell date *</Label>
+          <Input
+            id="property-sell-date"
+            v-model="sellDate"
+            type="date"
+            :min="acquisitionDate || '0001-01-01'"
+            max="9999-12-31"
+            :disabled="loading"
             required
           />
         </div>

@@ -1,6 +1,7 @@
 """Family properties and confirmed, atomic principal-home replacement."""
 
 from contextlib import contextmanager
+from datetime import date
 
 from flask import current_app, jsonify, request
 from sqlalchemy import text
@@ -40,7 +41,27 @@ def property_fields(data):
     replacement = data.get("replace_principal_home_id")
     if replacement is not None and (type(replacement) is not int or replacement <= 0):
         raise ValueError("replace_principal_home_id must be a positive integer")
-    return {"name": name.strip(), "is_principal_home": principal, "estimated_value": amount}
+    dates = {}
+    for field, label in (("acquisition_date", "Acquisition date"), ("sell_date", "Sell date")):
+        value = data.get(field)
+        if field == "sell_date" and value in (None, ""):
+            dates[field] = None
+            continue
+        try:
+            parsed = date.fromisoformat(value) if isinstance(value, str) else None
+            if parsed is None or parsed.isoformat() != value:
+                raise ValueError()
+        except ValueError as error:
+            raise ValueError(f"{label} must be a valid date in YYYY-MM-DD format") from error
+        dates[field] = parsed
+    if dates["sell_date"] is not None and dates["sell_date"] < dates["acquisition_date"]:
+        raise ValueError("Sell date must be on or after the acquisition date")
+    return {
+        "name": name.strip(),
+        "is_principal_home": principal,
+        "estimated_value": amount,
+        **dates,
+    }
 
 
 @api.route("/api/families/<int:family_id>/properties", methods=["GET", "POST"])
