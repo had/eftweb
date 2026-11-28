@@ -491,7 +491,10 @@ def parse_etrade(sheet):
             group["rows"].append(row_number)
             source_key = fingerprint(source)
             lot = group["sources"].setdefault(source_key, {**source, "quantity": 0, "rows": []})
-
+            if fmv and lot.get("acquisition_fmv") and lot["acquisition_fmv"] != fmv:
+                group["errors"].append(
+                    f"Row {row_number}: conflicting acquisition FMVs for the same lot"
+                )
             lot["acquisition_fmv"] = lot.get("acquisition_fmv") or fmv
             lot["quantity"] += quantity
             lot["rows"].append(row_number)

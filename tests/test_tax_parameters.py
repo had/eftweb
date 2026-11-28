@@ -1,3 +1,4 @@
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -6,9 +7,19 @@ from app import create_app
 from app.service import tax_service
 from app.service.tax_parameters import load_tax_parameters
 from easyfrenchtax import TaxField, TaxSimulator
-from easyfrenchtax.tax_simulator import year_tax_parameters
+from easyfrenchtax.tax_simulator import TaxParameters, year_tax_parameters
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "app" / "tax_parameters.toml"
+
+# Deliberately independent of the bundled configuration, which evolves each year.
+TEST_CONFIG = """\
+[2026]
+family_quotient_benefices_capping = 1791
+slices_thresholds = [11497, 29315, 83823, 180294]
+slices_rates = [0.11, 0.30, 0.41, 0.45]
+fees_10p_deduction_ceiling = 14426
+fees_10p_deduction_floor = 504
+"""
 
 
 @pytest.fixture(autouse=True)
@@ -19,21 +30,28 @@ def restore_parameters():
     year_tax_parameters.update(original)
 
 
-def test_bundled_2026_parameters_copy_2025_and_preserve_shared_registry():
+def test_bundled_parameters_load_all_years_and_preserve_shared_registry():
     original = year_tax_parameters.copy()
+    configured = tomllib.loads(DEFAULT_CONFIG.read_text())
     load_tax_parameters(DEFAULT_CONFIG)
 
     assert tax_service.year_tax_parameters is year_tax_parameters
-    assert year_tax_parameters[2026] == year_tax_parameters[2025]
-    assert all(year_tax_parameters[year] == values for year, values in original.items())
-    simulator = TaxSimulator(2026, {TaxField.SALARY_1_1AJ: 60000})
-    assert simulator.parameters is year_tax_parameters[2026]
-    assert simulator.state[TaxField.YEAR] == 2026
+    for year, values in configured.items():
+        year = int(year)
+        assert year_tax_parameters[year] == TaxParameters(**values)
+        simulator = TaxSimulator(year, {TaxField.SALARY_1_1AJ: 60000})
+        assert simulator.parameters is year_tax_parameters[year]
+        assert simulator.state[TaxField.YEAR] == year
+    assert all(
+        year_tax_parameters[year] is values
+        for year, values in original.items()
+        if str(year) not in configured
+    )
 
 
 def test_startup_loads_custom_file_for_new_and_existing_years(tmp_path, monkeypatch):
     original_2024 = year_tax_parameters[2024]
-    custom_values = DEFAULT_CONFIG.read_text().replace(
+    custom_values = TEST_CONFIG.replace(
         "[11497, 29315, 83823, 180294]", "[100000, 200000, 300000, 400000]"
     )
     custom_file = tmp_path / "tax_parameters.toml"
@@ -70,7 +88,8 @@ def test_startup_loads_custom_file_for_new_and_existing_years(tmp_path, monkeypa
 )
 def test_invalid_config_does_not_partially_update_registry(tmp_path, before, after):
     original = year_tax_parameters.copy()
-    content = DEFAULT_CONFIG.read_text()
+    content = TEST_CONFIG
+    assert before in content
     custom_file = tmp_path / "tax_parameters.toml"
     custom_file.write_text(
         content.replace("[2026]", "[2098]") + "\n" + content.replace(before, after)
