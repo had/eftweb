@@ -2,8 +2,6 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from easyfrenchtax import TaxField, TaxSimulator
-from easyfrenchtax.tax_simulator import TaxParameters
 
 from app import create_app, db
 from app.family.models import (
@@ -18,6 +16,8 @@ from app.family.models import (
 from app.service import tax_service
 from app.service.tax_service import _calculation_details, _prepare_tax_input, estimate_tax
 from app.stocks import models as stock_models  # noqa: F401 — register Family's stock relationship
+from easyfrenchtax import TaxField, TaxSimulator
+from easyfrenchtax.tax_simulator import TaxParameters
 
 
 @pytest.fixture()

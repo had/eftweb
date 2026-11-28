@@ -1,7 +1,5 @@
 from collections import namedtuple
 
-from easyfrenchtax import StockHelper, StockType, TaxField, TaxSimulator
-
 from app.tax.forms import (
     CharityForm,
     FixedIncomeInvestmentForm,
@@ -20,6 +18,7 @@ from app.tax.models import (
     ServicesChargesSegment,
     ShareholdingSegment,
 )
+from easyfrenchtax import StockHelper, StockType, TaxField, TaxSimulator
 
 StatementElement = namedtuple("StatementElement", ["name", "model", "form", "fields"])
 statement_elements = [

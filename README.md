@@ -2,6 +2,11 @@
 
 This is a Web UI for the python lib easyfrenchtax.
 
+The tax engine is maintained in the local `easyfrenchtax/` package, initially
+copied from easyfrenchtax 0.1.1 with its MIT license. It is included in eftweb's
+build; no separate easyfrenchtax installation is needed. Existing checkouts can
+run `uv sync --locked` to remove the external dependency and use the local source.
+
 It uses flask and bootstrap - I'm learning these 2 frameworks as I code, so expect some wild changes at this stage.
 
 

@@ -6,7 +6,8 @@
   - A future cleanup should remove the old HTML templates and their supporting
     code once they are no longer needed.
   - The long-term goal is to replace Flask with FastAPI.
-- Tax calculations rely on the `easyfrenchtax` library.
+- Tax calculations use the integrated `easyfrenchtax/` package. Keep the package
+  name so existing `easyfrenchtax` imports continue to work.
 - `README.md` is for contributors and administrators to set up and run the app.
   Keep it focused on setup and configuration, rather than explaining app features
   or how to use them.

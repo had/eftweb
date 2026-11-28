@@ -3,7 +3,6 @@ import json
 from datetime import date, datetime
 from io import TextIOWrapper
 
-from easyfrenchtax import StockType
 from sqlalchemy.exc import IntegrityError
 from werkzeug.datastructures import FileStorage
 
@@ -17,6 +16,7 @@ from app.stocks.models import (
     StockOptionVesting,
 )
 from app.stocks.ticker import ticker
+from easyfrenchtax import StockType
 
 from .. import db
 

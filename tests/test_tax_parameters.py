@@ -1,12 +1,12 @@
 from pathlib import Path
 
 import pytest
-from easyfrenchtax import TaxField, TaxSimulator
-from easyfrenchtax.tax_simulator import year_tax_parameters
 
 from app import create_app
 from app.service import tax_service
 from app.service.tax_parameters import load_tax_parameters
+from easyfrenchtax import TaxField, TaxSimulator
+from easyfrenchtax.tax_simulator import year_tax_parameters
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "app" / "tax_parameters.toml"
 

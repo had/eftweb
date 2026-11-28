@@ -1,12 +1,11 @@
 from collections import defaultdict
 from decimal import Decimal
 
-from easyfrenchtax import TaxField, TaxInfoFlag, TaxSimulator
-from easyfrenchtax.tax_simulator import tax_round, year_tax_parameters
-
 from app import db
 from app.family.donation_types import DONATION_TYPES_BY_CODE
 from app.family.models import TaxReturn
+from easyfrenchtax import TaxField, TaxInfoFlag, TaxSimulator
+from easyfrenchtax.tax_simulator import tax_round, year_tax_parameters
 
 from .stock_tax import aggregate
 

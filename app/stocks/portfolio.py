@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from datetime import date
 
 from currency_converter import CurrencyConverter
-from easyfrenchtax import RsuTaxScheme, StockHelper, StockType
 
 from app.stocks.models import (
     DirectStocks,
@@ -14,6 +13,7 @@ from app.stocks.models import (
     StockOptionPlan,
     StockOptionVesting,
 )
+from easyfrenchtax import RsuTaxScheme, StockHelper, StockType
 
 
 @dataclass

@@ -1,6 +1,6 @@
-from easyfrenchtax import TaxField
 from flask import redirect, render_template, url_for
 
+from easyfrenchtax import TaxField
 from taxhelpers import StatementElement, prepare_tax_input, simulate_tax, statement_elements
 
 from .. import db
